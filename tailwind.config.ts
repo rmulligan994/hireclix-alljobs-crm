@@ -13,7 +13,21 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        'heading': ['Unbounded', 'sans-serif'],
+        'body': ['Roboto', 'sans-serif'],
+      },
       colors: {
+        // Project Beacon Design System
+        'deep-sea': 'hsl(var(--deep-sea))',
+        'sky-blue': 'hsl(var(--sky-blue))',
+        'sunrise': 'hsl(var(--sunrise))',
+        'neutral-white': 'hsl(var(--neutral-white))',
+        'neutral-light': 'hsl(var(--neutral-light))',
+        'neutral-mid': 'hsl(var(--neutral-mid))',
+        'neutral-charcoal': 'hsl(var(--neutral-charcoal))',
+        
+        // Semantic tokens
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -57,6 +71,29 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      backgroundImage: {
+        'gradient-primary': 'var(--gradient-primary)',
+        'gradient-accent': 'var(--gradient-accent)',
+        'gradient-subtle': 'var(--gradient-subtle)',
+      },
+      boxShadow: {
+        'card': 'var(--shadow-card)',
+        'hover': 'var(--shadow-hover)',
+        'glow': 'var(--shadow-glow)',
+      },
+      fontSize: {
+        'xs': '12px',
+        'sm': '14px',
+        'base': '16px',
+        'lg': '18px',
+        'xl': '24px',
+        '2xl': '32px',
+        '3xl': '48px',
+      },
+      transitionProperty: {
+        'smooth': 'var(--transition-smooth)',
+        'fast': 'var(--transition-fast)',
       },
       borderRadius: {
         lg: "var(--radius)",
