@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
+import { CampaignBuilder } from '@/components/campaigns/CampaignBuilder';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,7 @@ import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users } from 'lucide-rea
 const Campaigns = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
+  const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
 
   const campaigns = [
     {
@@ -73,7 +75,10 @@ const Campaigns = () => {
                 <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
                   Template Library
                 </Button>
-                <Button className="bg-gradient-primary hover:opacity-90">
+                <Button 
+                  className="bg-gradient-primary hover:opacity-90"
+                  onClick={() => setShowCampaignBuilder(true)}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   New Campaign
                 </Button>
@@ -215,6 +220,11 @@ const Campaigns = () => {
       <AICopilot 
         collapsed={copilotCollapsed}
         onToggle={() => setCopilotCollapsed(!copilotCollapsed)}
+      />
+
+      <CampaignBuilder 
+        open={showCampaignBuilder}
+        onOpenChange={setShowCampaignBuilder}
       />
     </div>
   );
