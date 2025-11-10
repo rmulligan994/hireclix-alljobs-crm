@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import TalentPool from "./pages/TalentPool";
+import CandidateProfile from "./pages/CandidateProfile";
 import Pipelines from "./pages/Pipelines";
 import Campaigns from "./pages/Campaigns";
 import Analytics from "./pages/Analytics";
@@ -23,6 +24,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/talent" element={<TalentPool />} />
+          <Route path="/talent/:id" element={<CandidateProfile />} />
           <Route path="/pipelines" element={<Pipelines />} />
           <Route path="/campaigns" element={<Campaigns />} />
           <Route path="/analytics" element={<Analytics />} />

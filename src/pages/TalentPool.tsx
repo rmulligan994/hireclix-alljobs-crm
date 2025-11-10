@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
@@ -16,6 +17,7 @@ import {
 import { Search, Filter, Download, Upload, Plus, Mail, Phone, MapPin } from 'lucide-react';
 
 const TalentPool = () => {
+  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
 
@@ -175,7 +177,12 @@ const TalentPool = () => {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{candidate.lastContact}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" className="text-sky-blue hover:bg-sky-blue/10">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-sky-blue hover:bg-sky-blue/10"
+                        onClick={() => navigate(`/talent/${candidate.id}`)}
+                      >
                         View
                       </Button>
                     </TableCell>
