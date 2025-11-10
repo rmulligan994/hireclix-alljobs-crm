@@ -1,0 +1,293 @@
+import { useState } from 'react';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { TopBar } from '@/components/layout/TopBar';
+import { AICopilot } from '@/components/dashboard/AICopilot';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { Save } from 'lucide-react';
+
+const Settings = () => {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [copilotCollapsed, setCopilotCollapsed] = useState(true);
+
+  return (
+    <div className="flex h-screen bg-background font-body">
+      <Sidebar 
+        collapsed={sidebarCollapsed} 
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
+      />
+      
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopBar />
+        
+        <main className="flex-1 p-6 overflow-y-auto">
+          <div className="mb-8">
+            <h1 className="font-heading text-3xl font-bold text-foreground mb-2">
+              Settings
+            </h1>
+            <p className="font-body text-muted-foreground">
+              Manage your account and application preferences
+            </p>
+          </div>
+
+          <Tabs defaultValue="profile" className="w-full">
+            <TabsList className="bg-muted">
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="notifications">Notifications</TabsTrigger>
+              <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+              <TabsTrigger value="team">Team</TabsTrigger>
+              <TabsTrigger value="security">Security</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="profile" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Profile Information</CardTitle>
+                  <CardDescription>
+                    Update your personal and company information
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input id="firstName" defaultValue="Sarah" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input id="lastName" defaultValue="Chen" />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" type="email" defaultValue="sarah.chen@company.com" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Job Title</Label>
+                    <Input id="title" defaultValue="Talent Acquisition Lead" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="company">Company</Label>
+                    <Input id="company" defaultValue="Tech Innovations Inc." />
+                  </div>
+
+                  <Separator />
+
+                  <Button className="bg-gradient-primary hover:opacity-90">
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Changes
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="notifications" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notification Preferences</CardTitle>
+                  <CardDescription>
+                    Manage how and when you receive notifications
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Email Notifications</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Receive email updates about candidate activity
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Campaign Updates</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Get notified when campaigns complete or need attention
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Pipeline Alerts</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Alerts when candidates have been in a stage too long
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>AI Recommendations</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Get AI-powered suggestions and insights
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+
+                  <Separator />
+
+                  <Button className="bg-gradient-primary hover:opacity-90">
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Preferences
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="pipeline" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pipeline Configuration</CardTitle>
+                  <CardDescription>
+                    Customize your pipeline stages and SLA settings
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <Label>Pipeline Stages</Label>
+                    <div className="space-y-3">
+                      {['Sourced', 'Contacted', 'Engaged', 'Qualified', 'Submitted', 'Hired'].map((stage) => (
+                        <div key={stage} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                          <span className="font-medium">{stage}</span>
+                          <div className="flex items-center space-x-2">
+                            <Input 
+                              type="number" 
+                              placeholder="SLA (days)" 
+                              className="w-24"
+                              defaultValue={stage === 'Sourced' ? '7' : stage === 'Contacted' ? '5' : '10'}
+                            />
+                            <Button variant="ghost" size="sm">Edit</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <Button className="bg-gradient-primary hover:opacity-90">
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Configuration
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="team" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Team Members</CardTitle>
+                  <CardDescription>
+                    Manage team access and permissions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    {[
+                      { name: 'Sarah Chen', email: 'sarah.chen@company.com', role: 'Admin' },
+                      { name: 'Mike Johnson', email: 'mike.j@company.com', role: 'Recruiter' },
+                      { name: 'Emma Davis', email: 'emma.d@company.com', role: 'Recruiter' },
+                    ].map((member) => (
+                      <div key={member.email} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                        <div>
+                          <div className="font-medium text-foreground">{member.name}</div>
+                          <div className="text-sm text-muted-foreground">{member.email}</div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <Badge className="bg-sky-blue/20 text-sky-blue border-sky-blue">
+                            {member.role}
+                          </Badge>
+                          <Button variant="ghost" size="sm">Manage</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Separator />
+
+                  <Button className="bg-gradient-primary hover:opacity-90">
+                    Invite Team Member
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="security" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Security Settings</CardTitle>
+                  <CardDescription>
+                    Manage your password and security preferences
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="currentPassword">Current Password</Label>
+                    <Input id="currentPassword" type="password" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="newPassword">New Password</Label>
+                    <Input id="newPassword" type="password" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                    <Input id="confirmPassword" type="password" />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Two-Factor Authentication</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Add an extra layer of security to your account
+                      </p>
+                    </div>
+                    <Switch />
+                  </div>
+
+                  <Separator />
+
+                  <Button className="bg-gradient-primary hover:opacity-90">
+                    <Save className="w-4 h-4 mr-2" />
+                    Update Security
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </main>
+      </div>
+
+      <AICopilot 
+        collapsed={copilotCollapsed}
+        onToggle={() => setCopilotCollapsed(!copilotCollapsed)}
+      />
+    </div>
+  );
+};
+
+export default Settings;

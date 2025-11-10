@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { 
   Home, 
   Users, 
@@ -11,9 +10,10 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useLocation, Link } from 'react-router-dom';
 
 const navigationItems = [
-  { icon: Home, label: 'Dashboard', path: '/', active: true },
+  { icon: Home, label: 'Dashboard', path: '/' },
   { icon: Users, label: 'Talent Pool', path: '/talent' },
   { icon: TrendingUp, label: 'Pipelines', path: '/pipelines' },
   { icon: Mail, label: 'Campaigns', path: '/campaigns' },
@@ -28,6 +28,8 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
+  const location = useLocation();
+
   return (
     <div className={`
       bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out
@@ -62,13 +64,15 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
       <nav className="flex-1 p-4 space-y-2">
         {navigationItems.map((item) => {
           const Icon = item.icon;
+          const isActive = location.pathname === item.path;
           return (
-            <button
+            <Link
               key={item.path}
+              to={item.path}
               className={`
                 w-full flex items-center space-x-3 px-3 py-3 rounded-lg
                 font-body text-sm transition-all duration-200
-                ${item.active 
+                ${isActive 
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm' 
                   : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                 }
@@ -77,7 +81,7 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
             >
               <Icon className={`${collapsed ? 'w-5 h-5' : 'w-4 h-4'} flex-shrink-0`} />
               {!collapsed && <span>{item.label}</span>}
-            </button>
+            </Link>
           );
         })}
       </nav>
