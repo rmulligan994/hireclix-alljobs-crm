@@ -15,15 +15,44 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Calendar, ChevronRight, Users, Archive, CheckCircle } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Plus, Search, Calendar, ChevronRight, Users, Archive, CheckCircle, MoreHorizontal, ArchiveRestore } from 'lucide-react';
+
+type PipelineStatus = 'active' | 'archived';
+type ViewFilter = 'active' | 'archived' | 'all';
+
+interface Pipeline {
+  id: string;
+  title: string;
+  status: PipelineStatus;
+  stages: { sourced: number; contacted: number; engaged: number; qualified: number; submitted: number; hired: number };
+  createdAt: string;
+}
 
 const Pipelines = () => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const pipelines = [
+  const [viewFilter, setViewFilter] = useState<ViewFilter>('active');
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([
     {
       id: '1',
       title: 'Senior Frontend Developer - Q1 2024',
@@ -66,15 +95,41 @@ const Pipelines = () => {
       stages: { sourced: 41, contacted: 29, engaged: 18, qualified: 10, submitted: 6, hired: 2 },
       createdAt: '2023-11-01',
     },
-  ];
+  ]);
 
-  const filteredPipelines = pipelines.filter(pipeline =>
-    pipeline.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPipelines = pipelines.filter(pipeline => {
+    const matchesSearch = pipeline.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = viewFilter === 'all' || pipeline.status === viewFilter;
+    return matchesSearch && matchesFilter;
+  });
 
-  const getTotalCandidates = (stages: typeof pipelines[0]['stages']) => {
+  const getTotalCandidates = (stages: Pipeline['stages']) => {
     return Object.values(stages).reduce((sum, count) => sum + count, 0);
   };
+
+  const handleArchiveClick = (e: React.MouseEvent, pipeline: Pipeline) => {
+    e.stopPropagation();
+    setSelectedPipeline(pipeline);
+    setArchiveDialogOpen(true);
+  };
+
+  const handleArchiveConfirm = () => {
+    if (selectedPipeline) {
+      setPipelines(prev => prev.map(p => 
+        p.id === selectedPipeline.id 
+          ? { ...p, status: p.status === 'active' ? 'archived' : 'active' }
+          : p
+      ));
+    }
+    setArchiveDialogOpen(false);
+    setSelectedPipeline(null);
+  };
+
+  const filterOptions: { label: string; value: ViewFilter }[] = [
+    { label: 'Active Pipelines', value: 'active' },
+    { label: 'Archived Pipelines', value: 'archived' },
+    { label: 'All Pipelines', value: 'all' },
+  ];
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -108,8 +163,8 @@ const Pipelines = () => {
           </div>
 
           {/* Search and Filters */}
-          <div className="mb-6">
-            <div className="relative max-w-md">
+          <div className="mb-6 flex flex-col sm:flex-row gap-4">
+            <div className="relative max-w-md flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search pipelines..."
@@ -117,6 +172,23 @@ const Pipelines = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 border-border focus:border-sky-blue"
               />
+            </div>
+            
+            {/* View Filter Toggle */}
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              {filterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setViewFilter(option.value)}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    viewFilter === option.value
+                      ? 'bg-sky-blue text-white'
+                      : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -188,7 +260,35 @@ const Pipelines = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                      <div className="flex items-center gap-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-card border-border">
+                            {pipeline.status === 'active' ? (
+                              <DropdownMenuItem 
+                                onClick={(e) => handleArchiveClick(e as any, pipeline)}
+                                className="text-muted-foreground hover:text-foreground cursor-pointer"
+                              >
+                                <Archive className="w-4 h-4 mr-2" />
+                                Archive Pipeline
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem 
+                                onClick={(e) => handleArchiveClick(e as any, pipeline)}
+                                className="text-muted-foreground hover:text-foreground cursor-pointer"
+                              >
+                                <ArchiveRestore className="w-4 h-4 mr-2" />
+                                Unarchive Pipeline
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -198,7 +298,7 @@ const Pipelines = () => {
 
           {filteredPipelines.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">No pipelines found matching your search.</p>
+              <p className="text-muted-foreground">No pipelines found matching your criteria.</p>
             </div>
           )}
         </main>
@@ -208,6 +308,33 @@ const Pipelines = () => {
         open={copilotOpen}
         onClose={() => setCopilotOpen(false)}
       />
+
+      {/* Archive Confirmation Dialog */}
+      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">
+              {selectedPipeline?.status === 'active' ? 'Archive this pipeline?' : 'Unarchive this pipeline?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              {selectedPipeline?.status === 'active' 
+                ? 'It will be hidden from the main view but remain accessible for reporting.'
+                : 'It will be restored to the active pipelines view.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border text-muted-foreground hover:text-foreground">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleArchiveConfirm}
+              className="bg-gradient-primary hover:opacity-90"
+            >
+              {selectedPipeline?.status === 'active' ? 'Archive' : 'Unarchive'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
