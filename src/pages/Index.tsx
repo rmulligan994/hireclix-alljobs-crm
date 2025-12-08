@@ -5,6 +5,7 @@ import { AICopilot } from '@/components/dashboard/AICopilot';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PipelineChart } from '@/components/dashboard/PipelineChart';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
+import { QuickActions } from '@/components/dashboard/QuickActions';
 import { 
   Users, 
   Calendar, 
@@ -63,37 +64,45 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <MetricCard
-              title="New Candidate Leads"
-              value="247"
-              change="60%"
-              trend="up"
-              icon={Users}
-              variant="primary"
-            />
-            <MetricCard
-              title="Active Campaigns"
-              value="12"
-              change="45%"
-              trend="up"
-              icon={Calendar}
-            />
-            <MetricCard
-              title="Response Rate"
-              value="28.5%"
-              change="35%"
-              trend="up"
-              icon={TrendingUp}
-            />
-            <MetricCard
-              title="Pipeline Velocity"
-              value="18 days"
-              change="25%"
-              trend="up"
-              icon={MessageSquare}
-            />
+          {/* Quick Actions */}
+          <QuickActions />
+
+          {/* Metrics Overview */}
+          <div className="mb-8">
+            <h2 className="font-heading text-xl font-semibold text-foreground mb-4">
+              Metrics Overview
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <MetricCard
+                title="New Candidate Leads"
+                value="247"
+                change="60%"
+                trend="up"
+                icon={Users}
+                variant="primary"
+              />
+              <MetricCard
+                title="Active Campaigns"
+                value="12"
+                change="45%"
+                trend="up"
+                icon={Calendar}
+              />
+              <MetricCard
+                title="Response Rate"
+                value="28.5%"
+                change="35%"
+                trend="up"
+                icon={TrendingUp}
+              />
+              <MetricCard
+                title="Pipeline Velocity"
+                value="18 days"
+                change="25%"
+                trend="up"
+                icon={MessageSquare}
+              />
+            </div>
           </div>
 
           {/* Charts and Activity */}
