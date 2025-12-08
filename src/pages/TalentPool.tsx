@@ -14,12 +14,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, Filter, Download, Upload, Plus, Mail, Phone, MapPin } from 'lucide-react';
+import { Search, Filter, Download, Upload, Plus, Mail, Phone, MapPin, Users, CalendarPlus, GitBranch } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 const TalentPool = () => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+
+  // Snapshot metrics
+  const snapshotMetrics = [
+    { label: 'Total Candidates', value: 1247, icon: Users },
+    { label: 'New This Week', value: 23, icon: CalendarPlus },
+    { label: 'In Active Pipelines', value: 89, icon: GitBranch },
+  ];
 
   const candidates = [
     {
@@ -29,6 +37,7 @@ const TalentPool = () => {
       company: 'Tech Corp',
       location: 'San Francisco, CA',
       skills: ['React', 'TypeScript', 'Node.js'],
+      pipelines: ['Senior Dev Hiring', 'Frontend Team'],
       stage: 'Engaged',
       lastContact: '2 days ago',
     },
@@ -39,6 +48,7 @@ const TalentPool = () => {
       company: 'Innovation Labs',
       location: 'New York, NY',
       skills: ['Agile', 'Product Strategy', 'Analytics'],
+      pipelines: ['PM Leadership'],
       stage: 'Qualified',
       lastContact: '1 week ago',
     },
@@ -49,6 +59,7 @@ const TalentPool = () => {
       company: 'AI Solutions',
       location: 'Austin, TX',
       skills: ['Python', 'ML', 'Statistics'],
+      pipelines: ['Data Team', 'ML Engineers', 'Q1 Hires'],
       stage: 'Contacted',
       lastContact: '3 days ago',
     },
@@ -95,6 +106,28 @@ const TalentPool = () => {
             </div>
           </div>
 
+          {/* Snapshot Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {snapshotMetrics.map((metric) => {
+              const Icon = metric.icon;
+              return (
+                <Card key={metric.label} className="bg-card border-border">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-lg bg-sky-blue/10">
+                        <Icon className="w-5 h-5 text-sky-blue" />
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-foreground">{metric.value.toLocaleString()}</p>
+                        <p className="text-sm text-muted-foreground">{metric.label}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
           {/* Search and Filter Bar */}
           <div className="bg-card rounded-lg border border-border p-4 mb-6">
             <div className="flex items-center space-x-4">
@@ -135,6 +168,7 @@ const TalentPool = () => {
                   <TableHead className="text-white">Current Role</TableHead>
                   <TableHead className="text-white">Location</TableHead>
                   <TableHead className="text-white">Skills</TableHead>
+                  <TableHead className="text-white">Pipelines</TableHead>
                   <TableHead className="text-white">Stage</TableHead>
                   <TableHead className="text-white">Last Contact</TableHead>
                   <TableHead className="text-white">Actions</TableHead>
@@ -169,6 +203,15 @@ const TalentPool = () => {
                         {candidate.skills.map((skill) => (
                           <Badge key={skill} variant="secondary" className="text-xs">
                             {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {candidate.pipelines.map((pipeline) => (
+                          <Badge key={pipeline} variant="outline" className="text-xs border-sunrise text-sunrise">
+                            {pipeline}
                           </Badge>
                         ))}
                       </div>
