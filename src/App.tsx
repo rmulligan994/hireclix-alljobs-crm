@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import Index from "./pages/Index";
 import TalentPool from "./pages/TalentPool";
+import TalentPools from "./pages/TalentPools";
 import CandidateProfile from "./pages/CandidateProfile";
 import Pipelines from "./pages/Pipelines";
 import Campaigns from "./pages/Campaigns";
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/talent" element={<TalentPool />} />
             <Route path="/talent/:id" element={<CandidateProfile />} />
+            <Route path="/talent-pools" element={<TalentPools />} />
             <Route path="/pipelines" element={<Pipelines />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/analytics" element={<Analytics />} />
