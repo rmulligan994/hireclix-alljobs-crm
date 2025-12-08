@@ -77,7 +77,7 @@ const Index = () => {
               />
               <MetricCard
                 title="Active Pipelines"
-                value="8"
+                value="4"
                 icon={GitBranch}
               />
               <MetricCard

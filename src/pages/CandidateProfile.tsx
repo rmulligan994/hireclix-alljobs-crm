@@ -29,7 +29,10 @@ import {
   GitBranch,
   FolderKanban,
   ChevronRight,
+  Archive,
+  ChevronDown,
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const CandidateProfile = () => {
   const { id } = useParams();
@@ -53,9 +56,16 @@ const CandidateProfile = () => {
     'Seeking remote role at $120-140k range',
   ];
 
-  const pipelineAssociations = [
+  const [archivedPipelinesOpen, setArchivedPipelinesOpen] = useState(false);
+
+  const activePipelineAssociations = [
     { id: '1', name: 'Senior Frontend Dev - Q1 2024', stage: 'Qualified', lastUpdated: 'Jan 16, 2024' },
     { id: '2', name: 'Backend Engineer - Remote', stage: 'Contacted', lastUpdated: 'Jan 14, 2024' },
+  ];
+
+  const archivedPipelineAssociations = [
+    { id: '5', name: 'DevOps Engineer - Q4 2023', stage: 'Submitted', lastUpdated: 'Dec 20, 2023' },
+    { id: '6', name: 'UX Designer - Brand Team', stage: 'Engaged', lastUpdated: 'Nov 15, 2023' },
   ];
 
   const talentPoolAssociations = [
@@ -269,7 +279,7 @@ const CandidateProfile = () => {
                   Active Pipelines
                 </h4>
                 <div className="space-y-2">
-                  {pipelineAssociations.map((pipeline) => (
+                  {activePipelineAssociations.map((pipeline) => (
                     <div 
                       key={pipeline.id}
                       className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 cursor-pointer transition-colors group"
@@ -295,6 +305,51 @@ const CandidateProfile = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Archived Pipelines - Collapsible */}
+              {archivedPipelineAssociations.length > 0 && (
+                <Collapsible open={archivedPipelinesOpen} onOpenChange={setArchivedPipelinesOpen}>
+                  <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
+                    <Archive className="w-4 h-4" />
+                    Archived Pipelines ({archivedPipelineAssociations.length})
+                    <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${archivedPipelinesOpen ? 'rotate-180' : ''}`} />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3">
+                    <div className="space-y-2">
+                      {archivedPipelineAssociations.map((pipeline) => (
+                        <div 
+                          key={pipeline.id}
+                          className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 cursor-pointer transition-colors group opacity-70"
+                          onClick={() => navigate(`/pipelines/${pipeline.id}`)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <span className="text-foreground font-medium group-hover:text-sky-blue transition-colors">
+                                  {pipeline.name}
+                                </span>
+                                <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground">
+                                  <Archive className="w-3 h-3 mr-1" />
+                                  Archived
+                                </Badge>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                Last updated: {pipeline.lastUpdated}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge className={getStageColor(pipeline.stage)}>
+                              {pipeline.stage}
+                            </Badge>
+                            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-sky-blue" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
 
               {/* Talent Pools */}
               <div>
