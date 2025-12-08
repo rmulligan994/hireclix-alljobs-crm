@@ -6,6 +6,7 @@ import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PipelineChart } from '@/components/dashboard/PipelineChart';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { QuickActions } from '@/components/dashboard/QuickActions';
+import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { 
   Users, 
   Calendar, 
@@ -19,6 +20,7 @@ import { Button } from '@/components/ui/button';
 const Index = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [addCandidateOpen, setAddCandidateOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -53,7 +55,10 @@ const Index = () => {
                   <Calendar className="w-4 h-4 mr-2" />
                   Current Report
                 </Button>
-              <Button className="bg-gradient-primary hover:opacity-90">
+                <Button 
+                  className="bg-gradient-primary hover:opacity-90"
+                  onClick={() => setAddCandidateOpen(true)}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Candidate
                 </Button>
@@ -105,6 +110,12 @@ const Index = () => {
       <AICopilot 
         open={copilotOpen}
         onClose={() => setCopilotOpen(false)}
+      />
+
+      {/* Add Candidate Dialog */}
+      <AddCandidateDialog 
+        open={addCandidateOpen}
+        onOpenChange={setAddCandidateOpen}
       />
     </div>
   );
