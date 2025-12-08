@@ -26,6 +26,9 @@ import {
   ExternalLink,
   PhoneCall,
   Send,
+  GitBranch,
+  FolderKanban,
+  ChevronRight,
 } from 'lucide-react';
 
 const CandidateProfile = () => {
@@ -48,6 +51,17 @@ const CandidateProfile = () => {
     'Senior Frontend Developer with 5+ years React/TypeScript experience',
     'Strong technical skills, excellent communication, available immediately',
     'Seeking remote role at $120-140k range',
+  ];
+
+  const pipelineAssociations = [
+    { id: '1', name: 'Senior Frontend Dev - Q1 2024', stage: 'Qualified', lastUpdated: 'Jan 16, 2024' },
+    { id: '2', name: 'Backend Engineer - Remote', stage: 'Contacted', lastUpdated: 'Jan 14, 2024' },
+  ];
+
+  const talentPoolAssociations = [
+    { id: '1', name: 'Senior Engineers', candidateCount: 156 },
+    { id: '2', name: 'Remote-First Candidates', candidateCount: 89 },
+    { id: '3', name: 'JavaScript Experts', candidateCount: 234 },
   ];
 
   const currentTags = ['React', 'TypeScript', 'Remote', 'Senior', 'Available'];
@@ -109,6 +123,18 @@ const CandidateProfile = () => {
       case 'Email': return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
       case 'Phone Call': return 'bg-sunrise/20 text-sunrise border-sunrise';
       case 'Outreach': return 'bg-deep-sea/50 text-sky-blue border-deep-sea';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const getStageColor = (stage: string) => {
+    switch (stage) {
+      case 'Sourced': return 'bg-muted/50 text-muted-foreground';
+      case 'Contacted': return 'bg-deep-sea/20 text-sky-blue';
+      case 'Engaged': return 'bg-sky-blue/20 text-sky-blue';
+      case 'Qualified': return 'bg-sunrise/20 text-sunrise';
+      case 'Submitted': return 'bg-green-500/20 text-green-400';
+      case 'Hired': return 'bg-green-600/30 text-green-300';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -211,6 +237,84 @@ const CandidateProfile = () => {
                   <RefreshCw className="w-4 h-4 mr-1" />
                   Regenerate
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pipelines & Talent Pools - Full Width */}
+          <Card className="mb-6 bg-card border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-sky-blue">
+                  <GitBranch className="w-5 h-5" />
+                  Pipelines & Talent Pools
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add to Pipeline
+                  </Button>
+                  <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add to Talent Pool
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Active Pipelines */}
+              <div>
+                <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                  <GitBranch className="w-4 h-4" />
+                  Active Pipelines
+                </h4>
+                <div className="space-y-2">
+                  {pipelineAssociations.map((pipeline) => (
+                    <div 
+                      key={pipeline.id}
+                      className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 cursor-pointer transition-colors group"
+                      onClick={() => navigate(`/pipelines/${pipeline.id}`)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-foreground font-medium group-hover:text-sky-blue transition-colors">
+                            {pipeline.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Last updated: {pipeline.lastUpdated}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStageColor(pipeline.stage)}>
+                          {pipeline.stage}
+                        </Badge>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-sky-blue" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Talent Pools */}
+              <div>
+                <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                  <FolderKanban className="w-4 h-4" />
+                  Talent Pools
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {talentPoolAssociations.map((pool) => (
+                    <Badge 
+                      key={pool.id}
+                      variant="outline"
+                      className="border-sky-blue text-sky-blue hover:bg-sky-blue/10 cursor-pointer px-3 py-1"
+                      onClick={() => navigate(`/talent?pool=${pool.id}`)}
+                    >
+                      {pool.name}
+                      <span className="ml-1 text-xs text-muted-foreground">({pool.candidateCount})</span>
+                    </Badge>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>

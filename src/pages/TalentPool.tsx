@@ -22,7 +22,6 @@ const TalentPool = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
 
-  // Snapshot metrics
   const snapshotMetrics = [
     { label: 'Total Candidates', value: 1247, icon: Users },
     { label: 'New This Week', value: 23, icon: CalendarPlus },
@@ -32,13 +31,15 @@ const TalentPool = () => {
   const candidates = [
     {
       id: '1',
-      name: 'Alex Johnson',
+      name: 'Sarah Johnson',
       title: 'Senior Frontend Developer',
       company: 'Tech Corp',
       location: 'San Francisco, CA',
       skills: ['React', 'TypeScript', 'Node.js'],
-      pipelines: ['Senior Dev Hiring', 'Frontend Team'],
-      stage: 'Engaged',
+      pipelineAssociations: [
+        { id: '1', name: 'Senior Frontend Dev - Q1', stage: 'Qualified' },
+        { id: '2', name: 'Backend Engineer - Remote', stage: 'Contacted' },
+      ],
       lastContact: '2 days ago',
     },
     {
@@ -48,8 +49,9 @@ const TalentPool = () => {
       company: 'Innovation Labs',
       location: 'New York, NY',
       skills: ['Agile', 'Product Strategy', 'Analytics'],
-      pipelines: ['PM Leadership'],
-      stage: 'Qualified',
+      pipelineAssociations: [
+        { id: '3', name: 'Product Manager - NYC', stage: 'Engaged' },
+      ],
       lastContact: '1 week ago',
     },
     {
@@ -59,11 +61,26 @@ const TalentPool = () => {
       company: 'AI Solutions',
       location: 'Austin, TX',
       skills: ['Python', 'ML', 'Statistics'],
-      pipelines: ['Data Team', 'ML Engineers', 'Q1 Hires'],
-      stage: 'Contacted',
+      pipelineAssociations: [
+        { id: '4', name: 'Data Scientist - ML Team', stage: 'Submitted' },
+        { id: '1', name: 'Senior Frontend Dev - Q1', stage: 'Sourced' },
+        { id: '2', name: 'Backend Engineer - Remote', stage: 'Engaged' },
+      ],
       lastContact: '3 days ago',
     },
   ];
+
+  const getStageColor = (stage: string) => {
+    switch (stage) {
+      case 'Sourced': return 'bg-muted/50 text-muted-foreground border-muted';
+      case 'Contacted': return 'bg-deep-sea/20 text-sky-blue border-deep-sea';
+      case 'Engaged': return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
+      case 'Qualified': return 'bg-sunrise/20 text-sunrise border-sunrise';
+      case 'Submitted': return 'bg-green-500/20 text-green-400 border-green-500';
+      case 'Hired': return 'bg-green-600/30 text-green-300 border-green-600';
+      default: return 'bg-muted text-muted-foreground border-border';
+    }
+  };
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -169,7 +186,6 @@ const TalentPool = () => {
                   <TableHead className="text-white">Location</TableHead>
                   <TableHead className="text-white">Skills</TableHead>
                   <TableHead className="text-white">Pipelines</TableHead>
-                  <TableHead className="text-white">Stage</TableHead>
                   <TableHead className="text-white">Last Contact</TableHead>
                   <TableHead className="text-white">Actions</TableHead>
                 </TableRow>
@@ -208,18 +224,20 @@ const TalentPool = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {candidate.pipelines.map((pipeline) => (
-                          <Badge key={pipeline} variant="outline" className="text-xs border-sunrise text-sunrise">
-                            {pipeline}
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {candidate.pipelineAssociations.map((pipeline) => (
+                          <Badge 
+                            key={`${pipeline.id}-${pipeline.name}`}
+                            className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${getStageColor(pipeline.stage)}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/pipelines/${pipeline.id}`);
+                            }}
+                          >
+                            {pipeline.name.length > 15 ? `${pipeline.name.slice(0, 15)}...` : pipeline.name}: {pipeline.stage}
                           </Badge>
                         ))}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className="bg-sky-blue/20 text-sky-blue border-sky-blue">
-                        {candidate.stage}
-                      </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{candidate.lastContact}</TableCell>
                     <TableCell>
