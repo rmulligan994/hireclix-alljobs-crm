@@ -14,7 +14,7 @@ import { useLocation, Link } from 'react-router-dom';
 
 const navigationItems = [
   { icon: Home, label: 'Dashboard', path: '/' },
-  { icon: Users, label: 'Talent Pool', path: '/talent' },
+  { icon: Users, label: 'Candidates', path: '/talent' },
   { icon: TrendingUp, label: 'Pipelines', path: '/pipelines' },
   { icon: Mail, label: 'Campaigns', path: '/campaigns' },
   { icon: BarChart3, label: 'Analytics', path: '/analytics' },
