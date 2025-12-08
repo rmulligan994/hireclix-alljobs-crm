@@ -4,24 +4,28 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   ArrowLeft,
   Mail,
   Phone,
   MapPin,
-  Linkedin,
-  Globe,
-  Calendar,
-  MessageSquare,
+  Sparkles,
+  Tag,
   FileText,
-  TrendingUp,
+  StickyNote,
+  Clock,
   Plus,
+  RefreshCw,
+  X,
+  Eye,
+  Download,
+  Upload,
+  ExternalLink,
+  MessageSquare,
+  PhoneCall,
   Send,
 } from 'lucide-react';
 
@@ -30,121 +34,84 @@ const CandidateProfile = () => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
-  const [newNote, setNewNote] = useState('');
 
-  // Mock candidate data - in real app, fetch based on id
+  // Mock candidate data
   const candidate = {
     id: id || '1',
-    name: 'Alex Johnson',
-    title: 'Senior Frontend Developer',
-    company: 'Tech Corp',
-    location: 'San Francisco, CA',
-    email: 'alex.johnson@email.com',
+    name: 'Sarah Johnson',
+    email: 'sarah.johnson@email.com',
     phone: '+1 (555) 123-4567',
-    linkedin: 'linkedin.com/in/alexjohnson',
-    website: 'alexjohnson.dev',
-    skills: [
-      { name: 'React', level: 95 },
-      { name: 'TypeScript', level: 90 },
-      { name: 'Node.js', level: 85 },
-      { name: 'GraphQL', level: 80 },
-      { name: 'AWS', level: 75 },
-      { name: 'Docker', level: 70 },
-    ],
-    stage: 'Engaged',
     source: 'LinkedIn',
-    lastContact: '2 days ago',
-    joinedDate: 'Jan 15, 2024',
-    experience: '8 years',
-    education: 'BS Computer Science, Stanford University',
+    addedDate: '1/14/2024',
+    updatedDate: '1/16/2024',
   };
 
-  const timeline = [
+  const aiSummary = [
+    'Senior Frontend Developer with 5+ years React/TypeScript experience',
+    'Strong technical skills, excellent communication, available immediately',
+    'Seeking remote role at $120-140k range',
+  ];
+
+  const currentTags = ['React', 'TypeScript', 'Remote', 'Senior', 'Available'];
+  const suggestedTags = ['Node.js', 'Python', 'Java', 'Mid-level', 'Junior', 'On-site', 'Hybrid', 'Interviewing', 'Considering', 'Security Clearance'];
+
+  const resumeVersions = [
+    { id: '1', name: 'Resume v1', isLatest: true },
+    { id: '2', name: 'Resume v2', isLatest: false },
+  ];
+
+  const recruiterNotes = [
     {
       id: '1',
-      type: 'email',
-      title: 'Email sent: Senior Frontend Role',
-      description: 'Campaign: Tech Talent Nurture Q1',
-      date: '2 days ago',
-      status: 'opened',
+      date: 'Jan 15, 2024, 05:30 AM',
+      content: 'Strong technical background in React and TypeScript. Excellent communication skills during initial screening.',
     },
     {
       id: '2',
-      type: 'note',
-      title: 'Note added',
-      description: 'Interested in remote opportunities, prefers React-heavy roles',
-      date: '1 week ago',
-      status: 'completed',
+      date: 'Jan 16, 2024, 09:20 AM',
+      content: 'Available to start in 2 weeks. Looking for remote-first opportunities. Salary expectations: $120-140k.',
+    },
+  ];
+
+  const communicationHistory = [
+    {
+      id: '1',
+      type: 'Email',
+      date: 'Jan 16, 2024, 09:00 AM',
+      description: 'Sent technical assessment and next steps',
+      outcome: 'Acknowledged, assessment in progress',
+    },
+    {
+      id: '2',
+      type: 'Phone Call',
+      date: 'Jan 15, 2024, 05:30 AM',
+      description: '30-minute screening call',
+      outcome: 'Strong fit, proceeding to technical round',
     },
     {
       id: '3',
-      type: 'call',
-      title: 'Phone call',
-      description: 'Initial screening - 30 min discussion about career goals',
-      date: '2 weeks ago',
-      status: 'completed',
-    },
-    {
-      id: '4',
-      type: 'email',
-      title: 'Email received',
-      description: 'Response to outreach - expressed interest',
-      date: '3 weeks ago',
-      status: 'completed',
-    },
-    {
-      id: '5',
-      type: 'sourced',
-      title: 'Candidate sourced',
-      description: 'Added from LinkedIn Recruiter search',
-      date: '1 month ago',
-      status: 'completed',
+      type: 'Outreach',
+      date: 'Jan 14, 2024, 04:00 AM',
+      description: 'Initial LinkedIn outreach message sent',
+      outcome: 'Responded positively',
     },
   ];
 
-  const notes = [
-    {
-      id: '1',
-      author: 'Sarah Chen',
-      content: 'Very strong React skills. Looking for leadership opportunities. Mentioned interest in fintech sector.',
-      date: '1 week ago',
-    },
-    {
-      id: '2',
-      author: 'Mike Rodriguez',
-      content: 'Had great conversation about their work on scaling React applications. Open to relocation for the right opportunity.',
-      date: '2 weeks ago',
-    },
-  ];
+  const getCommIcon = (type: string) => {
+    switch (type) {
+      case 'Email': return <Mail className="w-4 h-4" />;
+      case 'Phone Call': return <PhoneCall className="w-4 h-4" />;
+      case 'Outreach': return <Send className="w-4 h-4" />;
+      default: return <MessageSquare className="w-4 h-4" />;
+    }
+  };
 
-  const aiRecommendations = [
-    {
-      id: '1',
-      type: 'job_match',
-      title: 'High Match: Senior Frontend Engineer',
-      description: 'Engineering Team Lead role at FinTech startup - 95% match based on skills and preferences',
-      action: 'View Job',
-    },
-    {
-      id: '2',
-      type: 'outreach',
-      title: 'Best Time to Contact',
-      description: 'Historical data shows highest response rate on Tuesday afternoons',
-      action: 'Schedule',
-    },
-    {
-      id: '3',
-      type: 'similar',
-      title: 'Similar Candidates',
-      description: '12 candidates with similar skill profiles currently in pipeline',
-      action: 'View',
-    },
-  ];
-
-  const handleAddNote = () => {
-    if (newNote.trim()) {
-      // Add note logic here
-      setNewNote('');
+  const getCommBadgeStyle = (type: string) => {
+    switch (type) {
+      case 'Email': return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
+      case 'Phone Call': return 'bg-sunrise/20 text-sunrise border-sunrise';
+      case 'Outreach': return 'bg-deep-sea/50 text-sky-blue border-deep-sea';
+      default: return 'bg-muted text-muted-foreground';
     }
   };
 
@@ -162,252 +129,302 @@ const CandidateProfile = () => {
         />
 
         <main className="flex-1 p-6 overflow-y-auto">
-          {/* Back Button */}
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/talent')}
-            className="mb-6 text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Talent Pool
-          </Button>
+          {/* Back Button & Page Title */}
+          <div className="flex items-start gap-4 mb-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/talent')}
+              className="border-border text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back
+            </Button>
+            <div>
+              <h1 className="font-heading text-2xl font-bold text-foreground">
+                Candidate Profile
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                View and manage candidate information
+              </p>
+            </div>
+          </div>
 
-          {/* Candidate Header */}
-          <Card className="mb-6">
+          {/* Candidate Header Card */}
+          <Card className="mb-6 bg-card border-border">
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
-                <div className="flex items-start space-x-6">
-                  <Avatar className="w-24 h-24">
-                    <AvatarImage src="" />
-                    <AvatarFallback className="bg-sky-blue text-white text-2xl">
+                <div className="flex items-center gap-4">
+                  <Avatar className="w-16 h-16">
+                    <AvatarFallback className="bg-muted text-muted-foreground text-xl">
                       {candidate.name.split(' ').map(n => n[0]).join('')}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1">
-                    <h1 className="font-heading text-3xl font-bold text-foreground mb-2">
+                  <div>
+                    <h2 className="font-heading text-2xl font-bold text-sky-blue mb-2">
                       {candidate.name}
-                    </h1>
-                    <p className="text-xl text-muted-foreground mb-4">
-                      {candidate.title} at {candidate.company}
-                    </p>
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div className="flex items-center text-muted-foreground">
-                        <Mail className="w-4 h-4 mr-2 text-sky-blue" />
+                    </h2>
+                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Mail className="w-4 h-4" />
                         {candidate.email}
                       </div>
-                      <div className="flex items-center text-muted-foreground">
-                        <Phone className="w-4 h-4 mr-2 text-sky-blue" />
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-4 h-4" />
                         {candidate.phone}
                       </div>
-                      <div className="flex items-center text-muted-foreground">
-                        <MapPin className="w-4 h-4 mr-2 text-sky-blue" />
-                        {candidate.location}
-                      </div>
-                      <div className="flex items-center text-muted-foreground">
-                        <Linkedin className="w-4 h-4 mr-2 text-sky-blue" />
-                        {candidate.linkedin}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <Badge className="bg-sky-blue/20 text-sky-blue border-sky-blue">
-                        {candidate.stage}
-                      </Badge>
-                      <Badge variant="secondary">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-4 h-4" />
                         Source: {candidate.source}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        Last contact: {candidate.lastContact}
-                      </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="flex space-x-3">
-                  <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
-                    <Mail className="w-4 h-4 mr-2" />
-                    Send Email
-                  </Button>
-                  <Button className="bg-gradient-primary hover:opacity-90">
-                    <Send className="w-4 h-4 mr-2" />
-                    Quick Action
-                  </Button>
+                <div className="text-right text-sm text-muted-foreground">
+                  <p>Added: {candidate.addedDate}</p>
+                  <p>Updated: {candidate.updatedDate}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Tabs for different sections */}
-          <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="bg-card border border-border">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="timeline">Engagement Timeline</TabsTrigger>
-              <TabsTrigger value="skills">Skills & Experience</TabsTrigger>
-              <TabsTrigger value="notes">Notes</TabsTrigger>
-            </TabsList>
+          {/* Main Content - 2 Column Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column - Wider */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* AI-Generated Summary */}
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sky-blue">
+                      <Sparkles className="w-5 h-5" />
+                      AI-Generated Summary
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">AI Powered</span>
+                      <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Regenerate
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {aiSummary.map((point, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-foreground">
+                        <span className="w-2 h-2 rounded-full bg-sky-blue mt-2 flex-shrink-0" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
 
-            {/* Overview Tab */}
-            <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-3 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Quick Stats</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Experience</p>
-                      <p className="text-foreground font-medium">{candidate.experience}</p>
+              {/* Tags & Skills */}
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sky-blue">
+                      <Tag className="w-5 h-5" />
+                      Tags & Skills
+                    </CardTitle>
+                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Tag
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Current Tags</p>
+                    <div className="flex flex-wrap gap-2">
+                      {currentTags.map((tag) => (
+                        <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-3 py-1">
+                          {tag}
+                          <button className="ml-2 hover:text-white">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Education</p>
-                      <p className="text-foreground font-medium">{candidate.education}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Suggested Tags</p>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestedTags.map((tag) => (
+                        <Badge 
+                          key={tag} 
+                          variant="outline" 
+                          className="border-border text-muted-foreground hover:border-sky-blue hover:text-sky-blue cursor-pointer px-3 py-1"
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Joined Pipeline</p>
-                      <p className="text-foreground font-medium">{candidate.joinedDate}</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
-                <Card className="col-span-2">
-                  <CardHeader>
-                    <CardTitle className="text-lg">AI Recommendations</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {aiRecommendations.map((rec) => (
-                      <div key={rec.id} className="flex items-start justify-between p-4 border border-border rounded-lg">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-foreground mb-1">{rec.title}</h4>
-                          <p className="text-sm text-muted-foreground">{rec.description}</p>
-                        </div>
-                        <Button size="sm" variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
-                          {rec.action}
+              {/* Resume Versions */}
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sky-blue">
+                      <FileText className="w-5 h-5" />
+                      Resume Versions
+                      <Badge variant="secondary" className="ml-2">{resumeVersions.length}</Badge>
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {resumeVersions.map((resume) => (
+                    <div 
+                      key={resume.id} 
+                      className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-foreground">{resume.name}</span>
+                        {resume.isLatest && (
+                          <Badge variant="secondary" className="text-xs">Latest</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+                          <Download className="w-4 h-4" />
                         </Button>
                       </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            {/* Timeline Tab */}
-            <TabsContent value="timeline">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Engagement History</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {timeline.map((event, index) => (
-                      <div key={event.id} className="flex items-start space-x-4">
-                        <div className="relative">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            event.type === 'email' ? 'bg-sky-blue/20' :
-                            event.type === 'note' ? 'bg-sunrise/20' :
-                            event.type === 'call' ? 'bg-deep-sea/20' : 'bg-muted'
-                          }`}>
-                            {event.type === 'email' && <Mail className="w-5 h-5 text-sky-blue" />}
-                            {event.type === 'note' && <FileText className="w-5 h-5 text-sunrise" />}
-                            {event.type === 'call' && <Phone className="w-5 h-5 text-deep-sea" />}
-                            {event.type === 'sourced' && <TrendingUp className="w-5 h-5 text-muted-foreground" />}
-                          </div>
-                          {index < timeline.length - 1 && (
-                            <div className="absolute left-5 top-10 w-0.5 h-12 bg-border" />
-                          )}
-                        </div>
-                        <div className="flex-1 pb-8">
-                          <div className="flex items-start justify-between mb-1">
-                            <h4 className="font-medium text-foreground">{event.title}</h4>
-                            <span className="text-sm text-muted-foreground">{event.date}</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{event.description}</p>
-                          {event.status === 'opened' && (
-                            <Badge className="mt-2 bg-sky-blue/20 text-sky-blue border-sky-blue">
-                              Opened
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Skills Tab */}
-            <TabsContent value="skills">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Skills Assessment</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {candidate.skills.map((skill) => (
-                      <div key={skill.name}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-foreground">{skill.name}</span>
-                          <span className="text-sm text-muted-foreground">{skill.level}%</span>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-sky-blue to-deep-sea rounded-full transition-all"
-                            style={{ width: `${skill.level}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 p-4 bg-sky-blue/5 border border-sky-blue/20 rounded-lg">
-                    <h4 className="font-medium text-foreground mb-2">Skill Highlights</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Top strengths in modern frontend technologies with strong expertise in React ecosystem.
-                      Growing backend capabilities with Node.js and cloud infrastructure knowledge.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Notes Tab */}
-            <TabsContent value="notes">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Notes & Comments</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4 mb-6">
-                    <Textarea
-                      placeholder="Add a note about this candidate..."
-                      value={newNote}
-                      onChange={(e) => setNewNote(e.target.value)}
-                      className="min-h-[100px] border-deep-sea focus:border-sky-blue"
-                    />
-                    <Button
-                      onClick={handleAddNote}
-                      className="bg-gradient-primary hover:opacity-90"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Note
+                    </div>
+                  ))}
+                  
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                      <Upload className="w-4 h-4 mr-1" />
+                      Upload New Version
+                    </Button>
+                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                      <ExternalLink className="w-4 h-4 mr-1" />
+                      Open in New Tab
                     </Button>
                   </div>
 
+                  <div className="mt-4 p-8 border border-dashed border-border rounded-lg text-center">
+                    <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-muted-foreground">Resume preview would appear here</p>
+                    <p className="text-sm text-muted-foreground">Integration with PDF viewer coming soon</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Communication History - Mobile Only (shows below on smaller screens) */}
+              <Card className="bg-card border-border lg:hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sky-blue">
+                      <Clock className="w-5 h-5" />
+                      Communication History
+                    </CardTitle>
+                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                      <Plus className="w-4 h-4 mr-1" />
+                      Log Communication
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
                   <div className="space-y-4">
-                    {notes.map((note) => (
-                      <div key={note.id} className="p-4 border border-border rounded-lg">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center space-x-2">
-                            <MessageSquare className="w-4 h-4 text-sky-blue" />
-                            <span className="font-medium text-foreground">{note.author}</span>
-                          </div>
-                          <span className="text-sm text-muted-foreground">{note.date}</span>
+                    {communicationHistory.map((comm, idx) => (
+                      <div key={comm.id} className="relative pl-8 pb-4">
+                        {idx < communicationHistory.length - 1 && (
+                          <div className="absolute left-3 top-6 w-0.5 h-full bg-border" />
+                        )}
+                        <div className="absolute left-0 top-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                          {getCommIcon(comm.type)}
                         </div>
-                        <p className="text-sm text-muted-foreground">{note.content}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge className={getCommBadgeStyle(comm.type)}>{comm.type}</Badge>
+                          <span className="text-xs text-muted-foreground">{comm.date}</span>
+                        </div>
+                        <p className="text-foreground text-sm">{comm.description}</p>
+                        <p className="text-sm text-muted-foreground italic">Outcome: {comm.outcome}</p>
                       </div>
                     ))}
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
+            </div>
+
+            {/* Right Column - Narrower */}
+            <div className="space-y-6">
+              {/* Recruiter Notes */}
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sky-blue">
+                      <StickyNote className="w-5 h-5" />
+                      Recruiter Notes
+                    </CardTitle>
+                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Note
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {recruiterNotes.map((note) => (
+                      <div key={note.id} className="pb-4 border-b border-border last:border-0 last:pb-0">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <FileText className="w-3 h-3" />
+                          {note.date}
+                        </div>
+                        <p className="text-foreground text-sm">{note.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Communication History - Desktop */}
+              <Card className="bg-card border-border hidden lg:block">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sky-blue">
+                      <Clock className="w-5 h-5" />
+                      Communication History
+                    </CardTitle>
+                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                      <Plus className="w-4 h-4 mr-1" />
+                      Log Communication
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {communicationHistory.map((comm, idx) => (
+                      <div key={comm.id} className="relative pl-8 pb-4">
+                        {idx < communicationHistory.length - 1 && (
+                          <div className="absolute left-3 top-6 w-0.5 h-full bg-border" />
+                        )}
+                        <div className="absolute left-0 top-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                          {getCommIcon(comm.type)}
+                        </div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge className={getCommBadgeStyle(comm.type)}>{comm.type}</Badge>
+                          <span className="text-xs text-muted-foreground">{comm.date}</span>
+                        </div>
+                        <p className="text-foreground text-sm">{comm.description}</p>
+                        <p className="text-sm text-muted-foreground italic">Outcome: {comm.outcome}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </main>
       </div>
 
