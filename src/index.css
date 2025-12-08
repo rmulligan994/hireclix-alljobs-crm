@@ -9,8 +9,8 @@ All colors MUST be HSL format.
 */
 
 @layer base {
+  /* Project Beacon Core Colors - Shared across themes */
   :root {
-    /* Project Beacon Core Colors */
     --deep-sea: 206 83% 20%;           /* #0B3555 */
     --sky-blue: 206 60% 58%;           /* #54A3DA */
     --sunrise: 39 96% 54%;             /* #FAA21B */
@@ -19,14 +19,22 @@ All colors MUST be HSL format.
     --neutral-mid: 210 6% 79%;         /* #C4C8CC */
     --neutral-charcoal: 0 0% 13%;      /* #212121 */
     
-    /* Semantic Tokens */
+    --radius: 0.75rem;
+    
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s ease-out;
+  }
+
+  /* Dark Theme (Default) */
+  .dark {
     --background: var(--neutral-charcoal);
     --foreground: var(--neutral-white);
     
-    --card: 210 15% 16%;               /* Slightly lighter than charcoal */
+    --card: 210 15% 16%;
     --card-foreground: var(--neutral-white);
     
-    --popover: var(--card);
+    --popover: 210 15% 16%;
     --popover-foreground: var(--neutral-white);
     
     --primary: var(--sky-blue);
@@ -48,17 +56,15 @@ All colors MUST be HSL format.
     --input: 210 10% 25%;
     --ring: var(--sky-blue);
     
-    --radius: 0.75rem;
-    
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(var(--deep-sea)), hsl(var(--sky-blue)));
     --gradient-accent: linear-gradient(135deg, hsl(var(--sunrise)), hsl(var(--sky-blue)));
-    --gradient-subtle: linear-gradient(180deg, hsl(var(--card)), hsl(210 15% 12%));
+    --gradient-subtle: linear-gradient(180deg, hsl(210 15% 16%), hsl(210 15% 12%));
     
     /* Shadows */
-    --shadow-card: 0px 2px 6px rgba(0, 0, 0, 0.12);
-    --shadow-hover: 0px 4px 12px rgba(84, 163, 218, 0.15);
-    --shadow-glow: 0 0 20px rgba(84, 163, 218, 0.3);
+    --shadow-card: 0px 2px 6px hsla(0, 0%, 0%, 0.25);
+    --shadow-hover: 0px 4px 12px hsla(206, 60%, 58%, 0.2);
+    --shadow-glow: 0 0 20px hsla(206, 60%, 58%, 0.3);
     
     /* Sidebar tokens */
     --sidebar-background: var(--deep-sea);
@@ -69,10 +75,57 @@ All colors MUST be HSL format.
     --sidebar-accent-foreground: var(--neutral-charcoal);
     --sidebar-border: 206 60% 30%;
     --sidebar-ring: var(--sky-blue);
+  }
+
+  /* Light Theme */
+  .light {
+    --background: var(--neutral-light);
+    --foreground: var(--neutral-charcoal);
     
-    /* Animations */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-fast: all 0.15s ease-out;
+    --card: var(--neutral-white);
+    --card-foreground: var(--neutral-charcoal);
+    
+    --popover: var(--neutral-white);
+    --popover-foreground: var(--neutral-charcoal);
+    
+    --primary: var(--sky-blue);
+    --primary-foreground: var(--neutral-white);
+    
+    --secondary: var(--deep-sea);
+    --secondary-foreground: var(--neutral-white);
+    
+    --muted: 210 14% 89%;
+    --muted-foreground: 210 10% 40%;
+    
+    --accent: var(--sunrise);
+    --accent-foreground: var(--neutral-charcoal);
+    
+    --destructive: 0 75% 55%;
+    --destructive-foreground: var(--neutral-white);
+    
+    --border: 210 14% 83%;
+    --input: 210 14% 83%;
+    --ring: var(--sky-blue);
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--deep-sea)), hsl(var(--sky-blue)));
+    --gradient-accent: linear-gradient(135deg, hsl(var(--sunrise)), hsl(var(--sky-blue)));
+    --gradient-subtle: linear-gradient(180deg, hsl(var(--neutral-white)), hsl(var(--neutral-light)));
+    
+    /* Shadows */
+    --shadow-card: 0px 2px 8px hsla(210, 10%, 50%, 0.1);
+    --shadow-hover: 0px 4px 16px hsla(206, 60%, 58%, 0.15);
+    --shadow-glow: 0 0 20px hsla(206, 60%, 58%, 0.2);
+    
+    /* Sidebar tokens */
+    --sidebar-background: var(--deep-sea);
+    --sidebar-foreground: var(--neutral-white);
+    --sidebar-primary: var(--sky-blue);
+    --sidebar-primary-foreground: var(--neutral-white);
+    --sidebar-accent: var(--sunrise);
+    --sidebar-accent-foreground: var(--neutral-charcoal);
+    --sidebar-border: 206 60% 30%;
+    --sidebar-ring: var(--sky-blue);
   }
 }
 

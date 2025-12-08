@@ -1,6 +1,7 @@
 import { Search, Bell, MessageSquare, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ThemeToggle } from './ThemeToggle';
 
 export const TopBar = () => {
   return (
@@ -30,6 +31,7 @@ export const TopBar = () => {
             <Bell className="w-5 h-5" />
             <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
           </Button>
+          <ThemeToggle />
         </div>
       </div>
     </header>
