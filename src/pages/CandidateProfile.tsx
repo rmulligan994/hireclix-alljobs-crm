@@ -29,7 +29,7 @@ const CandidateProfile = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotCollapsed, setCopilotCollapsed] = useState(true);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [newNote, setNewNote] = useState('');
 
   // Mock candidate data - in real app, fetch based on id
@@ -156,7 +156,10 @@ const CandidateProfile = () => {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
+        <TopBar 
+          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
+          copilotOpen={copilotOpen}
+        />
 
         <main className="flex-1 p-6 overflow-y-auto">
           {/* Back Button */}
@@ -409,8 +412,8 @@ const CandidateProfile = () => {
       </div>
 
       <AICopilot
-        collapsed={copilotCollapsed}
-        onToggle={() => setCopilotCollapsed(!copilotCollapsed)}
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
       />
     </div>
   );
