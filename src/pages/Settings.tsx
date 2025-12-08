@@ -14,7 +14,7 @@ import { Save } from 'lucide-react';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotCollapsed, setCopilotCollapsed] = useState(true);
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -24,7 +24,10 @@ const Settings = () => {
       />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
+        <TopBar 
+          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
+          copilotOpen={copilotOpen}
+        />
         
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-8">
@@ -283,8 +286,8 @@ const Settings = () => {
       </div>
 
       <AICopilot 
-        collapsed={copilotCollapsed}
-        onToggle={() => setCopilotCollapsed(!copilotCollapsed)}
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
       />
     </div>
   );

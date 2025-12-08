@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 
 const Index = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotCollapsed, setCopilotCollapsed] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -30,7 +30,10 @@ const Index = () => {
       
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
+        <TopBar 
+          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
+          copilotOpen={copilotOpen}
+        />
         
         {/* Dashboard Content */}
         <main className="flex-1 p-6 overflow-y-auto">
@@ -50,16 +53,9 @@ const Index = () => {
                   <Calendar className="w-4 h-4 mr-2" />
                   Current Report
                 </Button>
-                <Button className="bg-gradient-primary hover:opacity-90">
+              <Button className="bg-gradient-primary hover:opacity-90">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Candidate
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setCopilotCollapsed(!copilotCollapsed)}
-                  className="border-sunrise text-sunrise hover:bg-sunrise hover:text-neutral-charcoal"
-                >
-                  AI Copilot
                 </Button>
               </div>
             </div>
@@ -107,8 +103,8 @@ const Index = () => {
 
       {/* AI Copilot */}
       <AICopilot 
-        collapsed={copilotCollapsed}
-        onToggle={() => setCopilotCollapsed(!copilotCollapsed)}
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
       />
     </div>
   );

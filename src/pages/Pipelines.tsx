@@ -9,7 +9,7 @@ import { Plus, Clock, AlertCircle } from 'lucide-react';
 
 const Pipelines = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotCollapsed, setCopilotCollapsed] = useState(true);
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   const pipelineStages = [
     {
@@ -65,7 +65,10 @@ const Pipelines = () => {
       />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
+        <TopBar 
+          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
+          copilotOpen={copilotOpen}
+        />
         
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-8">
@@ -162,8 +165,8 @@ const Pipelines = () => {
       </div>
 
       <AICopilot 
-        collapsed={copilotCollapsed}
-        onToggle={() => setCopilotCollapsed(!copilotCollapsed)}
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
       />
     </div>
   );
