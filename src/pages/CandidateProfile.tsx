@@ -24,7 +24,6 @@ import {
   Download,
   Upload,
   ExternalLink,
-  MessageSquare,
   PhoneCall,
   Send,
 } from 'lucide-react';
@@ -35,7 +34,6 @@ const CandidateProfile = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
 
-  // Mock candidate data
   const candidate = {
     id: id || '1',
     name: 'Sarah Johnson',
@@ -102,7 +100,7 @@ const CandidateProfile = () => {
       case 'Email': return <Mail className="w-4 h-4" />;
       case 'Phone Call': return <PhoneCall className="w-4 h-4" />;
       case 'Outreach': return <Send className="w-4 h-4" />;
-      default: return <MessageSquare className="w-4 h-4" />;
+      default: return <Mail className="w-4 h-4" />;
     }
   };
 
@@ -188,243 +186,201 @@ const CandidateProfile = () => {
             </CardContent>
           </Card>
 
-          {/* Main Content - 2 Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column - Wider */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* AI-Generated Summary */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-sky-blue">
-                      <Sparkles className="w-5 h-5" />
-                      AI-Generated Summary
-                    </CardTitle>
+          {/* AI-Generated Summary - Full Width */}
+          <Card className="mb-6 bg-card border-border">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-sky-blue">
+                  <Sparkles className="w-5 h-5" />
+                  AI-Generated Summary
+                </CardTitle>
+                <span className="text-xs text-muted-foreground">AI Powered</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 mb-4">
+                {aiSummary.map((point, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-foreground">
+                    <span className="w-2 h-2 rounded-full bg-sky-blue mt-2 flex-shrink-0" />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Regenerate
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tags & Skills - Full Width */}
+          <Card className="mb-6 bg-card border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-sky-blue">
+                  <Tag className="w-5 h-5" />
+                  Tags & Skills
+                </CardTitle>
+                <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add Tag
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Current Tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {currentTags.map((tag) => (
+                    <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-3 py-1">
+                      {tag}
+                      <button className="ml-2 hover:text-white">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Suggested Tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedTags.map((tag) => (
+                    <Badge 
+                      key={tag} 
+                      variant="outline" 
+                      className="border-border text-muted-foreground hover:border-sky-blue hover:text-sky-blue cursor-pointer px-3 py-1"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Resume Versions + Recruiter Notes - Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Resume Versions */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sky-blue">
+                    <FileText className="w-5 h-5" />
+                    Resume Versions
+                    <Badge variant="secondary" className="ml-1">{resumeVersions.length}</Badge>
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {resumeVersions.map((resume) => (
+                  <div 
+                    key={resume.id} 
+                    className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 transition-colors"
+                  >
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">AI Powered</span>
-                      <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
-                        <RefreshCw className="w-4 h-4 mr-1" />
-                        Regenerate
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-foreground">{resume.name}</span>
+                      {resume.isLatest && (
+                        <Badge variant="secondary" className="text-xs">Latest</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                        <Download className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {aiSummary.map((point, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-foreground">
-                        <span className="w-2 h-2 rounded-full bg-sky-blue mt-2 flex-shrink-0" />
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+                ))}
+                
+                <div className="flex items-center gap-2 pt-2">
+                  <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                    <Upload className="w-4 h-4 mr-1" />
+                    Upload New Version
+                  </Button>
+                  <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                    <ExternalLink className="w-4 h-4 mr-1" />
+                    Open in New Tab
+                  </Button>
+                </div>
 
-              {/* Tags & Skills */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-sky-blue">
-                      <Tag className="w-5 h-5" />
-                      Tags & Skills
-                    </CardTitle>
-                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Tag
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Current Tags</p>
-                    <div className="flex flex-wrap gap-2">
-                      {currentTags.map((tag) => (
-                        <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-3 py-1">
-                          {tag}
-                          <button className="ml-2 hover:text-white">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Suggested Tags</p>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestedTags.map((tag) => (
-                        <Badge 
-                          key={tag} 
-                          variant="outline" 
-                          className="border-border text-muted-foreground hover:border-sky-blue hover:text-sky-blue cursor-pointer px-3 py-1"
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                <div className="p-6 border border-dashed border-border rounded-lg text-center">
+                  <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Resume preview would appear here</p>
+                  <p className="text-xs text-muted-foreground">Integration with PDF viewer coming soon</p>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* Resume Versions */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-sky-blue">
-                      <FileText className="w-5 h-5" />
-                      Resume Versions
-                      <Badge variant="secondary" className="ml-2">{resumeVersions.length}</Badge>
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {resumeVersions.map((resume) => (
-                    <div 
-                      key={resume.id} 
-                      className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-foreground">{resume.name}</span>
-                        {resume.isLatest && (
-                          <Badge variant="secondary" className="text-xs">Latest</Badge>
-                        )}
+            {/* Recruiter Notes */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sky-blue">
+                    <StickyNote className="w-5 h-5" />
+                    Recruiter Notes
+                  </CardTitle>
+                  <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Note
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {recruiterNotes.map((note) => (
+                    <div key={note.id} className="pb-4 border-b border-border last:border-0 last:pb-0">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <FileText className="w-3 h-3" />
+                        {note.date}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <p className="text-foreground text-sm">{note.content}</p>
                     </div>
                   ))}
-                  
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
-                      <Upload className="w-4 h-4 mr-1" />
-                      Upload New Version
-                    </Button>
-                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
-                      <ExternalLink className="w-4 h-4 mr-1" />
-                      Open in New Tab
-                    </Button>
-                  </div>
-
-                  <div className="mt-4 p-8 border border-dashed border-border rounded-lg text-center">
-                    <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-muted-foreground">Resume preview would appear here</p>
-                    <p className="text-sm text-muted-foreground">Integration with PDF viewer coming soon</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Communication History - Mobile Only (shows below on smaller screens) */}
-              <Card className="bg-card border-border lg:hidden">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-sky-blue">
-                      <Clock className="w-5 h-5" />
-                      Communication History
-                    </CardTitle>
-                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Log Communication
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {communicationHistory.map((comm, idx) => (
-                      <div key={comm.id} className="relative pl-8 pb-4">
-                        {idx < communicationHistory.length - 1 && (
-                          <div className="absolute left-3 top-6 w-0.5 h-full bg-border" />
-                        )}
-                        <div className="absolute left-0 top-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                          {getCommIcon(comm.type)}
-                        </div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge className={getCommBadgeStyle(comm.type)}>{comm.type}</Badge>
-                          <span className="text-xs text-muted-foreground">{comm.date}</span>
-                        </div>
-                        <p className="text-foreground text-sm">{comm.description}</p>
-                        <p className="text-sm text-muted-foreground italic">Outcome: {comm.outcome}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Column - Narrower */}
-            <div className="space-y-6">
-              {/* Recruiter Notes */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-sky-blue">
-                      <StickyNote className="w-5 h-5" />
-                      Recruiter Notes
-                    </CardTitle>
-                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Note
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {recruiterNotes.map((note) => (
-                      <div key={note.id} className="pb-4 border-b border-border last:border-0 last:pb-0">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                          <FileText className="w-3 h-3" />
-                          {note.date}
-                        </div>
-                        <p className="text-foreground text-sm">{note.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Communication History - Desktop */}
-              <Card className="bg-card border-border hidden lg:block">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-sky-blue">
-                      <Clock className="w-5 h-5" />
-                      Communication History
-                    </CardTitle>
-                    <Button className="bg-gradient-primary hover:opacity-90" size="sm">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Log Communication
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {communicationHistory.map((comm, idx) => (
-                      <div key={comm.id} className="relative pl-8 pb-4">
-                        {idx < communicationHistory.length - 1 && (
-                          <div className="absolute left-3 top-6 w-0.5 h-full bg-border" />
-                        )}
-                        <div className="absolute left-0 top-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                          {getCommIcon(comm.type)}
-                        </div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge className={getCommBadgeStyle(comm.type)}>{comm.type}</Badge>
-                          <span className="text-xs text-muted-foreground">{comm.date}</span>
-                        </div>
-                        <p className="text-foreground text-sm">{comm.description}</p>
-                        <p className="text-sm text-muted-foreground italic">Outcome: {comm.outcome}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
+
+          {/* Communication History - Full Width */}
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-sky-blue">
+                  <Clock className="w-5 h-5" />
+                  Communication History
+                </CardTitle>
+                <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Log Communication
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {communicationHistory.map((comm, idx) => (
+                  <div key={comm.id} className="relative pl-8 pb-4 border-b border-border last:border-0 last:pb-0">
+                    {idx < communicationHistory.length - 1 && (
+                      <div className="absolute left-3 top-6 w-0.5 h-[calc(100%-8px)] bg-border" />
+                    )}
+                    <div className="absolute left-0 top-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                      {getCommIcon(comm.type)}
+                    </div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge className={getCommBadgeStyle(comm.type)}>{comm.type}</Badge>
+                      <span className="text-xs text-muted-foreground">{comm.date}</span>
+                    </div>
+                    <p className="text-foreground text-sm">{comm.description}</p>
+                    <p className="text-sm text-muted-foreground italic">Outcome: {comm.outcome}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </main>
       </div>
 
