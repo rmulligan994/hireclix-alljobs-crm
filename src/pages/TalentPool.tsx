@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
+import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ const TalentPool = () => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [addCandidateOpen, setAddCandidateOpen] = useState(false);
 
   const snapshotMetrics = [
     { label: 'Total Candidates', value: 1247, icon: Users },
@@ -115,7 +117,10 @@ const TalentPool = () => {
                   <Upload className="w-4 h-4 mr-2" />
                   Import
                 </Button>
-                <Button className="bg-gradient-primary hover:opacity-90">
+                <Button 
+                  className="bg-gradient-primary hover:opacity-90"
+                  onClick={() => setAddCandidateOpen(true)}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Candidate
                 </Button>
@@ -261,6 +266,11 @@ const TalentPool = () => {
       <AICopilot 
         open={copilotOpen}
         onClose={() => setCopilotOpen(false)}
+      />
+
+      <AddCandidateDialog 
+        open={addCandidateOpen}
+        onOpenChange={setAddCandidateOpen}
       />
     </div>
   );
