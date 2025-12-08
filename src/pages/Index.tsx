@@ -9,8 +9,9 @@ import { QuickActions } from '@/components/dashboard/QuickActions';
 import { 
   Users, 
   Calendar, 
-  TrendingUp, 
-  MessageSquare,
+  GitBranch, 
+  Briefcase,
+  TrendingUp,
   Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -72,35 +73,26 @@ const Index = () => {
             <h2 className="font-heading text-xl font-semibold text-foreground mb-4">
               Metrics Overview
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <MetricCard
-                title="New Candidate Leads"
-                value="247"
-                change="60%"
-                trend="up"
+                title="Total Candidates"
+                value="1,247"
                 icon={Users}
-                variant="primary"
               />
               <MetricCard
-                title="Active Campaigns"
+                title="Active Pipelines"
+                value="8"
+                icon={GitBranch}
+              />
+              <MetricCard
+                title="Open Jobs"
+                value="24"
+                icon={Briefcase}
+              />
+              <MetricCard
+                title="Placements This Month"
                 value="12"
-                change="45%"
-                trend="up"
-                icon={Calendar}
-              />
-              <MetricCard
-                title="Response Rate"
-                value="28.5%"
-                change="35%"
-                trend="up"
                 icon={TrendingUp}
-              />
-              <MetricCard
-                title="Pipeline Velocity"
-                value="18 days"
-                change="25%"
-                trend="up"
-                icon={MessageSquare}
               />
             </div>
           </div>
