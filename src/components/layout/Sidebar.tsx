@@ -1,7 +1,8 @@
 import { 
   Home, 
   Users, 
-  TrendingUp, 
+  FolderKanban,
+  GitBranch,
   Mail, 
   BarChart3, 
   Settings, 
@@ -15,7 +16,8 @@ import { useLocation, Link } from 'react-router-dom';
 const navigationItems = [
   { icon: Home, label: 'Dashboard', path: '/' },
   { icon: Users, label: 'Candidates', path: '/talent' },
-  { icon: TrendingUp, label: 'Pipelines', path: '/pipelines' },
+  { icon: FolderKanban, label: 'Talent Pools', path: '/talent-pools' },
+  { icon: GitBranch, label: 'Pipelines', path: '/pipelines' },
   { icon: Mail, label: 'Campaigns', path: '/campaigns' },
   { icon: BarChart3, label: 'Analytics', path: '/analytics' },
   { icon: Zap, label: 'Integrations', path: '/integrations' },
