@@ -73,6 +73,18 @@ export const mockCandidatesData: MockCandidate[] = [
   },
 ];
 
+// Helper to get candidates in a format compatible with talent pool/pipeline dialogs
+export const mockCandidates = mockCandidatesData.map(c => ({
+  id: c.id,
+  name: `${c.firstName} ${c.lastName}`,
+  title: c.jobTitle,
+  company: c.company,
+  skills: c.tags,
+  email: c.email,
+  phone: c.phone,
+  location: c.location,
+}));
+
 export function findDuplicateCandidate(email?: string, phone?: string): MockCandidate | null {
   if (!email && !phone) return null;
   
