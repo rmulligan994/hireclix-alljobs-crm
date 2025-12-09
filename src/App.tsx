@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import Index from "./pages/Index";
 import TalentPool from "./pages/TalentPool";
 import TalentPools from "./pages/TalentPools";
+import TalentPoolDetail from "./pages/TalentPoolDetail";
 import CandidateProfile from "./pages/CandidateProfile";
 import Pipelines from "./pages/Pipelines";
 import PipelineDetail from "./pages/PipelineDetail";
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/talent" element={<TalentPool />} />
             <Route path="/talent/:id" element={<CandidateProfile />} />
             <Route path="/talent-pools" element={<TalentPools />} />
+            <Route path="/talent-pools/:id" element={<TalentPoolDetail />} />
             <Route path="/pipelines" element={<Pipelines />} />
             <Route path="/pipelines/:id" element={<PipelineDetail />} />
             <Route path="/campaigns" element={<Campaigns />} />

@@ -115,7 +115,7 @@ const TalentPools = () => {
               <Card 
                 key={pool.id} 
                 className="bg-card border-border hover:border-sky-blue transition-colors cursor-pointer group"
-                onClick={() => navigate(`/talent?pool=${pool.id}`)}
+                onClick={() => navigate(`/talent-pools/${pool.id}`)}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
