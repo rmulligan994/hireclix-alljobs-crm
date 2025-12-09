@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { CreatePipelineDialog } from '@/components/pipelines/CreatePipelineDialog';
+import { StageProgressBar } from '@/components/pipelines/StageProgressBar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Calendar, ChevronRight, Users, Archive, CheckCircle, MoreHorizontal, ArchiveRestore, Settings } from 'lucide-react';
+import { Plus, Search, Calendar, ChevronRight, Users, Archive, CheckCircle, MoreHorizontal, ArchiveRestore, Settings, GitBranch } from 'lucide-react';
 
 type PipelineStatus = 'active' | 'archived';
 type ViewFilter = 'active' | 'archived' | 'all';
@@ -197,123 +198,146 @@ const Pipelines = () => {
             </div>
           </div>
 
-          {/* Pipelines Table */}
-          <div className="bg-card rounded-lg border border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-deep-sea hover:bg-deep-sea">
-                  <TableHead className="text-white">Pipeline</TableHead>
-                  <TableHead className="text-white">Status</TableHead>
-                  <TableHead className="text-white">Stage Breakdown</TableHead>
-                  <TableHead className="text-white">Total</TableHead>
-                  <TableHead className="text-white">Created</TableHead>
-                  <TableHead className="text-white"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPipelines.map((pipeline) => (
-                  <TableRow 
-                    key={pipeline.id} 
-                    className="hover:bg-sky-blue/5 cursor-pointer"
-                    onClick={() => navigate(`/pipelines/${pipeline.id}`)}
-                  >
-                    <TableCell>
-                      <div className="font-medium text-foreground">{pipeline.title}</div>
-                    </TableCell>
-                    <TableCell>
-                      {pipeline.status === 'active' ? (
-                        <Badge className="bg-green-500/20 text-green-500 border-green-500">
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-muted text-muted-foreground">
-                          <Archive className="w-3 h-3 mr-1" />
-                          Archived
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant="outline" className="text-xs border-muted-foreground/30">
-                          S: {pipeline.stages.sourced}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs border-muted-foreground/30">
-                          C: {pipeline.stages.contacted}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs border-muted-foreground/30">
-                          E: {pipeline.stages.engaged}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs border-muted-foreground/30">
-                          Q: {pipeline.stages.qualified}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs border-sunrise text-sunrise">
-                          H: {pipeline.stages.hired}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-foreground">
-                        <Users className="w-4 h-4 text-sky-blue" />
-                        {getTotalCandidates(pipeline.stages)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(pipeline.createdAt).toLocaleDateString()}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-card border-border">
-                            <DropdownMenuItem 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/pipelines/${pipeline.id}`);
-                              }}
-                              className="text-muted-foreground hover:text-foreground cursor-pointer"
-                            >
-                              <Settings className="w-4 h-4 mr-2" />
-                              Edit Stages
-                            </DropdownMenuItem>
-                            {pipeline.status === 'active' ? (
-                              <DropdownMenuItem 
-                                onClick={(e) => handleArchiveClick(e as any, pipeline)}
-                                className="text-muted-foreground hover:text-foreground cursor-pointer"
-                              >
-                                <Archive className="w-4 h-4 mr-2" />
-                                Archive Pipeline
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem 
-                                onClick={(e) => handleArchiveClick(e as any, pipeline)}
-                                className="text-muted-foreground hover:text-foreground cursor-pointer"
-                              >
-                                <ArchiveRestore className="w-4 h-4 mr-2" />
-                                Unarchive Pipeline
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          {/* Empty State - No pipelines exist */}
+          {pipelines.length === 0 && (
+            <div className="bg-card rounded-lg border border-border p-12">
+              <div className="text-center max-w-md mx-auto">
+                <div className="w-20 h-20 rounded-full bg-sky-blue/10 flex items-center justify-center mx-auto mb-6">
+                  <GitBranch className="w-10 h-10 text-sky-blue" />
+                </div>
+                <h2 className="font-heading text-xl font-bold text-foreground mb-3">
+                  No pipelines yet
+                </h2>
+                <p className="text-muted-foreground mb-6">
+                  Create your first pipeline to start tracking candidates through your hiring process. 
+                  Each pipeline represents a role you're hiring for.
+                </p>
+                <Button 
+                  className="bg-gradient-primary hover:opacity-90"
+                  onClick={() => setCreateDialogOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Pipeline
+                </Button>
+              </div>
+            </div>
+          )}
 
-          {filteredPipelines.length === 0 && (
-            <div className="text-center py-12">
+          {/* Pipelines Table */}
+          {pipelines.length > 0 && (
+            <div className="bg-card rounded-lg border border-border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-deep-sea hover:bg-deep-sea">
+                    <TableHead className="text-white">Pipeline</TableHead>
+                    <TableHead className="text-white">Status</TableHead>
+                    <TableHead className="text-white">Stage Breakdown</TableHead>
+                    <TableHead className="text-white">Total</TableHead>
+                    <TableHead className="text-white">Created</TableHead>
+                    <TableHead className="text-white"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPipelines.map((pipeline) => (
+                    <TableRow 
+                      key={pipeline.id} 
+                      className="hover:bg-sky-blue/5 cursor-pointer"
+                      onClick={() => navigate(`/pipelines/${pipeline.id}`)}
+                    >
+                      <TableCell>
+                        <div className="font-medium text-foreground">{pipeline.title}</div>
+                      </TableCell>
+                      <TableCell>
+                        {pipeline.status === 'active' ? (
+                          <Badge className="bg-green-500/20 text-green-500 border-green-500">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                            <Archive className="w-3 h-3 mr-1" />
+                            Archived
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <StageProgressBar stages={pipeline.stages} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-foreground">
+                          <Users className="w-4 h-4 text-sky-blue" />
+                          {getTotalCandidates(pipeline.stages)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-muted-foreground text-sm">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(pipeline.createdAt).toLocaleDateString()}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-card border-border">
+                              <DropdownMenuItem 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/pipelines/${pipeline.id}`);
+                                }}
+                                className="text-muted-foreground hover:text-foreground cursor-pointer"
+                              >
+                                <Settings className="w-4 h-4 mr-2" />
+                                Edit Stages
+                              </DropdownMenuItem>
+                              {pipeline.status === 'active' ? (
+                                <DropdownMenuItem 
+                                  onClick={(e) => handleArchiveClick(e as any, pipeline)}
+                                  className="text-muted-foreground hover:text-foreground cursor-pointer"
+                                >
+                                  <Archive className="w-4 h-4 mr-2" />
+                                  Archive Pipeline
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem 
+                                  onClick={(e) => handleArchiveClick(e as any, pipeline)}
+                                  className="text-muted-foreground hover:text-foreground cursor-pointer"
+                                >
+                                  <ArchiveRestore className="w-4 h-4 mr-2" />
+                                  Unarchive Pipeline
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* No results for filter/search */}
+          {pipelines.length > 0 && filteredPipelines.length === 0 && (
+            <div className="bg-card rounded-lg border border-border p-8 text-center">
+              <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground">No pipelines found matching your criteria.</p>
+              <Button 
+                variant="ghost" 
+                className="mt-3 text-sky-blue"
+                onClick={() => {
+                  setSearchQuery('');
+                  setViewFilter('all');
+                }}
+              >
+                Clear filters
+              </Button>
             </div>
           )}
         </main>
