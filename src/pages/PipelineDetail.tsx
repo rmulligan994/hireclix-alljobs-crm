@@ -288,7 +288,7 @@ const PipelineDetail = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={() => navigate('/pipelines')}
+                onClick={() => navigate(-1)}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="w-5 h-5" />

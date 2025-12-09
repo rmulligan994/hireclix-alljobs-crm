@@ -168,7 +168,7 @@ const CandidateProfile = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate('/talent')}
+              onClick={() => navigate(-1)}
               className="border-border text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="w-4 h-4 mr-1" />
