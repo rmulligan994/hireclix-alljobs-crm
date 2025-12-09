@@ -1,0 +1,233 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { GitMerge, User, Mail, Phone, Building, Briefcase, MapPin, Tag, StickyNote, ArrowRight } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { MockCandidate } from '@/data/mockCandidates';
+
+interface MergeCandidateDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  existingCandidate: MockCandidate;
+  newCandidateData: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    jobTitle?: string;
+    location?: string;
+    source?: string;
+    tags?: string[];
+    notes?: string;
+  };
+  onMergeComplete?: () => void;
+}
+
+type MergeField = 'firstName' | 'lastName' | 'email' | 'phone' | 'company' | 'jobTitle' | 'location' | 'source' | 'notes';
+
+const fieldConfig: { key: MergeField; label: string; icon: React.ElementType }[] = [
+  { key: 'firstName', label: 'First Name', icon: User },
+  { key: 'lastName', label: 'Last Name', icon: User },
+  { key: 'email', label: 'Email', icon: Mail },
+  { key: 'phone', label: 'Phone', icon: Phone },
+  { key: 'company', label: 'Company', icon: Building },
+  { key: 'jobTitle', label: 'Job Title', icon: Briefcase },
+  { key: 'location', label: 'Location', icon: MapPin },
+  { key: 'source', label: 'Source', icon: User },
+  { key: 'notes', label: 'Notes', icon: StickyNote },
+];
+
+export function MergeCandidateDialog({
+  open,
+  onOpenChange,
+  existingCandidate,
+  newCandidateData,
+  onMergeComplete,
+}: MergeCandidateDialogProps) {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  // Initialize selections - prefer existing data if new is empty
+  const [selections, setSelections] = useState<Record<MergeField, 'existing' | 'new'>>(() => {
+    const initial: Record<MergeField, 'existing' | 'new'> = {} as any;
+    fieldConfig.forEach(({ key }) => {
+      const existingValue = existingCandidate[key];
+      const newValue = newCandidateData[key];
+      // Default to existing if it has a value, otherwise prefer new
+      initial[key] = existingValue ? 'existing' : (newValue ? 'new' : 'existing');
+    });
+    return initial;
+  });
+
+  const [mergeTags, setMergeTags] = useState(true);
+
+  const handleMerge = () => {
+    // In a real app, this would call an API to merge the candidates
+    toast({
+      title: 'Candidates merged',
+      description: 'The candidate records have been successfully merged.',
+    });
+    onOpenChange(false);
+    onMergeComplete?.();
+    navigate(`/talent/${existingCandidate.id}`);
+  };
+
+  const getDisplayValue = (field: MergeField, source: 'existing' | 'new') => {
+    const value = source === 'existing' ? existingCandidate[field] : newCandidateData[field];
+    return value || '(empty)';
+  };
+
+  const existingTags = existingCandidate.tags || [];
+  const newTags = newCandidateData.tags || [];
+  const combinedTags = [...new Set([...existingTags, ...newTags])];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-card border-border max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
+            <GitMerge className="w-5 h-5 text-sky-blue" />
+            Merge Candidates
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Select which values to keep for each field
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-4">
+          {/* Header Row */}
+          <div className="grid grid-cols-[180px_1fr_40px_1fr] gap-4 items-center text-sm font-medium text-muted-foreground pb-2 border-b border-border">
+            <div>Field</div>
+            <div className="text-center">Existing Record</div>
+            <div></div>
+            <div className="text-center">New Data</div>
+          </div>
+
+          {/* Field Rows */}
+          {fieldConfig.map(({ key, label, icon: Icon }) => {
+            const existingValue = getDisplayValue(key, 'existing');
+            const newValue = getDisplayValue(key, 'new');
+            const isDifferent = existingValue !== newValue && newValue !== '(empty)' && existingValue !== '(empty)';
+            
+            return (
+              <div 
+                key={key} 
+                className={`grid grid-cols-[180px_1fr_40px_1fr] gap-4 items-center py-2 ${isDifferent ? 'bg-sunrise/5 -mx-4 px-4 rounded-lg' : ''}`}
+              >
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <Icon className="w-4 h-4 text-sky-blue" />
+                  {label}
+                </div>
+                
+                <label 
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    selections[key] === 'existing' 
+                      ? 'border-sky-blue bg-sky-blue/10' 
+                      : 'border-border hover:border-muted-foreground'
+                  }`}
+                  onClick={() => setSelections(prev => ({ ...prev, [key]: 'existing' }))}
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroup value={selections[key]} className="pointer-events-none">
+                      <RadioGroupItem value="existing" id={`${key}-existing`} />
+                    </RadioGroup>
+                    <span className={`text-sm ${existingValue === '(empty)' ? 'text-muted-foreground italic' : 'text-foreground'}`}>
+                      {existingValue}
+                    </span>
+                  </div>
+                </label>
+
+                <ArrowRight className="w-4 h-4 text-muted-foreground mx-auto" />
+
+                <label 
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    selections[key] === 'new' 
+                      ? 'border-sky-blue bg-sky-blue/10' 
+                      : 'border-border hover:border-muted-foreground'
+                  }`}
+                  onClick={() => setSelections(prev => ({ ...prev, [key]: 'new' }))}
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroup value={selections[key]} className="pointer-events-none">
+                      <RadioGroupItem value="new" id={`${key}-new`} />
+                    </RadioGroup>
+                    <span className={`text-sm ${newValue === '(empty)' ? 'text-muted-foreground italic' : 'text-foreground'}`}>
+                      {newValue}
+                    </span>
+                  </div>
+                </label>
+              </div>
+            );
+          })}
+
+          {/* Tags Section */}
+          <div className="pt-4 border-t border-border">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
+              <Tag className="w-4 h-4 text-sky-blue" />
+              Tags & Skills
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg border border-border">
+                <p className="text-xs text-muted-foreground mb-2">Existing Tags</p>
+                <div className="flex flex-wrap gap-1">
+                  {existingTags.length > 0 ? existingTags.map(tag => (
+                    <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                  )) : <span className="text-sm text-muted-foreground italic">(none)</span>}
+                </div>
+              </div>
+              <div className="p-3 rounded-lg border border-border">
+                <p className="text-xs text-muted-foreground mb-2">New Tags</p>
+                <div className="flex flex-wrap gap-1">
+                  {newTags.length > 0 ? newTags.map(tag => (
+                    <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                  )) : <span className="text-sm text-muted-foreground italic">(none)</span>}
+                </div>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 mt-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={mergeTags} 
+                onChange={(e) => setMergeTags(e.target.checked)}
+                className="rounded border-border"
+              />
+              <span className="text-sm text-foreground">
+                Combine all tags ({combinedTags.length} unique)
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-4 mt-4 border-t border-border">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="flex-1 border-border text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleMerge}
+            className="flex-1 bg-gradient-primary hover:opacity-90"
+          >
+            <GitMerge className="w-4 h-4 mr-2" />
+            Merge Candidates
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

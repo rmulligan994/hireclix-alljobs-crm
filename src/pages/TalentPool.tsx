@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
+import { FindDuplicatesDialog } from '@/components/candidates/FindDuplicatesDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, Filter, Download, Upload, Plus, Mail, Phone, MapPin, Users, CalendarPlus, GitBranch } from 'lucide-react';
+import { Search, Filter, Download, Upload, Plus, Mail, Phone, MapPin, Users, CalendarPlus, GitBranch, GitMerge } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 const TalentPool = () => {
@@ -23,6 +24,7 @@ const TalentPool = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
+  const [findDuplicatesOpen, setFindDuplicatesOpen] = useState(false);
 
   const snapshotMetrics = [
     { label: 'Total Candidates', value: 1247, icon: Users },
@@ -109,6 +111,14 @@ const TalentPool = () => {
                 </p>
               </div>
               <div className="flex items-center space-x-3">
+                <Button 
+                  variant="outline" 
+                  className="border-sunrise text-sunrise hover:bg-sunrise hover:text-white"
+                  onClick={() => setFindDuplicatesOpen(true)}
+                >
+                  <GitMerge className="w-4 h-4 mr-2" />
+                  Find Duplicates
+                </Button>
                 <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
                   <Download className="w-4 h-4 mr-2" />
                   Export
@@ -271,6 +281,11 @@ const TalentPool = () => {
       <AddCandidateDialog 
         open={addCandidateOpen}
         onOpenChange={setAddCandidateOpen}
+      />
+
+      <FindDuplicatesDialog
+        open={findDuplicatesOpen}
+        onOpenChange={setFindDuplicatesOpen}
       />
     </div>
   );
