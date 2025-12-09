@@ -9,6 +9,7 @@ import TalentPool from "./pages/TalentPool";
 import TalentPools from "./pages/TalentPools";
 import CandidateProfile from "./pages/CandidateProfile";
 import Pipelines from "./pages/Pipelines";
+import PipelineDetail from "./pages/PipelineDetail";
 import Campaigns from "./pages/Campaigns";
 import Analytics from "./pages/Analytics";
 import Integrations from "./pages/Integrations";
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/talent/:id" element={<CandidateProfile />} />
             <Route path="/talent-pools" element={<TalentPools />} />
             <Route path="/pipelines" element={<Pipelines />} />
+            <Route path="/pipelines/:id" element={<PipelineDetail />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/integrations" element={<Integrations />} />

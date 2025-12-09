@@ -10,11 +10,36 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Save } from 'lucide-react';
+import { Save, Plus, Trash2, Copy, GitBranch } from 'lucide-react';
+import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
+import { useToast } from '@/hooks/use-toast';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const { toast } = useToast();
+  const [customTemplates, setCustomTemplates] = useState<PipelineTemplate[]>([]);
+
+  const handleDuplicateTemplate = (template: PipelineTemplate) => {
+    const newTemplate: PipelineTemplate = {
+      ...template,
+      id: `custom-${Date.now()}`,
+      name: `${template.name} (Copy)`,
+    };
+    setCustomTemplates([...customTemplates, newTemplate]);
+    toast({
+      title: 'Template duplicated',
+      description: `"${newTemplate.name}" has been created.`,
+    });
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    setCustomTemplates(customTemplates.filter(t => t.id !== templateId));
+    toast({
+      title: 'Template deleted',
+      description: 'The template has been removed.',
+    });
+  };
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -44,6 +69,7 @@ const Settings = () => {
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+              <TabsTrigger value="templates">Pipeline Templates</TabsTrigger>
               <TabsTrigger value="team">Team</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
@@ -193,6 +219,117 @@ const Settings = () => {
                     <Save className="w-4 h-4 mr-2" />
                     Save Configuration
                   </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="templates" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <GitBranch className="w-5 h-5 text-sky-blue" />
+                    Pipeline Templates
+                  </CardTitle>
+                  <CardDescription>
+                    Save and manage reusable stage configurations for new pipelines
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Default Templates */}
+                  <div className="space-y-3">
+                    <Label className="text-foreground">Default Templates</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Built-in templates that can be used when creating new pipelines
+                    </p>
+                    <div className="space-y-3">
+                      {defaultTemplates.map((template) => (
+                        <div key={template.id} className="p-4 border border-border rounded-lg">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h4 className="font-medium text-foreground">{template.name}</h4>
+                              <p className="text-sm text-muted-foreground">{template.description}</p>
+                            </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleDuplicateTemplate(template)}
+                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                            >
+                              <Copy className="w-3 h-3 mr-1" />
+                              Duplicate
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-3">
+                            {template.stages.map((stage, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {stage.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Custom Templates */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-foreground">Custom Templates</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Templates created by your team
+                        </p>
+                      </div>
+                      <Button 
+                        variant="outline"
+                        className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        New Template
+                      </Button>
+                    </div>
+
+                    {customTemplates.length === 0 ? (
+                      <div className="p-8 border border-dashed border-border rounded-lg text-center">
+                        <p className="text-muted-foreground">
+                          No custom templates yet. Duplicate a default template or create a new one.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {customTemplates.map((template) => (
+                          <div key={template.id} className="p-4 border border-border rounded-lg">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h4 className="font-medium text-foreground">{template.name}</h4>
+                                <p className="text-sm text-muted-foreground">{template.description}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button variant="ghost" size="sm">Edit</Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleDeleteTemplate(template.id)}
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1 mt-3">
+                              {template.stages.map((stage, index) => (
+                                <Badge key={index} variant="secondary" className="text-xs">
+                                  {stage.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

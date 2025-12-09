@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
+import { CreatePipelineDialog } from '@/components/pipelines/CreatePipelineDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Calendar, ChevronRight, Users, Archive, CheckCircle, MoreHorizontal, ArchiveRestore } from 'lucide-react';
+import { Plus, Search, Calendar, ChevronRight, Users, Archive, CheckCircle, MoreHorizontal, ArchiveRestore, Settings } from 'lucide-react';
 
 type PipelineStatus = 'active' | 'archived';
 type ViewFilter = 'active' | 'archived' | 'all';
@@ -52,6 +53,7 @@ const Pipelines = () => {
   const [viewFilter, setViewFilter] = useState<ViewFilter>('active');
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pipelines, setPipelines] = useState<Pipeline[]>([
     {
       id: '1',
@@ -155,7 +157,10 @@ const Pipelines = () => {
                   Manage role-specific recruitment funnels
                 </p>
               </div>
-              <Button className="bg-gradient-primary hover:opacity-90">
+              <Button 
+                className="bg-gradient-primary hover:opacity-90"
+                onClick={() => setCreateDialogOpen(true)}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Create Pipeline
               </Button>
@@ -268,6 +273,16 @@ const Pipelines = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-card border-border">
+                            <DropdownMenuItem 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/pipelines/${pipeline.id}`);
+                              }}
+                              className="text-muted-foreground hover:text-foreground cursor-pointer"
+                            >
+                              <Settings className="w-4 h-4 mr-2" />
+                              Edit Stages
+                            </DropdownMenuItem>
                             {pipeline.status === 'active' ? (
                               <DropdownMenuItem 
                                 onClick={(e) => handleArchiveClick(e as any, pipeline)}
@@ -335,6 +350,12 @@ const Pipelines = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Pipeline Dialog */}
+      <CreatePipelineDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
     </div>
   );
 };
