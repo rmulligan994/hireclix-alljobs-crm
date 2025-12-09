@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -36,8 +36,12 @@ import {
   Eye,
   X,
   AlertCircle,
+  AlertTriangle,
+  GitMerge,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { findDuplicateCandidate, getDuplicateMatchType, MockCandidate } from '@/data/mockCandidates';
+import { MergeCandidateDialog } from './MergeCandidateDialog';
 
 const candidateSchema = z.object({
   firstName: z.string().trim().max(50, 'First name must be less than 50 characters').optional().or(z.literal('')),
@@ -92,6 +96,10 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdCandidateId, setCreatedCandidateId] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [duplicateCandidate, setDuplicateCandidate] = useState<MockCandidate | null>(null);
+  const [duplicateMatchType, setDuplicateMatchType] = useState<'email' | 'phone' | null>(null);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [proceedAnyway, setProceedAnyway] = useState(false);
 
   const {
     register,
@@ -100,6 +108,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
     reset,
     watch,
     setValue,
+    getValues,
   } = useForm<CandidateFormData>({
     resolver: zodResolver(candidateSchema),
     mode: 'onChange',
@@ -123,11 +132,31 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
   // Get the root error for contactInfo validation
   const contactError = (errors as any).contactInfo?.message as string | undefined;
 
+  // Check for duplicates when email or phone changes
+  useEffect(() => {
+    if (proceedAnyway) return; // Don't check if user decided to proceed
+    
+    const timeoutId = setTimeout(() => {
+      const duplicate = findDuplicateCandidate(email, phone);
+      if (duplicate) {
+        setDuplicateCandidate(duplicate);
+        setDuplicateMatchType(getDuplicateMatchType(duplicate, email, phone));
+      } else {
+        setDuplicateCandidate(null);
+        setDuplicateMatchType(null);
+      }
+    }, 300); // Debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [email, phone, proceedAnyway]);
+
   const onSubmit = (data: CandidateFormData) => {
     // In a real app, this would call an API to create the candidate
     const newCandidateId = `candidate-${Date.now()}`;
     setCreatedCandidateId(newCandidateId);
     setShowSuccess(true);
+    setProceedAnyway(false);
+    setDuplicateCandidate(null);
     
     toast({
       title: 'Candidate created',
@@ -142,6 +171,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
       setShowSuccess(false);
       reset();
       setSelectedTags([]);
+      setProceedAnyway(false);
     }, 100);
   };
 
@@ -166,6 +196,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
     setShowSuccess(false);
     reset();
     setSelectedTags([]);
+    setProceedAnyway(false);
   };
 
   const handleClose = () => {
@@ -173,6 +204,8 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
     setShowSuccess(false);
     reset();
     setSelectedTags([]);
+    setProceedAnyway(false);
+    setDuplicateCandidate(null);
   };
 
   const toggleTag = (tag: string) => {
@@ -185,6 +218,22 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
 
   const removeTag = (tag: string) => {
     setSelectedTags(prev => prev.filter(t => t !== tag));
+  };
+
+  const handleViewExistingProfile = () => {
+    if (duplicateCandidate) {
+      onOpenChange(false);
+      navigate(`/talent/${duplicateCandidate.id}`);
+    }
+  };
+
+  const handleOpenMergeDialog = () => {
+    setShowMergeDialog(true);
+  };
+
+  const handleProceedAnyway = () => {
+    setProceedAnyway(true);
+    setDuplicateCandidate(null);
   };
 
   if (showSuccess) {
@@ -233,233 +282,309 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-sky-blue" />
-            Add Candidate
-          </DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            Quickly add a new candidate to your database
-          </p>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-sky-blue" />
+              Add Candidate
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Quickly add a new candidate to your database
+            </p>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Contact Info Section - Required */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <User className="w-4 h-4 text-sky-blue" />
-              Contact Information
-              <span className="text-sunrise text-xs">*At least email or phone required</span>
-            </div>
-
-            {/* Contact validation error */}
-            {contactError && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/30">
-                <AlertCircle className="w-4 h-4 text-destructive" />
-                <span className="text-sm text-destructive">{contactError}</span>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Duplicate Warning */}
+            {duplicateCandidate && !proceedAnyway && (
+              <div className="p-4 rounded-lg bg-sunrise/10 border border-sunrise/30 space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-sunrise flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">
+                      A candidate with this {duplicateMatchType} already exists:
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {duplicateCandidate.firstName} {duplicateCandidate.lastName}
+                      {duplicateCandidate.jobTitle && ` • ${duplicateCandidate.jobTitle}`}
+                      {duplicateCandidate.company && ` at ${duplicateCandidate.company}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleViewExistingProfile}
+                    className="border-sunrise text-sunrise hover:bg-sunrise hover:text-white"
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    View Profile
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleOpenMergeDialog}
+                    className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                  >
+                    <GitMerge className="w-3 h-3 mr-1" />
+                    Merge with Existing
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleProceedAnyway}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Proceed Anyway
+                  </Button>
+                </div>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName" className="text-muted-foreground">
-                  First Name <span className="text-xs">(Optional)</span>
-                </Label>
-                <Input
-                  id="firstName"
-                  placeholder="John"
-                  {...register('firstName')}
-                  className="border-border focus:border-sky-blue"
-                />
+            {/* Contact Info Section - Required */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <User className="w-4 h-4 text-sky-blue" />
+                Contact Information
+                <span className="text-sunrise text-xs">*At least email or phone required</span>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName" className="text-muted-foreground">
-                  Last Name <span className="text-xs">(Optional)</span>
-                </Label>
-                <Input
-                  id="lastName"
-                  placeholder="Smith"
-                  {...register('lastName')}
-                  className="border-border focus:border-sky-blue"
-                />
+
+              {/* Contact validation error */}
+              {contactError && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/30">
+                  <AlertCircle className="w-4 h-4 text-destructive" />
+                  <span className="text-sm text-destructive">{contactError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName" className="text-muted-foreground">
+                    First Name <span className="text-xs">(Optional)</span>
+                  </Label>
+                  <Input
+                    id="firstName"
+                    placeholder="John"
+                    {...register('firstName')}
+                    className="border-border focus:border-sky-blue"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName" className="text-muted-foreground">
+                    Last Name <span className="text-xs">(Optional)</span>
+                  </Label>
+                  <Input
+                    id="lastName"
+                    placeholder="Smith"
+                    {...register('lastName')}
+                    className="border-border focus:border-sky-blue"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-muted-foreground flex items-center gap-1">
+                    <Mail className="w-3 h-3" />
+                    Email
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="john@company.com"
+                    {...register('email')}
+                    className={`border-border focus:border-sky-blue ${errors.email ? 'border-destructive' : ''}`}
+                  />
+                  {errors.email && (
+                    <span className="text-xs text-destructive">{errors.email.message}</span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-muted-foreground flex items-center gap-1">
+                    <Phone className="w-3 h-3" />
+                    Phone
+                  </Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="+1 (555) 123-4567"
+                    {...register('phone')}
+                    className="border-border focus:border-sky-blue"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-muted-foreground flex items-center gap-1">
-                  <Mail className="w-3 h-3" />
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="john@company.com"
-                  {...register('email')}
-                  className={`border-border focus:border-sky-blue ${errors.email ? 'border-destructive' : ''}`}
-                />
-                {errors.email && (
-                  <span className="text-xs text-destructive">{errors.email.message}</span>
-                )}
+            {/* Optional Details Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Briefcase className="w-4 h-4 text-sky-blue" />
+                Professional Details
+                <span className="text-xs text-muted-foreground">(Optional)</span>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-muted-foreground flex items-center gap-1">
-                  <Phone className="w-3 h-3" />
-                  Phone
-                </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+1 (555) 123-4567"
-                  {...register('phone')}
-                  className="border-border focus:border-sky-blue"
-                />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company" className="text-muted-foreground flex items-center gap-1">
+                    <Building className="w-3 h-3" />
+                    Company <span className="text-xs">(Optional)</span>
+                  </Label>
+                  <Input
+                    id="company"
+                    placeholder="Acme Corp"
+                    {...register('company')}
+                    className="border-border focus:border-sky-blue"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="jobTitle" className="text-muted-foreground flex items-center gap-1">
+                    <Briefcase className="w-3 h-3" />
+                    Job Title <span className="text-xs">(Optional)</span>
+                  </Label>
+                  <Input
+                    id="jobTitle"
+                    placeholder="Software Engineer"
+                    {...register('jobTitle')}
+                    className="border-border focus:border-sky-blue"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="location" className="text-muted-foreground flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    Location <span className="text-xs">(Optional)</span>
+                  </Label>
+                  <Input
+                    id="location"
+                    placeholder="San Francisco, CA"
+                    {...register('location')}
+                    className="border-border focus:border-sky-blue"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="source" className="text-muted-foreground">
+                    Source <span className="text-xs">(Optional)</span>
+                  </Label>
+                  <Select onValueChange={(value) => setValue('source', value)}>
+                    <SelectTrigger className="border-border">
+                      <SelectValue placeholder="Select source" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      {sourceOptions.map((source) => (
+                        <SelectItem key={source} value={source}>
+                          {source}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Optional Details Section */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <Briefcase className="w-4 h-4 text-sky-blue" />
-              Professional Details
-              <span className="text-xs text-muted-foreground">(Optional)</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="company" className="text-muted-foreground flex items-center gap-1">
-                  <Building className="w-3 h-3" />
-                  Company <span className="text-xs">(Optional)</span>
-                </Label>
-                <Input
-                  id="company"
-                  placeholder="Acme Corp"
-                  {...register('company')}
-                  className="border-border focus:border-sky-blue"
-                />
+            {/* Tags Section */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Tag className="w-4 h-4 text-sky-blue" />
+                Tags & Skills
+                <span className="text-xs text-muted-foreground">(Optional)</span>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="jobTitle" className="text-muted-foreground flex items-center gap-1">
-                  <Briefcase className="w-3 h-3" />
-                  Job Title <span className="text-xs">(Optional)</span>
-                </Label>
-                <Input
-                  id="jobTitle"
-                  placeholder="Software Engineer"
-                  {...register('jobTitle')}
-                  className="border-border focus:border-sky-blue"
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="location" className="text-muted-foreground flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
-                  Location <span className="text-xs">(Optional)</span>
-                </Label>
-                <Input
-                  id="location"
-                  placeholder="San Francisco, CA"
-                  {...register('location')}
-                  className="border-border focus:border-sky-blue"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source" className="text-muted-foreground">
-                  Source <span className="text-xs">(Optional)</span>
-                </Label>
-                <Select onValueChange={(value) => setValue('source', value)}>
-                  <SelectTrigger className="border-border">
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {sourceOptions.map((source) => (
-                      <SelectItem key={source} value={source}>
-                        {source}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
+              {selectedTags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedTags.map((tag) => (
+                    <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-2 py-1">
+                      {tag}
+                      <button type="button" onClick={() => removeTag(tag)} className="ml-1 hover:text-white">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
-          {/* Tags Section */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <Tag className="w-4 h-4 text-sky-blue" />
-              Tags & Skills
-              <span className="text-xs text-muted-foreground">(Optional)</span>
-            </div>
-
-            {selectedTags.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {selectedTags.map((tag) => (
-                  <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-2 py-1">
-                    {tag}
-                    <button type="button" onClick={() => removeTag(tag)} className="ml-1 hover:text-white">
-                      <X className="w-3 h-3" />
-                    </button>
+                {suggestedTags.filter(t => !selectedTags.includes(t)).map((tag) => (
+                  <Badge 
+                    key={tag}
+                    variant="outline"
+                    className="border-border text-muted-foreground hover:border-sky-blue hover:text-sky-blue cursor-pointer px-2 py-1"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    + {tag}
                   </Badge>
                 ))}
               </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {suggestedTags.filter(t => !selectedTags.includes(t)).map((tag) => (
-                <Badge 
-                  key={tag}
-                  variant="outline"
-                  className="border-border text-muted-foreground hover:border-sky-blue hover:text-sky-blue cursor-pointer px-2 py-1"
-                  onClick={() => toggleTag(tag)}
-                >
-                  + {tag}
-                </Badge>
-              ))}
             </div>
-          </div>
 
-          {/* Notes Section */}
-          <div className="space-y-2">
-            <Label htmlFor="notes" className="text-muted-foreground flex items-center gap-1">
-              <StickyNote className="w-3 h-3" />
-              Notes <span className="text-xs">(Optional)</span>
-            </Label>
-            <Textarea
-              id="notes"
-              placeholder="Add any initial notes about this candidate..."
-              {...register('notes')}
-              className="border-border focus:border-sky-blue min-h-[80px] resize-none"
-            />
-          </div>
+            {/* Notes Section */}
+            <div className="space-y-2">
+              <Label htmlFor="notes" className="text-muted-foreground flex items-center gap-1">
+                <StickyNote className="w-3 h-3" />
+                Notes <span className="text-xs">(Optional)</span>
+              </Label>
+              <Textarea
+                id="notes"
+                placeholder="Add any initial notes about this candidate..."
+                {...register('notes')}
+                className="border-border focus:border-sky-blue min-h-[80px] resize-none"
+              />
+            </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleSubmit(handleSaveAndAddAnother)()}
-              disabled={!hasContactInfo}
-              className="flex-1 border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              <UserPlus className="w-4 h-4 mr-2" />
-              Save & Add Another
-            </Button>
-            <Button
-              type="submit"
-              disabled={!hasContactInfo}
-              className="flex-1 bg-gradient-primary hover:opacity-90 disabled:opacity-50"
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Create Candidate
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleSubmit(handleSaveAndAddAnother)()}
+                disabled={!hasContactInfo || (duplicateCandidate !== null && !proceedAnyway)}
+                className="flex-1 border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Save & Add Another
+              </Button>
+              <Button
+                type="submit"
+                disabled={!hasContactInfo || (duplicateCandidate !== null && !proceedAnyway)}
+                className="flex-1 bg-gradient-primary hover:opacity-90 disabled:opacity-50"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Create Candidate
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Merge Dialog */}
+      {duplicateCandidate && (
+        <MergeCandidateDialog
+          open={showMergeDialog}
+          onOpenChange={setShowMergeDialog}
+          existingCandidate={duplicateCandidate}
+          newCandidateData={{
+            firstName: getValues('firstName'),
+            lastName: getValues('lastName'),
+            email: getValues('email'),
+            phone: getValues('phone'),
+            company: getValues('company'),
+            jobTitle: getValues('jobTitle'),
+            location: getValues('location'),
+            source: getValues('source'),
+            tags: selectedTags,
+            notes: getValues('notes'),
+          }}
+          onMergeComplete={() => {
+            handleClose();
+          }}
+        />
+      )}
+    </>
   );
 }
