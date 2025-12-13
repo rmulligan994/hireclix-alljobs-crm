@@ -144,12 +144,15 @@ Deno.serve(async (req) => {
             "Authorization": `Bearer ${RESEND_API_KEY}`,
           },
           body: JSON.stringify({
-            from: "Beacon CRM <onboarding@resend.dev>",
+            from: "Beacon CRM <noreply@product.hireclix.com>",
             to: [candidate.email],
             subject: personalizedSubject,
             html: personalizedHtml,
           }),
         });
+
+        // Add delay to respect rate limits (2 requests per second max)
+        await new Promise(resolve => setTimeout(resolve, 600));
 
         if (response.ok) {
           console.log(`Email sent successfully to ${candidate.email}`);
