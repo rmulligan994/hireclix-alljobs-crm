@@ -71,25 +71,43 @@ const Campaigns = () => {
   };
 
   const handleLaunchCampaign = async (id: string) => {
+    console.log('[Campaign Launch] Starting launch for campaign:', id);
     setSendingCampaignId(id);
+    
+    toast({ title: 'Sending emails...', description: 'Please wait while we send your campaign.' });
+    
     try {
+      console.log('[Campaign Launch] Invoking send-campaign-email edge function...');
       const { data, error } = await supabase.functions.invoke('send-campaign-email', {
         body: { campaignId: id }
       });
 
-      if (error) throw error;
+      console.log('[Campaign Launch] Edge function response:', { data, error });
 
-      toast({ 
-        title: 'Campaign launched!', 
-        description: `Sent ${data?.sent || 0} emails successfully.`
-      });
+      if (error) {
+        console.error('[Campaign Launch] Edge function error:', error);
+        throw error;
+      }
+
+      if (data?.sent === 0 && data?.message === 'No pending recipients') {
+        toast({ 
+          title: 'No pending recipients', 
+          description: 'All recipients have already been sent emails.',
+          variant: 'default'
+        });
+      } else {
+        toast({ 
+          title: 'Campaign launched!', 
+          description: `Sent ${data?.sent || 0} of ${data?.total || 0} emails successfully.${data?.errors?.length ? ` ${data.errors.length} failed.` : ''}`
+        });
+      }
       
       refetch();
     } catch (err: any) {
-      console.error('Error launching campaign:', err);
+      console.error('[Campaign Launch] Error:', err);
       toast({ 
         title: 'Failed to launch campaign', 
-        description: err.message,
+        description: err.message || 'Unknown error occurred',
         variant: 'destructive' 
       });
     } finally {
@@ -277,7 +295,24 @@ const Campaigns = () => {
                           </CardDescription>
                         </div>
                         <div className="flex items-center space-x-2">
-                          {campaign.status === 'active' ? (
+                          {/* Show Send Pending button for active campaigns with pending recipients */}
+                          {campaign.status === 'active' && (statsMap[campaign.id]?.pending ?? 0) > 0 && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                              onClick={() => handleLaunchCampaign(campaign.id)}
+                              disabled={sendingCampaignId === campaign.id}
+                            >
+                              {sendingCampaignId === campaign.id ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Send className="w-4 h-4 mr-2" />
+                              )}
+                              {sendingCampaignId === campaign.id ? 'Sending...' : `Send ${statsMap[campaign.id]?.pending} Pending`}
+                            </Button>
+                          )}
+                          {campaign.status === 'active' && (statsMap[campaign.id]?.pending ?? 0) === 0 ? (
                             <Button 
                               variant="outline" 
                               size="sm" 
