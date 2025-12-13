@@ -11,15 +11,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Search, UserPlus } from 'lucide-react';
-import { mockCandidates } from '@/data/mockCandidates';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
+import { useCandidates } from '@/hooks/useCandidates';
 
 interface AddCandidatesToPoolDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   poolName: string;
   existingCandidateIds: string[];
-  onAddCandidates: (candidates: { id: string; name: string; title: string; company: string }[]) => void;
+  onAddCandidates: (candidateIds: string[]) => void;
 }
 
 export const AddCandidatesToPoolDialog = ({
@@ -31,16 +32,19 @@ export const AddCandidatesToPoolDialog = ({
 }: AddCandidatesToPoolDialogProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
+  
+  const { data: candidates, isLoading } = useCandidates();
 
-  const availableCandidates = mockCandidates.filter(
+  const availableCandidates = (candidates || []).filter(
     c => !existingCandidateIds.includes(c.id)
   );
 
-  const filteredCandidates = availableCandidates.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.company.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredCandidates = availableCandidates.filter(c => {
+    const name = `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase();
+    return name.includes(searchQuery.toLowerCase()) ||
+      (c.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.company || '').toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   const handleToggleCandidate = (candidateId: string) => {
     setSelectedCandidates(prev =>
@@ -51,15 +55,7 @@ export const AddCandidatesToPoolDialog = ({
   };
 
   const handleAddSelected = () => {
-    const candidatesToAdd = mockCandidates
-      .filter(c => selectedCandidates.includes(c.id))
-      .map(c => ({
-        id: c.id,
-        name: c.name,
-        title: c.title,
-        company: c.company,
-      }));
-    onAddCandidates(candidatesToAdd);
+    onAddCandidates(selectedCandidates);
     setSelectedCandidates([]);
     setSearchQuery('');
     onOpenChange(false);
@@ -111,7 +107,13 @@ export const AddCandidatesToPoolDialog = ({
         )}
 
         <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px] max-h-[400px]">
-          {filteredCandidates.length === 0 ? (
+          {isLoading ? (
+            <>
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </>
+          ) : filteredCandidates.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {availableCandidates.length === 0
                 ? 'All candidates are already in this pool'
@@ -134,13 +136,32 @@ export const AddCandidatesToPoolDialog = ({
                   className="border-muted-foreground data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
                 />
                 <div className="flex-1">
-                  <p className="font-medium text-foreground">{candidate.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {candidate.title} at {candidate.company}
+                  <p className="font-medium text-foreground">
+                    {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
                   </p>
+                  <div className="flex items-center gap-4 mt-1 flex-wrap">
+                    {candidate.title && (
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        {candidate.title}
+                      </span>
+                    )}
+                    {candidate.company && (
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Building className="w-3 h-3" />
+                        {candidate.company}
+                      </span>
+                    )}
+                    {candidate.location && (
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {candidate.location}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {candidate.skills.slice(0, 2).map((skill) => (
+                  {(candidate.tags || []).slice(0, 2).map((skill) => (
                     <Badge key={skill} variant="secondary" className="text-xs">
                       {skill}
                     </Badge>

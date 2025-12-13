@@ -53,7 +53,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useTalentPoolWithCandidates, useRemoveCandidateFromPool } from '@/hooks/useTalentPools';
+import { useTalentPoolWithCandidates, useRemoveCandidateFromPool, useAddCandidatesToPool } from '@/hooks/useTalentPools';
 import { useCandidates } from '@/hooks/useCandidates';
 
 interface PoolCandidate {
@@ -84,6 +84,7 @@ const TalentPoolDetail = () => {
   const { data: pool, isLoading } = useTalentPoolWithCandidates(id || '');
   const { data: allCandidates } = useCandidates();
   const removeCandidateFromPool = useRemoveCandidateFromPool();
+  const addCandidatesToPool = useAddCandidatesToPool();
 
   // Build candidates with full info when pool and candidates are loaded
   useEffect(() => {
@@ -160,25 +161,33 @@ const TalentPoolDetail = () => {
     }
   };
 
-  const handleAddCandidates = (newCandidates: { id: string; name: string; title: string; company: string }[]) => {
-    const candidatesToAdd: PoolCandidate[] = newCandidates.map(c => {
-      const fullCandidate = allCandidates?.find(mc => mc.id === c.id);
-      return {
-        id: c.id,
-        candidateId: c.id,
-        name: c.name,
-        title: c.title,
-        company: c.company,
-        tags: fullCandidate?.tags || [],
-        pipelines: [],
-        dateAdded: new Date().toISOString().split('T')[0],
-      };
-    });
-    setPoolCandidates(prev => [...prev, ...candidatesToAdd]);
-    toast({
-      title: 'Candidates added',
-      description: `Added ${newCandidates.length} candidate${newCandidates.length !== 1 ? 's' : ''} to ${pool.name}`,
-    });
+  const handleAddCandidates = async (candidateIds: string[]) => {
+    if (!allCandidates) return;
+    
+    try {
+      await addCandidatesToPool.mutateAsync({
+        poolId: id || '',
+        candidateIds,
+      });
+      
+      // Update local state with full candidate info
+      const candidatesToAdd: PoolCandidate[] = candidateIds.map(candidateId => {
+        const fullCandidate = allCandidates.find(c => c.id === candidateId);
+        return {
+          id: candidateId,
+          candidateId,
+          name: fullCandidate ? `${fullCandidate.firstName || ''} ${fullCandidate.lastName || ''}`.trim() : 'Unknown',
+          title: fullCandidate?.title || '',
+          company: fullCandidate?.company || '',
+          tags: fullCandidate?.tags || [],
+          pipelines: [],
+          dateAdded: new Date().toISOString().split('T')[0],
+        };
+      });
+      setPoolCandidates(prev => [...prev, ...candidatesToAdd]);
+    } catch {
+      toast({ title: 'Failed to add candidates', variant: 'destructive' });
+    }
   };
 
   const handleRemoveCandidate = async (candidateId: string, candidateName: string) => {

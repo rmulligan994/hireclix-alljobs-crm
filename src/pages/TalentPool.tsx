@@ -245,9 +245,26 @@ const TalentPool = () => {
     }
   }, [debouncedSearchQuery, searchQuery, setIsSearching]);
 
-  // Filter and sort candidates
+  // Filter and sort candidates - use real database candidates
   const filteredCandidates = useMemo(() => {
-    let results = [...mockCandidates];
+    // Convert database candidates to the expected format
+    const candidates = (dbCandidates || []).map(c => ({
+      id: c.id,
+      firstName: c.firstName || '',
+      lastName: c.lastName || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      title: c.title || '',
+      company: c.company || '',
+      location: c.location || '',
+      skills: c.tags || [],
+      pipelineAssociations: [] as { id: string; name: string; stage: string }[],
+      source: c.source || '',
+      lastContact: 'Never',
+      createdAt: new Date(c.createdAt),
+    }));
+
+    let results = [...candidates];
 
     // Apply text search
     if (debouncedSearchQuery) {
@@ -328,45 +345,48 @@ const TalentPool = () => {
     }
 
     return results;
-  }, [debouncedSearchQuery, filters, sortOption]);
+  }, [dbCandidates, debouncedSearchQuery, filters, sortOption]);
 
-  // Generate search suggestions
+  // Generate search suggestions from real candidates
   const searchSuggestions = useMemo(() => {
     if (!searchQuery || searchQuery.length < 2) return [];
     
     const query = searchQuery.toLowerCase();
     const suggestions: Array<{ type: 'candidate' | 'company' | 'skill'; value: string; subtext?: string }> = [];
+    const candidates = dbCandidates || [];
 
     // Candidate suggestions
-    mockCandidates
-      .filter(c => `${c.firstName} ${c.lastName}`.toLowerCase().includes(query))
+    candidates
+      .filter(c => `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase().includes(query))
       .slice(0, 3)
       .forEach(c => suggestions.push({
         type: 'candidate',
-        value: `${c.firstName} ${c.lastName}`,
-        subtext: `${c.title} at ${c.company}`
+        value: `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+        subtext: `${c.title || ''} at ${c.company || ''}`
       }));
 
     // Company suggestions
-    const companies = [...new Set(mockCandidates.map(c => c.company))];
+    const companies = [...new Set(candidates.map(c => c.company).filter(Boolean))];
     companies
       .filter(c => c?.toLowerCase().includes(query))
       .slice(0, 3)
       .forEach(c => suggestions.push({ type: 'company', value: c || '' }));
 
-    // Skill suggestions
-    availableSkills
+    // Skill suggestions from candidates' tags
+    const allSkills = [...new Set(candidates.flatMap(c => c.tags || []))];
+    allSkills
       .filter(s => s.toLowerCase().includes(query))
       .slice(0, 3)
       .forEach(s => suggestions.push({ type: 'skill', value: s }));
 
     return suggestions;
-  }, [searchQuery]);
+  }, [searchQuery, dbCandidates]);
 
+  const totalCandidates = dbCandidates?.length || 0;
   const snapshotMetrics = [
-    { label: 'Total Candidates', value: stats?.total || mockCandidates.length, icon: Users },
-    { label: 'New This Week', value: stats?.newThisWeek || 23, icon: CalendarPlus },
-    { label: 'In Active Pipelines', value: mockCandidates.filter(c => c.pipelineAssociations.length > 0).length, icon: GitBranch },
+    { label: 'Total Candidates', value: stats?.total || totalCandidates, icon: Users },
+    { label: 'New This Week', value: stats?.newThisWeek || 0, icon: CalendarPlus },
+    { label: 'In Active Pipelines', value: filteredCandidates.filter(c => c.pipelineAssociations.length > 0).length, icon: GitBranch },
   ];
 
   const getStageColor = (stage: string) => {
@@ -553,7 +573,7 @@ const TalentPool = () => {
             filters={filters}
             searchQuery={searchQuery}
             totalResults={filteredCandidates.length}
-            totalCandidates={mockCandidates.length}
+            totalCandidates={totalCandidates}
             onRemoveFilter={removeFilter}
             onClearAll={clearAllFilters}
             onClearSearch={clearSearch}
