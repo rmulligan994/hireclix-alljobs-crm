@@ -15,7 +15,7 @@ import { TemplateLibrary } from './TemplateLibrary';
 import { BeefreeEmailEditor } from './BeefreeEmailEditor';
 import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Clock, Users, Loader2 } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
-import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients } from '@/hooks/useCampaigns';
+import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients, useCreateCampaignEmail } from '@/hooks/useCampaigns';
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
 import { EmailTemplate } from '@/services/emailTemplateService';
@@ -57,10 +57,26 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
   const createCampaign = useCreateCampaign();
   const updateCampaign = useUpdateCampaign();
   const addRecipients = useAddCampaignRecipients();
+  const createCampaignEmail = useCreateCampaignEmail();
   const { data: talentPools } = useTalentPools();
   const { data: pipelines } = usePipelines();
   const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
   const { data: recipientCount } = useRecipientCount(audienceFilter);
+
+  // Helper to save campaign emails
+  const saveCampaignEmails = async (campaignId: string) => {
+    for (const step of emailSteps) {
+      await createCampaignEmail.mutateAsync({
+        campaign_id: campaignId,
+        step_order: step.step_order || 1,
+        delay_days: step.delay_days || 0,
+        delay_hours: step.delay_hours || 0,
+        subject: step.subject || 'Untitled',
+        bee_json: step.bee_json,
+        html_content: step.html_content,
+      });
+    }
+  };
 
   // Update audience filter when selections change
   useEffect(() => {
@@ -116,6 +132,11 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
           audience_filter: audienceFilter,
         });
         setCampaignId(campaign.id);
+        
+        // Save email steps
+        if (emailSteps.length > 0) {
+          await saveCampaignEmails(campaign.id);
+        }
         
         // Add recipients
         if (filteredCandidates && filteredCandidates.length > 0) {
@@ -176,6 +197,11 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
         });
         setCampaignId(campaign.id);
         
+        // Save email steps
+        if (emailSteps.length > 0) {
+          await saveCampaignEmails(campaign.id);
+        }
+        
         await updateCampaign.mutateAsync({
           id: campaign.id,
           input: { status: 'scheduled' },
@@ -221,6 +247,11 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
           audience_filter: audienceFilter,
         });
         setCampaignId(campaign.id);
+        
+        // Save email steps
+        if (emailSteps.length > 0) {
+          await saveCampaignEmails(campaign.id);
+        }
         
         await updateCampaign.mutateAsync({
           id: campaign.id,
