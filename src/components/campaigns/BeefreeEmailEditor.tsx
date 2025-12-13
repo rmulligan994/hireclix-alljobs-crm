@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import BeePlugin from '@beefree.io/sdk';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import BeefreeSDK from '@beefree.io/sdk';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Loader2, X } from 'lucide-react';
@@ -69,12 +69,33 @@ export const BeefreeEmailEditor = ({
   onCancel 
 }: BeefreeEmailEditorProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const beeInstanceRef = useRef<BeePlugin | null>(null);
+  const beeInstanceRef = useRef<BeefreeSDK | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Stable callback for onSave
+  const handleSaveCallback = useCallback((jsonFile: string, htmlFile: string) => {
+    try {
+      const beeJson = JSON.parse(jsonFile);
+      onSave(beeJson, htmlFile);
+      toast({
+        title: 'Template saved',
+        description: 'Your email template has been saved successfully.',
+      });
+    } catch (err) {
+      console.error('Error parsing BeeFree JSON:', err);
+      toast({
+        title: 'Save failed',
+        description: 'Failed to save the template. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  }, [onSave, toast]);
+
   useEffect(() => {
+    let isMounted = true;
+
     const initBeePlugin = async () => {
       if (!containerRef.current) return;
 
@@ -87,6 +108,8 @@ export const BeefreeEmailEditor = ({
           body: { uid: 'user-' + Date.now() },
         });
 
+        if (!isMounted) return;
+
         if (authError) {
           throw new Error(`Authentication failed: ${authError.message}`);
         }
@@ -95,30 +118,19 @@ export const BeefreeEmailEditor = ({
           throw new Error('No access token received from BeeFree');
         }
 
-        // Initialize BeeFree SDK
+        console.log('BeeFree auth token received, initializing editor...');
+
+        // Initialize BeeFree SDK with token in constructor
+        const bee = new BeefreeSDK(data);
+
+        // Config for the editor
         const beeConfig = {
           uid: 'user-' + Date.now(),
           container: 'bee-plugin-container',
           language: 'en-US',
           mergeTags,
           specialLinks,
-          onSave: (jsonFile: string, htmlFile: string) => {
-            try {
-              const beeJson = JSON.parse(jsonFile);
-              onSave(beeJson, htmlFile);
-              toast({
-                title: 'Template saved',
-                description: 'Your email template has been saved successfully.',
-              });
-            } catch (err) {
-              console.error('Error parsing BeeFree JSON:', err);
-              toast({
-                title: 'Save failed',
-                description: 'Failed to save the template. Please try again.',
-                variant: 'destructive',
-              });
-            }
-          },
+          onSave: handleSaveCallback,
           onSaveAsTemplate: (jsonFile: string) => {
             console.log('Save as template:', jsonFile);
           },
@@ -133,32 +145,36 @@ export const BeefreeEmailEditor = ({
           },
           onLoad: () => {
             console.log('BeeFree editor loaded');
-            setIsLoading(false);
+            if (isMounted) {
+              setIsLoading(false);
+            }
           },
         };
 
-        const bee = new BeePlugin();
+        // Start the editor
+        await bee.start(beeConfig, initialTemplate || defaultTemplate);
         
-        // Use the token method as per BeeFree SDK
-        await (bee as unknown as { token: (t: string) => Promise<void> }).token(data.access_token);
-        await bee.start(beeConfig as Parameters<typeof bee.start>[0], initialTemplate || defaultTemplate);
-        
-        beeInstanceRef.current = bee;
+        if (isMounted) {
+          beeInstanceRef.current = bee;
+        }
       } catch (err) {
         console.error('Failed to initialize BeeFree:', err);
-        setError(err instanceof Error ? err.message : 'Failed to initialize email editor');
-        setIsLoading(false);
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Failed to initialize email editor');
+          setIsLoading(false);
+        }
       }
     };
 
     initBeePlugin();
 
     return () => {
+      isMounted = false;
       if (beeInstanceRef.current) {
         beeInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [initialTemplate, handleSaveCallback, toast]);
 
   const handleSave = () => {
     if (beeInstanceRef.current) {
