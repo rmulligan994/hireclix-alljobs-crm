@@ -8,18 +8,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2 } from 'lucide-react';
+import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2 } from 'lucide-react';
 import { useCampaigns, useUpdateCampaign, useDeleteCampaign } from '@/hooks/useCampaigns';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 
 const Campaigns = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
+  const [sendingCampaignId, setSendingCampaignId] = useState<string | null>(null);
   
-  const { data: campaigns, isLoading } = useCampaigns();
+  const { data: campaigns, isLoading, refetch } = useCampaigns();
   const updateCampaign = useUpdateCampaign();
   const deleteCampaign = useDeleteCampaign();
   const { toast } = useToast();
@@ -31,7 +33,7 @@ const Campaigns = () => {
 
   const stats = {
     active: campaigns?.filter(c => c.status === 'active').length || 0,
-    totalRecipients: 0, // Would need to aggregate from campaign_recipients
+    totalRecipients: 0,
     openRate: 0,
     responseRate: 0,
   };
@@ -51,6 +53,33 @@ const Campaigns = () => {
       toast({ title: 'Campaign resumed' });
     } catch {
       toast({ title: 'Failed to resume campaign', variant: 'destructive' });
+    }
+  };
+
+  const handleLaunchCampaign = async (id: string) => {
+    setSendingCampaignId(id);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-campaign-email', {
+        body: { campaignId: id }
+      });
+
+      if (error) throw error;
+
+      toast({ 
+        title: 'Campaign launched!', 
+        description: `Sent ${data?.sent || 0} emails successfully.`
+      });
+      
+      refetch();
+    } catch (err: any) {
+      console.error('Error launching campaign:', err);
+      toast({ 
+        title: 'Failed to launch campaign', 
+        description: err.message,
+        variant: 'destructive' 
+      });
+    } finally {
+      setSendingCampaignId(null);
     }
   };
 
@@ -234,7 +263,22 @@ const Campaigns = () => {
                               <Pause className="w-4 h-4 mr-2" />
                               Pause
                             </Button>
-                          ) : campaign.status !== 'completed' ? (
+                          ) : campaign.status === 'draft' || campaign.status === 'scheduled' ? (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                              onClick={() => handleLaunchCampaign(campaign.id)}
+                              disabled={sendingCampaignId === campaign.id}
+                            >
+                              {sendingCampaignId === campaign.id ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Send className="w-4 h-4 mr-2" />
+                              )}
+                              {sendingCampaignId === campaign.id ? 'Sending...' : 'Launch'}
+                            </Button>
+                          ) : campaign.status === 'paused' ? (
                             <Button 
                               variant="outline" 
                               size="sm" 
@@ -242,7 +286,7 @@ const Campaigns = () => {
                               onClick={() => handleResumeCampaign(campaign.id)}
                             >
                               <Play className="w-4 h-4 mr-2" />
-                              {campaign.status === 'draft' ? 'Launch' : 'Resume'}
+                              Resume
                             </Button>
                           ) : null}
                           <Button variant="ghost" size="sm">
