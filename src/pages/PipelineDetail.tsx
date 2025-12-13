@@ -45,7 +45,7 @@ import {
   BarChart3,
   GitBranch,
 } from 'lucide-react';
-import { usePipelineWithCandidates } from '@/hooks/usePipelines';
+import { usePipelineWithCandidates, useAddCandidateToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
 import { useCandidates } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
 import { PipelineStage } from '@/types/Pipeline';
@@ -77,6 +77,9 @@ const PipelineDetail = () => {
 
   const { data: pipeline, isLoading } = usePipelineWithCandidates(id || '');
   const { data: allCandidates } = useCandidates();
+  const addCandidateToPipeline = useAddCandidateToPipeline();
+  const removeCandidateFromPipeline = useRemoveCandidateFromPipeline();
+  const updateCandidateStage = useUpdateCandidateStage();
 
   // Build candidates with full info when pipeline and candidates are loaded
   useEffect(() => {
@@ -175,22 +178,26 @@ const PipelineDetail = () => {
     setDragOverStage(null);
   };
 
-  const moveCandidate = (candidateId: string, targetStageId: string) => {
+  const moveCandidate = async (candidateId: string, targetStageId: string) => {
     const candidate = candidatesInStages.find(c => c.id === candidateId);
     const targetStage = stages.find(s => s.id === targetStageId);
     if (!targetStage || !candidate || candidate.stageId === targetStageId) return;
 
-    setCandidatesInStages(prev => prev.map(c => {
-      if (c.id === candidateId) {
-        return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
-      }
-      return c;
-    }));
-
-    toast({
-      title: `${candidate.name} moved to ${targetStage.name}`,
-      description: 'Stage updated successfully',
-    });
+    try {
+      await updateCandidateStage.mutateAsync({
+        pipelineId: id || '',
+        candidateId,
+        stage: targetStageId,
+      });
+      setCandidatesInStages(prev => prev.map(c => {
+        if (c.id === candidateId) {
+          return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
+        }
+        return c;
+      }));
+    } catch {
+      toast({ title: 'Failed to move candidate', variant: 'destructive' });
+    }
   };
 
   const handleSelectCandidate = (candidateId: string) => {
@@ -219,29 +226,53 @@ const PipelineDetail = () => {
     setSelectedCandidates([]);
   };
 
-  const handleRemoveCandidate = (candidateId: string, candidateName: string) => {
-    setCandidatesInStages(prev => prev.filter(c => c.id !== candidateId));
-    toast({
-      title: 'Candidate removed',
-      description: `${candidateName} has been removed from this pipeline`,
-    });
+  const handleRemoveCandidate = async (candidateId: string, candidateName: string) => {
+    try {
+      await removeCandidateFromPipeline.mutateAsync({
+        pipelineId: id || '',
+        candidateId,
+      });
+      setCandidatesInStages(prev => prev.filter(c => c.id !== candidateId));
+    } catch {
+      toast({ title: 'Failed to remove candidate', variant: 'destructive' });
+    }
   };
 
-  const handleAddCandidates = (newCandidates: { id: string; name: string; title: string; company: string }[]) => {
+  const handleAddCandidates = async (candidateIds: string[]) => {
     const firstStageId = stages[0]?.id;
-    if (!firstStageId) return;
+    if (!firstStageId || !allCandidates) return;
 
-    const candidatesToAdd: CandidateInStage[] = newCandidates.map(c => ({
-      id: c.id,
-      candidateId: c.id,
-      name: c.name,
-      title: c.title,
-      company: c.company,
-      stageId: firstStageId,
-      movedAt: new Date().toISOString().split('T')[0],
-    }));
-
-    setCandidatesInStages(prev => [...prev, ...candidatesToAdd]);
+    try {
+      for (const candidateId of candidateIds) {
+        await addCandidateToPipeline.mutateAsync({
+          pipelineId: id || '',
+          candidateId,
+          stage: firstStageId,
+        });
+      }
+      
+      // Update local state with full candidate info
+      const candidatesToAdd: CandidateInStage[] = candidateIds.map(candidateId => {
+        const candidate = allCandidates.find(c => c.id === candidateId);
+        return {
+          id: candidateId,
+          candidateId,
+          name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
+          title: candidate?.title || '',
+          company: candidate?.company || '',
+          stageId: firstStageId,
+          movedAt: new Date().toISOString().split('T')[0],
+        };
+      });
+      setCandidatesInStages(prev => [...prev, ...candidatesToAdd]);
+      
+      toast({
+        title: 'Candidates added',
+        description: `Added ${candidateIds.length} candidate${candidateIds.length !== 1 ? 's' : ''} to ${pipeline?.name}`,
+      });
+    } catch {
+      toast({ title: 'Failed to add candidates', variant: 'destructive' });
+    }
   };
 
   const handleOpenNoteDialog = (candidate: { id: string; name: string }) => {

@@ -10,37 +10,17 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-
-interface Candidate {
-  id: string;
-  name: string;
-  title: string;
-  company: string;
-  location: string;
-  skills: string[];
-}
+import { useCandidates } from '@/hooks/useCandidates';
 
 interface AddCandidatesToPipelineDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pipelineName: string;
   existingCandidateIds: string[];
-  onAddCandidates: (candidates: { id: string; name: string; title: string; company: string }[]) => void;
+  onAddCandidates: (candidateIds: string[]) => void;
 }
-
-// Mock candidates for selection
-const availableCandidates: Candidate[] = [
-  { id: 'new-1', name: 'Alex Thompson', title: 'Senior Software Engineer', company: 'Google', location: 'Mountain View, CA', skills: ['React', 'Go', 'Kubernetes'] },
-  { id: 'new-2', name: 'Jessica Martinez', title: 'Full Stack Developer', company: 'Stripe', location: 'San Francisco, CA', skills: ['TypeScript', 'Node.js', 'PostgreSQL'] },
-  { id: 'new-3', name: 'Ryan Park', title: 'Frontend Engineer', company: 'Airbnb', location: 'Seattle, WA', skills: ['React', 'Vue', 'CSS'] },
-  { id: 'new-4', name: 'Samantha Liu', title: 'DevOps Engineer', company: 'Netflix', location: 'Los Angeles, CA', skills: ['AWS', 'Docker', 'Terraform'] },
-  { id: 'new-5', name: 'Marcus Johnson', title: 'Backend Developer', company: 'Meta', location: 'New York, NY', skills: ['Python', 'Django', 'Redis'] },
-  { id: 'new-6', name: 'Emily Chen', title: 'Mobile Developer', company: 'Uber', location: 'Austin, TX', skills: ['React Native', 'Swift', 'Kotlin'] },
-  { id: 'new-7', name: 'David Wilson', title: 'Tech Lead', company: 'Amazon', location: 'Seattle, WA', skills: ['Java', 'AWS', 'Microservices'] },
-  { id: 'new-8', name: 'Nina Patel', title: 'Software Architect', company: 'Microsoft', location: 'Redmond, WA', skills: ['C#', '.NET', 'Azure'] },
-];
 
 export function AddCandidatesToPipelineDialog({
   open,
@@ -49,16 +29,18 @@ export function AddCandidatesToPipelineDialog({
   existingCandidateIds,
   onAddCandidates,
 }: AddCandidatesToPipelineDialogProps) {
-  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  const { data: candidates, isLoading } = useCandidates();
 
-  const filteredCandidates = availableCandidates.filter(c => {
+  const filteredCandidates = (candidates || []).filter(c => {
+    const name = `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase();
     const matchesSearch = 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.skills.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
+      name.includes(searchQuery.toLowerCase()) ||
+      (c.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.company || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.tags || []).some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
     const notAlreadyInPipeline = !existingCandidateIds.includes(c.id);
     return matchesSearch && notAlreadyInPipeline;
   });
@@ -70,17 +52,7 @@ export function AddCandidatesToPipelineDialog({
   };
 
   const handleAddSelected = () => {
-    const selectedCandidates = availableCandidates
-      .filter(c => selectedIds.includes(c.id))
-      .map(c => ({ id: c.id, name: c.name, title: c.title, company: c.company }));
-    
-    onAddCandidates(selectedCandidates);
-    
-    toast({
-      title: 'Candidates added',
-      description: `Added ${selectedCandidates.length} candidate${selectedCandidates.length !== 1 ? 's' : ''} to ${pipelineName}`,
-    });
-    
+    onAddCandidates(selectedIds);
     setSelectedIds([]);
     setSearchQuery('');
     onOpenChange(false);
@@ -136,7 +108,13 @@ export function AddCandidatesToPipelineDialog({
         {/* Candidates List */}
         <ScrollArea className="flex-1 -mx-6 px-6">
           <div className="space-y-2 pr-4">
-            {filteredCandidates.map((candidate) => (
+            {isLoading ? (
+              <>
+                {[1, 2, 3].map(i => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </>
+            ) : filteredCandidates.map((candidate) => (
               <div
                 key={candidate.id}
                 className={`p-3 border rounded-lg cursor-pointer transition-all ${
@@ -153,34 +131,44 @@ export function AddCandidatesToPipelineDialog({
                     onClick={(e) => e.stopPropagation()}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground">{candidate.name}</p>
-                    <div className="flex items-center gap-4 mt-1">
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        {candidate.title}
-                      </span>
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Building className="w-3 h-3" />
-                        {candidate.company}
-                      </span>
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {candidate.location}
-                      </span>
+                    <p className="font-medium text-foreground">
+                      {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
+                    </p>
+                    <div className="flex items-center gap-4 mt-1 flex-wrap">
+                      {candidate.title && (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {candidate.title}
+                        </span>
+                      )}
+                      {candidate.company && (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Building className="w-3 h-3" />
+                          {candidate.company}
+                        </span>
+                      )}
+                      {candidate.location && (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {candidate.location}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {candidate.skills.map((skill) => (
-                        <Badge key={skill} variant="secondary" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
+                    {candidate.tags && candidate.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {candidate.tags.slice(0, 5).map((skill) => (
+                          <Badge key={skill} variant="secondary" className="text-xs">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
 
-            {filteredCandidates.length === 0 && (
+            {!isLoading && filteredCandidates.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">No candidates found</p>
               </div>
