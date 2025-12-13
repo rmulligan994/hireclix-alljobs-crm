@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Plus, Search, Users, Calendar, ChevronRight } from 'lucide-react';
+import { useTalentPoolsWithCounts } from '@/hooks/useTalentPools';
 
 const TalentPools = () => {
   const navigate = useNavigate();
@@ -15,54 +17,11 @@ const TalentPools = () => {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const talentPools = [
-    {
-      id: '1',
-      name: 'Senior Engineers',
-      description: 'Experienced engineers with 5+ years in full-stack development',
-      candidateCount: 156,
-      createdAt: '2024-01-15',
-    },
-    {
-      id: '2',
-      name: 'Remote-First Candidates',
-      description: 'Candidates who prefer or require fully remote positions',
-      candidateCount: 89,
-      createdAt: '2024-02-01',
-    },
-    {
-      id: '3',
-      name: 'JavaScript Experts',
-      description: 'Specialists in React, Node.js, and modern JS frameworks',
-      candidateCount: 234,
-      createdAt: '2024-01-20',
-    },
-    {
-      id: '4',
-      name: 'Data Scientists',
-      description: 'ML engineers and data analysts with Python expertise',
-      candidateCount: 67,
-      createdAt: '2024-02-10',
-    },
-    {
-      id: '5',
-      name: 'Product Leaders',
-      description: 'Senior PMs and Directors with B2B SaaS experience',
-      candidateCount: 45,
-      createdAt: '2024-01-25',
-    },
-    {
-      id: '6',
-      name: 'Bay Area Talent',
-      description: 'Candidates located in San Francisco Bay Area',
-      candidateCount: 312,
-      createdAt: '2024-02-05',
-    },
-  ];
+  const { data: talentPools, isLoading } = useTalentPoolsWithCounts();
 
-  const filteredPools = talentPools.filter(pool =>
+  const filteredPools = (talentPools || []).filter(pool =>
     pool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pool.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (pool.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -110,43 +69,63 @@ const TalentPools = () => {
           </div>
 
           {/* Talent Pools Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPools.map((pool) => (
-              <Card 
-                key={pool.id} 
-                className="bg-card border-border hover:border-sky-blue transition-colors cursor-pointer group"
-                onClick={() => navigate(`/talent-pools/${pool.id}`)}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg font-semibold text-foreground group-hover:text-sky-blue transition-colors">
-                      {pool.name}
-                    </CardTitle>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-sky-blue transition-colors" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                    {pool.description}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-sky-blue" />
-                      <Badge variant="secondary" className="bg-sky-blue/10 text-sky-blue">
-                        {pool.candidateCount} candidates
-                      </Badge>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <Card key={i} className="bg-card border-border">
+                  <CardHeader className="pb-2">
+                    <Skeleton className="h-6 w-3/4" />
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-4 w-full mb-2" />
+                    <Skeleton className="h-4 w-2/3 mb-4" />
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-5 w-24" />
+                      <Skeleton className="h-4 w-16" />
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(pool.createdAt).toLocaleDateString()}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredPools.map((pool) => (
+                <Card 
+                  key={pool.id} 
+                  className="bg-card border-border hover:border-sky-blue transition-colors cursor-pointer group"
+                  onClick={() => navigate(`/talent-pools/${pool.id}`)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <CardTitle className="text-lg font-semibold text-foreground group-hover:text-sky-blue transition-colors">
+                        {pool.name}
+                      </CardTitle>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-sky-blue transition-colors" />
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                      {pool.description}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-sky-blue" />
+                        <Badge variant="secondary" className="bg-sky-blue/10 text-sky-blue">
+                          {pool.candidateCount || 0} candidates
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(pool.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
-          {filteredPools.length === 0 && (
+          {!isLoading && filteredPools.length === 0 && (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No talent pools found matching your search.</p>
             </div>

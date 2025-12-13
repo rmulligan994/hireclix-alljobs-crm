@@ -4,11 +4,10 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { CreatePipelineDialog } from '@/components/pipelines/CreatePipelineDialog';
-import { StageProgressBar } from '@/components/pipelines/StageProgressBar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Table,
   TableBody,
@@ -34,17 +33,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Plus, Search, Calendar, ChevronRight, Users, Archive, CheckCircle, MoreHorizontal, ArchiveRestore, Settings, GitBranch } from 'lucide-react';
+import { usePipelines, useArchivePipeline, useUnarchivePipeline } from '@/hooks/usePipelines';
+import { Pipeline } from '@/types/Pipeline';
 
-type PipelineStatus = 'active' | 'archived';
 type ViewFilter = 'active' | 'archived' | 'all';
-
-interface Pipeline {
-  id: string;
-  title: string;
-  status: PipelineStatus;
-  stages: { sourced: number; contacted: number; engaged: number; qualified: number; submitted: number; hired: number };
-  createdAt: string;
-}
 
 const Pipelines = () => {
   const navigate = useNavigate();
@@ -55,60 +47,14 @@ const Pipelines = () => {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [pipelines, setPipelines] = useState<Pipeline[]>([
-    {
-      id: '1',
-      title: 'Senior Frontend Developer - Q1 2024',
-      status: 'active',
-      stages: { sourced: 45, contacted: 32, engaged: 28, qualified: 18, submitted: 12, hired: 2 },
-      createdAt: '2024-01-10',
-    },
-    {
-      id: '2',
-      title: 'Backend Engineer - Remote',
-      status: 'active',
-      stages: { sourced: 67, contacted: 45, engaged: 20, qualified: 12, submitted: 8, hired: 1 },
-      createdAt: '2024-01-15',
-    },
-    {
-      id: '3',
-      title: 'Product Manager - NYC',
-      status: 'active',
-      stages: { sourced: 34, contacted: 22, engaged: 15, qualified: 8, submitted: 5, hired: 0 },
-      createdAt: '2024-02-01',
-    },
-    {
-      id: '4',
-      title: 'Data Scientist - ML Team',
-      status: 'active',
-      stages: { sourced: 28, contacted: 18, engaged: 10, qualified: 6, submitted: 3, hired: 1 },
-      createdAt: '2024-02-05',
-    },
-    {
-      id: '5',
-      title: 'DevOps Engineer - Q4 2023',
-      status: 'archived',
-      stages: { sourced: 52, contacted: 38, engaged: 22, qualified: 14, submitted: 9, hired: 3 },
-      createdAt: '2023-10-15',
-    },
-    {
-      id: '6',
-      title: 'UX Designer - Brand Team',
-      status: 'archived',
-      stages: { sourced: 41, contacted: 29, engaged: 18, qualified: 10, submitted: 6, hired: 2 },
-      createdAt: '2023-11-01',
-    },
-  ]);
 
-  const filteredPipelines = pipelines.filter(pipeline => {
-    const matchesSearch = pipeline.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = viewFilter === 'all' || pipeline.status === viewFilter;
-    return matchesSearch && matchesFilter;
-  });
+  const { data: pipelines, isLoading } = usePipelines(viewFilter);
+  const archivePipeline = useArchivePipeline();
+  const unarchivePipeline = useUnarchivePipeline();
 
-  const getTotalCandidates = (stages: Pipeline['stages']) => {
-    return Object.values(stages).reduce((sum, count) => sum + count, 0);
-  };
+  const filteredPipelines = (pipelines || []).filter(pipeline => 
+    pipeline.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleArchiveClick = (e: React.MouseEvent, pipeline: Pipeline) => {
     e.stopPropagation();
@@ -116,13 +62,13 @@ const Pipelines = () => {
     setArchiveDialogOpen(true);
   };
 
-  const handleArchiveConfirm = () => {
+  const handleArchiveConfirm = async () => {
     if (selectedPipeline) {
-      setPipelines(prev => prev.map(p => 
-        p.id === selectedPipeline.id 
-          ? { ...p, status: p.status === 'active' ? 'archived' : 'active' }
-          : p
-      ));
+      if (selectedPipeline.status === 'active') {
+        await archivePipeline.mutateAsync(selectedPipeline.id);
+      } else {
+        await unarchivePipeline.mutateAsync(selectedPipeline.id);
+      }
     }
     setArchiveDialogOpen(false);
     setSelectedPipeline(null);
@@ -198,8 +144,36 @@ const Pipelines = () => {
             </div>
           </div>
 
+          {/* Loading State */}
+          {isLoading && (
+            <div className="bg-card rounded-lg border border-border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-deep-sea hover:bg-deep-sea">
+                    <TableHead className="text-white">Pipeline</TableHead>
+                    <TableHead className="text-white">Status</TableHead>
+                    <TableHead className="text-white">Stages</TableHead>
+                    <TableHead className="text-white">Created</TableHead>
+                    <TableHead className="text-white"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[1, 2, 3].map((i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-5 w-48" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-8" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
           {/* Empty State - No pipelines exist */}
-          {pipelines.length === 0 && (
+          {!isLoading && (!pipelines || pipelines.length === 0) && (
             <div className="bg-card rounded-lg border border-border p-12">
               <div className="text-center max-w-md mx-auto">
                 <div className="w-20 h-20 rounded-full bg-sky-blue/10 flex items-center justify-center mx-auto mb-6">
@@ -224,15 +198,14 @@ const Pipelines = () => {
           )}
 
           {/* Pipelines Table */}
-          {pipelines.length > 0 && (
+          {!isLoading && pipelines && pipelines.length > 0 && (
             <div className="bg-card rounded-lg border border-border overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-deep-sea hover:bg-deep-sea">
                     <TableHead className="text-white">Pipeline</TableHead>
                     <TableHead className="text-white">Status</TableHead>
-                    <TableHead className="text-white">Stage Breakdown</TableHead>
-                    <TableHead className="text-white">Total</TableHead>
+                    <TableHead className="text-white">Stages</TableHead>
                     <TableHead className="text-white">Created</TableHead>
                     <TableHead className="text-white"></TableHead>
                   </TableRow>
@@ -245,7 +218,10 @@ const Pipelines = () => {
                       onClick={() => navigate(`/pipelines/${pipeline.id}`)}
                     >
                       <TableCell>
-                        <div className="font-medium text-foreground">{pipeline.title}</div>
+                        <div className="font-medium text-foreground">{pipeline.name}</div>
+                        {pipeline.description && (
+                          <div className="text-sm text-muted-foreground">{pipeline.description}</div>
+                        )}
                       </TableCell>
                       <TableCell>
                         {pipeline.status === 'active' ? (
@@ -261,12 +237,9 @@ const Pipelines = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <StageProgressBar stages={pipeline.stages} />
-                      </TableCell>
-                      <TableCell>
                         <div className="flex items-center gap-1 text-foreground">
                           <Users className="w-4 h-4 text-sky-blue" />
-                          {getTotalCandidates(pipeline.stages)}
+                          {pipeline.stages?.length || 0} stages
                         </div>
                       </TableCell>
                       <TableCell>
@@ -324,7 +297,7 @@ const Pipelines = () => {
           )}
 
           {/* No results for filter/search */}
-          {pipelines.length > 0 && filteredPipelines.length === 0 && (
+          {!isLoading && pipelines && pipelines.length > 0 && filteredPipelines.length === 0 && (
             <div className="bg-card rounded-lg border border-border p-8 text-center">
               <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground">No pipelines found matching your criteria.</p>
