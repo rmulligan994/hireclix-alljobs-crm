@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,9 +43,22 @@ import {
   Clock,
   TrendingUp,
   BarChart3,
+  GitBranch,
 } from 'lucide-react';
-import { mockPipelinesWithStages, PipelineCandidate, PipelineStage } from '@/data/pipelineStages';
+import { usePipelineWithCandidates } from '@/hooks/usePipelines';
+import { useCandidates } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
+import { PipelineStage } from '@/types/Pipeline';
+
+interface CandidateInStage {
+  id: string;
+  candidateId: string;
+  name: string;
+  title: string;
+  company: string;
+  stageId: string;
+  movedAt: string;
+}
 
 const PipelineDetail = () => {
   const { id } = useParams();
@@ -59,41 +73,81 @@ const PipelineDetail = () => {
   const [draggingCandidate, setDraggingCandidate] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteCandidate, setNoteCandidate] = useState<{ id: string; name: string } | null>(null);
+  const [candidatesInStages, setCandidatesInStages] = useState<CandidateInStage[]>([]);
 
-  // Find the pipeline
-  const pipeline = mockPipelinesWithStages.find(p => p.id === id);
-  
-  const [candidates, setCandidates] = useState<PipelineCandidate[]>(
-    pipeline?.candidates || []
-  );
+  const { data: pipeline, isLoading } = usePipelineWithCandidates(id || '');
+  const { data: allCandidates } = useCandidates();
 
-  if (!pipeline) {
+  // Build candidates with full info when pipeline and candidates are loaded
+  useEffect(() => {
+    if (pipeline?.candidates && allCandidates) {
+      const candidatesWithInfo = pipeline.candidates.map(pc => {
+        const candidate = allCandidates.find(c => c.id === pc.candidateId);
+        return {
+          id: pc.candidateId,
+          candidateId: pc.candidateId,
+          name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
+          title: candidate?.title || '',
+          company: candidate?.company || '',
+          stageId: pc.stage,
+          movedAt: pc.addedAt.toISOString().split('T')[0],
+        };
+      });
+      setCandidatesInStages(candidatesWithInfo);
+    }
+  }, [pipeline, allCandidates]);
+
+  if (isLoading) {
     return (
-      <div className="flex h-screen bg-background items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-foreground mb-2">Pipeline not found</h2>
-          <Button onClick={() => navigate('/pipelines')}>Back to Pipelines</Button>
+      <div className="flex h-screen bg-background font-body">
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+          <main className="flex-1 p-6">
+            <div className="mb-4">
+              <Skeleton className="h-8 w-64 mb-2" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20" />)}
+            </div>
+            <div className="flex gap-4">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-96 w-72" />)}
+            </div>
+          </main>
         </div>
       </div>
     );
   }
 
-  const stages = pipeline.stages.sort((a, b) => a.order - b.order);
+  if (!pipeline) {
+    return (
+      <div className="flex h-screen bg-background items-center justify-center">
+        <div className="text-center">
+          <GitBranch className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-foreground mb-2">Pipeline not found</h2>
+          <p className="text-muted-foreground mb-4">The pipeline you're looking for doesn't exist or you don't have access.</p>
+          <Button onClick={() => navigate('/pipelines')} className="bg-gradient-primary">Back to Pipelines</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const stages = [...(pipeline.stages || [])].sort((a, b) => a.order - b.order);
 
   const getCandidatesInStage = (stageId: string) => {
-    return candidates.filter(c => c.stageId === stageId);
+    return candidatesInStages.filter(c => c.stageId === stageId);
   };
 
-  // Calculate pipeline stats
-  const totalCandidates = candidates.length;
-  const hiredCount = getCandidatesInStage(stages[stages.length - 1]?.id || '').length;
+  const totalCandidates = candidatesInStages.length;
+  const lastStage = stages[stages.length - 1];
+  const hiredCount = lastStage ? getCandidatesInStage(lastStage.id).length : 0;
   const conversionRate = totalCandidates > 0 ? Math.round((hiredCount / totalCandidates) * 100) : 0;
-  const avgDaysInPipeline = 14; // Mock value
+  const avgDaysInPipeline = 14;
 
   const handleDragStart = (e: React.DragEvent, candidateId: string) => {
     e.dataTransfer.setData('candidateId', candidateId);
     setDraggingCandidate(candidateId);
-    // Add drag image styling
     const element = e.currentTarget as HTMLElement;
     element.style.opacity = '0.5';
   };
@@ -122,26 +176,13 @@ const PipelineDetail = () => {
   };
 
   const moveCandidate = (candidateId: string, targetStageId: string) => {
-    const candidate = candidates.find(c => c.id === candidateId);
+    const candidate = candidatesInStages.find(c => c.id === candidateId);
     const targetStage = stages.find(s => s.id === targetStageId);
     if (!targetStage || !candidate || candidate.stageId === targetStageId) return;
 
-    setCandidates(prev => prev.map(c => {
+    setCandidatesInStages(prev => prev.map(c => {
       if (c.id === candidateId) {
-        const currentStage = stages.find(s => s.id === c.stageId);
-        return {
-          ...c,
-          stageId: targetStageId,
-          movedAt: new Date().toISOString().split('T')[0],
-          stageHistory: [
-            ...c.stageHistory,
-            { 
-              stageId: c.stageId, 
-              stageName: currentStage?.name || '', 
-              movedAt: c.movedAt 
-            }
-          ],
-        };
+        return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
       }
       return c;
     }));
@@ -164,22 +205,9 @@ const PipelineDetail = () => {
     const targetStage = stages.find(s => s.id === targetStageId);
     if (!targetStage || selectedCandidates.length === 0) return;
 
-    setCandidates(prev => prev.map(c => {
+    setCandidatesInStages(prev => prev.map(c => {
       if (selectedCandidates.includes(c.id)) {
-        const currentStage = stages.find(s => s.id === c.stageId);
-        return {
-          ...c,
-          stageId: targetStageId,
-          movedAt: new Date().toISOString().split('T')[0],
-          stageHistory: [
-            ...c.stageHistory,
-            { 
-              stageId: c.stageId, 
-              stageName: currentStage?.name || '', 
-              movedAt: c.movedAt 
-            }
-          ],
-        };
+        return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
       }
       return c;
     }));
@@ -188,12 +216,11 @@ const PipelineDetail = () => {
       title: 'Candidates moved',
       description: `Moved ${selectedCandidates.length} candidates to ${targetStage.name}`,
     });
-
     setSelectedCandidates([]);
   };
 
   const handleRemoveCandidate = (candidateId: string, candidateName: string) => {
-    setCandidates(prev => prev.filter(c => c.id !== candidateId));
+    setCandidatesInStages(prev => prev.filter(c => c.id !== candidateId));
     toast({
       title: 'Candidate removed',
       description: `${candidateName} has been removed from this pipeline`,
@@ -204,17 +231,17 @@ const PipelineDetail = () => {
     const firstStageId = stages[0]?.id;
     if (!firstStageId) return;
 
-    const candidatesToAdd: PipelineCandidate[] = newCandidates.map(c => ({
+    const candidatesToAdd: CandidateInStage[] = newCandidates.map(c => ({
       id: c.id,
+      candidateId: c.id,
       name: c.name,
       title: c.title,
       company: c.company,
       stageId: firstStageId,
       movedAt: new Date().toISOString().split('T')[0],
-      stageHistory: [],
     }));
 
-    setCandidates(prev => [...prev, ...candidatesToAdd]);
+    setCandidatesInStages(prev => [...prev, ...candidatesToAdd]);
   };
 
   const handleOpenNoteDialog = (candidate: { id: string; name: string }) => {
@@ -230,28 +257,17 @@ const PipelineDetail = () => {
     );
   };
 
-  const handleAddCandidateToStage = (stageId: string) => {
-    // For now, just open the add candidates dialog
-    setAddCandidatesOpen(true);
-  };
-
   const handleExport = () => {
-    toast({
-      title: 'Export started',
-      description: 'Pipeline data is being exported to CSV',
-    });
+    toast({ title: 'Export started', description: 'Pipeline data is being exported to CSV' });
   };
 
   const handleArchivePipeline = () => {
-    toast({
-      title: 'Pipeline archived',
-      description: 'This pipeline has been archived',
-    });
+    toast({ title: 'Pipeline archived', description: 'This pipeline has been archived' });
     navigate('/pipelines');
   };
 
   const getStageColor = (index: number, total: number) => {
-    const progress = index / (total - 1);
+    const progress = total > 1 ? index / (total - 1) : 0;
     if (progress === 0) return 'bg-muted/50 text-muted-foreground border-muted';
     if (progress < 0.3) return 'bg-deep-sea/20 text-sky-blue border-deep-sea';
     if (progress < 0.6) return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
@@ -260,7 +276,7 @@ const PipelineDetail = () => {
   };
 
   const getStageBgColor = (index: number, total: number) => {
-    const progress = index / (total - 1);
+    const progress = total > 1 ? index / (total - 1) : 0;
     if (progress === 0) return 'bg-muted/20';
     if (progress < 0.3) return 'bg-deep-sea/10';
     if (progress < 0.6) return 'bg-sky-blue/10';
@@ -270,16 +286,10 @@ const PipelineDetail = () => {
 
   return (
     <div className="flex h-screen bg-background font-body">
-      <Sidebar 
-        collapsed={sidebarCollapsed} 
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
-      />
+      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
         
         <main className="flex-1 p-6 overflow-hidden flex flex-col">
           {/* Header */}
@@ -295,10 +305,10 @@ const PipelineDetail = () => {
               </Button>
               <div className="flex-1">
                 <h1 className="font-heading text-2xl font-bold text-foreground">
-                  {pipeline.title}
+                  {pipeline.name}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  {candidates.length} candidates • {stages.length} stages
+                  {totalCandidates} candidates • {stages.length} stages
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -325,10 +335,7 @@ const PipelineDetail = () => {
                       Export to CSV
                     </DropdownMenuItem>
                     <DropdownMenuSeparator className="bg-border" />
-                    <DropdownMenuItem 
-                      onClick={handleArchivePipeline} 
-                      className="cursor-pointer text-destructive"
-                    >
+                    <DropdownMenuItem onClick={handleArchivePipeline} className="cursor-pointer text-destructive">
                       <Archive className="w-4 h-4 mr-2" />
                       Archive Pipeline
                     </DropdownMenuItem>
@@ -380,9 +387,7 @@ const PipelineDetail = () => {
             {/* Bulk Actions */}
             {selectedCandidates.length > 0 && (
               <div className="flex items-center gap-4 p-3 bg-sky-blue/10 border border-sky-blue/30 rounded-lg animate-fade-in">
-                <span className="text-sm text-foreground">
-                  {selectedCandidates.length} selected
-                </span>
+                <span className="text-sm text-foreground">{selectedCandidates.length} selected</span>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" className="bg-sky-blue hover:bg-sky-blue/90 text-white">
@@ -392,22 +397,13 @@ const PipelineDetail = () => {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="bg-card border-border">
                     {stages.map((stage) => (
-                      <DropdownMenuItem
-                        key={stage.id}
-                        onClick={() => handleBulkMove(stage.id)}
-                        className="cursor-pointer"
-                      >
+                      <DropdownMenuItem key={stage.id} onClick={() => handleBulkMove(stage.id)} className="cursor-pointer">
                         {stage.name}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  onClick={() => setSelectedCandidates([])}
-                  className="text-muted-foreground"
-                >
+                <Button size="sm" variant="ghost" onClick={() => setSelectedCandidates([])} className="text-muted-foreground">
                   Clear selection
                 </Button>
               </div>
@@ -425,33 +421,22 @@ const PipelineDetail = () => {
                 return (
                   <div
                     key={stage.id}
-                    className={`flex-shrink-0 flex flex-col transition-all duration-200 ${
-                      isCollapsed ? 'w-12' : 'w-72'
-                    }`}
+                    className={`flex-shrink-0 flex flex-col transition-all duration-200 ${isCollapsed ? 'w-12' : 'w-72'}`}
                     onDragOver={(e) => handleDragOver(e, stage.id)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, stage.id)}
                   >
                     {/* Stage Header */}
-                    <div 
-                      className={`flex items-center justify-between mb-3 px-2 py-2 rounded-lg ${getStageBgColor(index, stages.length)} ${
-                        isDragOver ? 'ring-2 ring-sky-blue' : ''
-                      }`}
-                    >
+                    <div className={`flex items-center justify-between mb-3 px-2 py-2 rounded-lg ${getStageBgColor(index, stages.length)} ${isDragOver ? 'ring-2 ring-sky-blue' : ''}`}>
                       {isCollapsed ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              onClick={() => toggleStageCollapse(stage.id)}
-                              className="w-full flex flex-col items-center gap-1 py-2"
-                            >
+                            <button onClick={() => toggleStageCollapse(stage.id)} className="w-full flex flex-col items-center gap-1 py-2">
                               <ChevronRight className="w-4 h-4 text-muted-foreground" />
                               <span className="text-xs font-medium text-foreground writing-mode-vertical rotate-180" style={{ writingMode: 'vertical-rl' }}>
                                 {stage.name}
                               </span>
-                              <Badge variant="secondary" className="text-xs px-1">
-                                {stageCandidates.length}
-                              </Badge>
+                              <Badge variant="secondary" className="text-xs px-1">{stageCandidates.length}</Badge>
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="right">
@@ -461,146 +446,91 @@ const PipelineDetail = () => {
                       ) : (
                         <>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => toggleStageCollapse(stage.id)}>
-                              <ChevronDown className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                            <button onClick={() => toggleStageCollapse(stage.id)} className="text-muted-foreground hover:text-foreground">
+                              <ChevronDown className="w-4 h-4" />
                             </button>
-                            <Badge className={getStageColor(index, stages.length)}>
-                              {stage.name}
-                            </Badge>
-                            <span className="text-sm font-medium text-foreground">
-                              {stageCandidates.length}
-                            </span>
+                            <span className="font-medium text-foreground text-sm">{stage.name}</span>
+                            <Badge className={`text-xs ${getStageColor(index, stages.length)}`}>{stageCandidates.length}</Badge>
                           </div>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => setAddCandidatesOpen(true)}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
                         </>
                       )}
                     </div>
 
-                    {/* Candidates List */}
+                    {/* Candidates */}
                     {!isCollapsed && (
-                      <div className={`flex-1 space-y-2 overflow-y-auto pr-1 transition-all ${
-                        isDragOver ? 'bg-sky-blue/5 rounded-lg p-2 -m-2' : ''
-                      }`}>
+                      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                         {stageCandidates.map((candidate) => (
                           <Card
                             key={candidate.id}
                             draggable
                             onDragStart={(e) => handleDragStart(e, candidate.id)}
                             onDragEnd={handleDragEnd}
-                            onClick={() => navigate(`/talent/${candidate.id}`)}
-                            className={`bg-card border-border cursor-pointer hover:border-sky-blue/50 transition-all ${
-                              selectedCandidates.includes(candidate.id) ? 'border-sky-blue bg-sky-blue/5' : ''
-                            } ${draggingCandidate === candidate.id ? 'opacity-50 scale-95 shadow-lg' : ''}`}
+                            className={`bg-card border-border hover:border-sky-blue/50 cursor-grab active:cursor-grabbing transition-all ${
+                              draggingCandidate === candidate.id ? 'opacity-50' : ''
+                            } ${selectedCandidates.includes(candidate.id) ? 'ring-2 ring-sky-blue' : ''}`}
                           >
                             <CardContent className="p-3">
-                              <div className="flex items-start gap-3">
+                              <div className="flex items-start gap-2">
                                 <Checkbox
                                   checked={selectedCandidates.includes(candidate.id)}
                                   onCheckedChange={() => handleSelectCandidate(candidate.id)}
+                                  className="mt-1 border-muted-foreground data-[state=checked]:bg-sky-blue"
                                   onClick={(e) => e.stopPropagation()}
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-foreground text-sm truncate hover:text-sky-blue transition-colors">
-                                    {candidate.name}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                                    <User className="w-3 h-3" />
-                                    {candidate.title}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                                    <Building className="w-3 h-3" />
-                                    {candidate.company}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
-                                    {candidate.movedAt}
-                                  </p>
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-medium text-foreground text-sm truncate">{candidate.name}</span>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
+                                          <MoreHorizontal className="w-4 h-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="bg-card border-border">
+                                        <DropdownMenuItem onClick={() => navigate(`/candidates/${candidate.candidateId}`)} className="cursor-pointer">
+                                          <Eye className="w-4 h-4 mr-2" />
+                                          View Profile
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleOpenNoteDialog(candidate)} className="cursor-pointer">
+                                          <StickyNote className="w-4 h-4 mr-2" />
+                                          Add Note
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator className="bg-border" />
+                                        <DropdownMenuItem onClick={() => handleRemoveCandidate(candidate.id, candidate.name)} className="cursor-pointer text-destructive">
+                                          <Trash2 className="w-4 h-4 mr-2" />
+                                          Remove
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                  {candidate.title && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <User className="w-3 h-3 text-muted-foreground" />
+                                      <span className="text-xs text-muted-foreground truncate">{candidate.title}</span>
+                                    </div>
+                                  )}
+                                  {candidate.company && (
+                                    <div className="flex items-center gap-1">
+                                      <Building className="w-3 h-3 text-muted-foreground" />
+                                      <span className="text-xs text-muted-foreground truncate">{candidate.company}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-1 mt-2">
+                                    <Calendar className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">{candidate.movedAt}</span>
+                                  </div>
                                 </div>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0">
-                                      <MoreHorizontal className="w-4 h-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="bg-card border-border w-48">
-                                    <DropdownMenuItem 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate(`/talent/${candidate.id}`);
-                                      }}
-                                      className="cursor-pointer"
-                                    >
-                                      <Eye className="w-4 h-4 mr-2" />
-                                      View Profile
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator className="bg-border" />
-                                    <DropdownMenuItem className="cursor-pointer p-0">
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger className="flex items-center w-full px-2 py-1.5">
-                                          <MoveRight className="w-4 h-4 mr-2" />
-                                          Move to Stage
-                                          <ChevronRight className="w-4 h-4 ml-auto" />
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent side="right" className="bg-card border-border">
-                                          {stages.filter(s => s.id !== stage.id).map((targetStage) => (
-                                            <DropdownMenuItem
-                                              key={targetStage.id}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                moveCandidate(candidate.id, targetStage.id);
-                                              }}
-                                              className="cursor-pointer"
-                                            >
-                                              {targetStage.name}
-                                            </DropdownMenuItem>
-                                          ))}
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenNoteDialog({ id: candidate.id, name: candidate.name });
-                                      }}
-                                      className="cursor-pointer"
-                                    >
-                                      <StickyNote className="w-4 h-4 mr-2" />
-                                      Add Note
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator className="bg-border" />
-                                    <DropdownMenuItem 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveCandidate(candidate.id, candidate.name);
-                                      }}
-                                      className="cursor-pointer text-destructive"
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Remove from Pipeline
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
                               </div>
                             </CardContent>
                           </Card>
                         ))}
-
-                        {/* Add Candidate to Stage Button */}
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleAddCandidateToStage(stage.id)}
-                          className="w-full h-10 border-2 border-dashed border-border hover:border-sky-blue hover:text-sky-blue text-muted-foreground"
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add Candidate
-                        </Button>
-
                         {stageCandidates.length === 0 && (
-                          <div className={`h-20 border-2 border-dashed rounded-lg flex items-center justify-center transition-colors ${
-                            isDragOver ? 'border-sky-blue bg-sky-blue/10' : 'border-border'
-                          }`}>
-                            <p className="text-xs text-muted-foreground">
-                              {isDragOver ? 'Drop here' : 'Drag candidates here'}
-                            </p>
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <Users className="w-8 h-8 text-muted-foreground mb-2" />
+                            <p className="text-xs text-muted-foreground">No candidates</p>
                           </div>
                         )}
                       </div>
@@ -613,16 +543,13 @@ const PipelineDetail = () => {
         </main>
       </div>
 
-      <AICopilot 
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-      />
+      <AICopilot open={copilotOpen} onClose={() => setCopilotOpen(false)} />
 
       <AddCandidatesToPipelineDialog
         open={addCandidatesOpen}
         onOpenChange={setAddCandidatesOpen}
-        pipelineName={pipeline.title}
-        existingCandidateIds={candidates.map(c => c.id)}
+        pipelineName={pipeline.name}
+        existingCandidateIds={candidatesInStages.map(c => c.candidateId)}
         onAddCandidates={handleAddCandidates}
       />
 
@@ -632,8 +559,7 @@ const PipelineDetail = () => {
           onOpenChange={setNoteDialogOpen}
           candidateName={noteCandidate.name}
           onSaveNote={(note) => {
-            // In a real app, save the note to the candidate
-            console.log('Note saved:', note);
+            toast({ title: 'Note saved', description: `Note added for ${noteCandidate.name}` });
           }}
         />
       )}
