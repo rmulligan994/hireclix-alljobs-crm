@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import BeefreeSDK from '@beefree.io/sdk';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, X, Eye, Monitor, Smartphone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface BeefreeEmailEditorProps {
@@ -43,8 +43,9 @@ const defaultTemplate = {
   },
 };
 
-// Merge tags for personalization
+// Merge tags for personalization - including CRM/Job context
 const mergeTags = [
+  // Candidate fields
   { name: 'First Name', value: '{{firstName}}' },
   { name: 'Last Name', value: '{{lastName}}' },
   { name: 'Full Name', value: '{{fullName}}' },
@@ -53,8 +54,18 @@ const mergeTags = [
   { name: 'Job Title', value: '{{jobTitle}}' },
   { name: 'Skills', value: '{{skills}}' },
   { name: 'Location', value: '{{location}}' },
+  // Job/Pipeline context
+  { name: 'Pipeline Name', value: '{{pipeline.name}}' },
+  { name: 'Pipeline Stage', value: '{{pipeline.stage}}' },
+  { name: 'Job Req Title', value: '{{jobReq.title}}' },
+  { name: 'Job Req Company', value: '{{jobReq.company}}' },
+  { name: 'Job Req Location', value: '{{jobReq.location}}' },
+  { name: 'Job Apply Link', value: '{{jobReq.applyLink}}' },
+  // Sender fields
   { name: 'Sender Name', value: '{{senderName}}' },
   { name: 'Sender Company', value: '{{senderCompany}}' },
+  { name: 'Sender Email', value: '{{senderEmail}}' },
+  { name: 'Sender Phone', value: '{{senderPhone}}' },
 ];
 
 // Special links for email actions
@@ -72,6 +83,7 @@ export const BeefreeEmailEditor = ({
   const beeInstanceRef = useRef<BeefreeSDK | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile' | null>(null);
   const { toast } = useToast();
 
   // Stable callback for onSave
@@ -182,6 +194,46 @@ export const BeefreeEmailEditor = ({
     }
   };
 
+  const handlePreview = (mode: 'desktop' | 'mobile') => {
+    if (beeInstanceRef.current) {
+      try {
+        // Toggle preview mode
+        if (previewMode === mode) {
+          beeInstanceRef.current.togglePreview();
+          setPreviewMode(null);
+        } else {
+          if (previewMode) {
+            // If already in preview, toggle off first
+            beeInstanceRef.current.togglePreview();
+          }
+          beeInstanceRef.current.togglePreview();
+          setPreviewMode(mode);
+        }
+      } catch (err) {
+        console.log('Preview toggle error:', err);
+        // BeeFree may not support togglePreview in all versions
+        toast({
+          title: 'Preview',
+          description: 'Use the preview button in the editor toolbar.',
+        });
+      }
+    }
+  };
+
+  const handleMergeTagsPreview = () => {
+    if (beeInstanceRef.current) {
+      try {
+        beeInstanceRef.current.toggleMergeTagsPreview();
+        toast({
+          title: 'Merge Tags Preview',
+          description: 'Showing how merge tags will appear with sample data.',
+        });
+      } catch (err) {
+        console.log('Merge tags preview not supported');
+      }
+    }
+  };
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full space-y-4 p-8">
@@ -199,10 +251,44 @@ export const BeefreeEmailEditor = ({
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b border-border bg-card">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          <X className="w-4 h-4 mr-2" />
-          Cancel
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            <X className="w-4 h-4 mr-2" />
+            Cancel
+          </Button>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <Button
+            variant={previewMode === 'desktop' ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => handlePreview('desktop')}
+            disabled={isLoading}
+            title="Desktop Preview"
+          >
+            <Monitor className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={previewMode === 'mobile' ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => handlePreview('mobile')}
+            disabled={isLoading}
+            title="Mobile Preview"
+          >
+            <Smartphone className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMergeTagsPreview}
+            disabled={isLoading}
+            title="Preview with Sample Data"
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            Preview Data
+          </Button>
+        </div>
+
         <Button 
           className="bg-gradient-primary hover:opacity-90" 
           size="sm"

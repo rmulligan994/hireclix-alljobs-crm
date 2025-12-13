@@ -14,6 +14,153 @@ export type Database = {
   }
   public: {
     Tables: {
+      campaign_emails: {
+        Row: {
+          bee_json: Json | null
+          campaign_id: string
+          created_at: string
+          delay_days: number
+          delay_hours: number
+          email_template_id: string | null
+          html_content: string | null
+          id: string
+          step_order: number
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          bee_json?: Json | null
+          campaign_id: string
+          created_at?: string
+          delay_days?: number
+          delay_hours?: number
+          email_template_id?: string | null
+          html_content?: string | null
+          id?: string
+          step_order?: number
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          bee_json?: Json | null
+          campaign_id?: string
+          created_at?: string
+          delay_days?: number
+          delay_hours?: number
+          email_template_id?: string | null
+          html_content?: string | null
+          id?: string
+          step_order?: number
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_emails_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_emails_email_template_id_fkey"
+            columns: ["email_template_id"]
+            isOneToOne: false
+            referencedRelation: "email_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_recipients: {
+        Row: {
+          campaign_id: string
+          candidate_id: string
+          clicked_at: string | null
+          created_at: string
+          id: string
+          opened_at: string | null
+          responded_at: string | null
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          campaign_id: string
+          candidate_id: string
+          clicked_at?: string | null
+          created_at?: string
+          id?: string
+          opened_at?: string | null
+          responded_at?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          campaign_id?: string
+          candidate_id?: string
+          clicked_at?: string | null
+          created_at?: string
+          id?: string
+          opened_at?: string | null
+          responded_at?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          audience_filter: Json | null
+          created_at: string
+          goal: string | null
+          id: string
+          name: string
+          scheduled_at: string | null
+          status: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audience_filter?: Json | null
+          created_at?: string
+          goal?: string | null
+          id?: string
+          name: string
+          scheduled_at?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audience_filter?: Json | null
+          created_at?: string
+          goal?: string | null
+          id?: string
+          name?: string
+          scheduled_at?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       candidates: {
         Row: {
           avatar_url: string | null
