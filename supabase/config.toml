@@ -1,1 +1,4 @@
 project_id = "kkfzvpifcmsuwdhrxrpv"
+
+[functions.beefree-auth]
+verify_jwt = false

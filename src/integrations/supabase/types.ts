@@ -112,6 +112,51 @@ export type Database = {
           },
         ]
       }
+      email_templates: {
+        Row: {
+          bee_json: Json | null
+          category: string
+          created_at: string
+          html_content: string | null
+          id: string
+          is_default: boolean
+          name: string
+          preheader: string | null
+          subject: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          bee_json?: Json | null
+          category?: string
+          created_at?: string
+          html_content?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          preheader?: string | null
+          subject?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          bee_json?: Json | null
+          category?: string
+          created_at?: string
+          html_content?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          preheader?: string | null
+          subject?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       notes: {
         Row: {
           candidate_id: string
