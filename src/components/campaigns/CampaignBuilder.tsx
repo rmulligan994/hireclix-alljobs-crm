@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,13 +6,24 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SequenceBuilder } from './SequenceBuilder';
 import { TemplateLibrary } from './TemplateLibrary';
 import { BeefreeEmailEditor } from './BeefreeEmailEditor';
-import { ArrowLeft, Save, Send } from 'lucide-react';
+import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Clock, Users, Loader2 } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
+import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients } from '@/hooks/useCampaigns';
+import { useTalentPools } from '@/hooks/useTalentPools';
+import { usePipelines } from '@/hooks/usePipelines';
 import { EmailTemplate } from '@/services/emailTemplateService';
+import { AudienceFilter, CampaignEmail } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface CampaignBuilderProps {
   open: boolean;
@@ -23,11 +34,42 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
   const [currentStep, setCurrentStep] = useState<'details' | 'template' | 'editor' | 'sequence' | 'audience' | 'review'>('details');
   const [campaignName, setCampaignName] = useState('');
   const [campaignType, setCampaignType] = useState('');
+  const [campaignGoal, setCampaignGoal] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [templateBeeJson, setTemplateBeeJson] = useState<Record<string, unknown> | null>(null);
   const [templateHtml, setTemplateHtml] = useState<string | null>(null);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [emailSteps, setEmailSteps] = useState<Partial<CampaignEmail>[]>([]);
   
+  // Audience state
+  const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>({});
+  const [selectedTalentPools, setSelectedTalentPools] = useState<string[]>([]);
+  const [selectedPipelines, setSelectedPipelines] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  
+  // Schedule state
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
+  const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [isScheduled, setIsScheduled] = useState(false);
+  
+  const { toast } = useToast();
   const { createTemplate } = useEmailTemplates();
+  const createCampaign = useCreateCampaign();
+  const updateCampaign = useUpdateCampaign();
+  const addRecipients = useAddCampaignRecipients();
+  const { data: talentPools } = useTalentPools();
+  const { data: pipelines } = usePipelines();
+  const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
+  const { data: recipientCount } = useRecipientCount(audienceFilter);
+
+  // Update audience filter when selections change
+  useEffect(() => {
+    setAudienceFilter({
+      talentPoolIds: selectedTalentPools.length > 0 ? selectedTalentPools : undefined,
+      pipelineIds: selectedPipelines.length > 0 ? selectedPipelines : undefined,
+      tags: selectedTags.length > 0 ? selectedTags : undefined,
+    });
+  }, [selectedTalentPools, selectedPipelines, selectedTags]);
 
   const handleTemplateSelect = (template: EmailTemplate | null) => {
     setSelectedTemplate(template);
@@ -59,14 +101,188 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
     setCurrentStep('template');
   };
 
+  const handleSequenceContinue = (steps: Partial<CampaignEmail>[]) => {
+    setEmailSteps(steps);
+    setCurrentStep('audience');
+  };
+
+  const handleSaveAsDraft = async () => {
+    try {
+      if (!campaignId) {
+        const campaign = await createCampaign.mutateAsync({
+          name: campaignName,
+          type: campaignType,
+          goal: campaignGoal,
+          audience_filter: audienceFilter,
+        });
+        setCampaignId(campaign.id);
+        
+        // Add recipients
+        if (filteredCandidates && filteredCandidates.length > 0) {
+          await addRecipients.mutateAsync({
+            campaignId: campaign.id,
+            candidateIds: filteredCandidates.map(c => c.id),
+          });
+        }
+      } else {
+        await updateCampaign.mutateAsync({
+          id: campaignId,
+          input: {
+            name: campaignName,
+            type: campaignType,
+            goal: campaignGoal,
+            status: 'draft',
+            audience_filter: audienceFilter,
+          },
+        });
+      }
+      
+      toast({
+        title: 'Campaign saved',
+        description: 'Your campaign has been saved as a draft.',
+      });
+      handleClose();
+    } catch (err) {
+      toast({
+        title: 'Save failed',
+        description: 'Failed to save campaign. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleScheduleCampaign = async () => {
+    if (!scheduleDate) {
+      toast({
+        title: 'Schedule required',
+        description: 'Please select a date and time to schedule the campaign.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const scheduledAt = new Date(scheduleDate);
+      const [hours, minutes] = scheduleTime.split(':').map(Number);
+      scheduledAt.setHours(hours, minutes);
+
+      if (!campaignId) {
+        const campaign = await createCampaign.mutateAsync({
+          name: campaignName,
+          type: campaignType,
+          goal: campaignGoal,
+          audience_filter: audienceFilter,
+          scheduled_at: scheduledAt.toISOString(),
+        });
+        setCampaignId(campaign.id);
+        
+        await updateCampaign.mutateAsync({
+          id: campaign.id,
+          input: { status: 'scheduled' },
+        });
+
+        if (filteredCandidates && filteredCandidates.length > 0) {
+          await addRecipients.mutateAsync({
+            campaignId: campaign.id,
+            candidateIds: filteredCandidates.map(c => c.id),
+          });
+        }
+      } else {
+        await updateCampaign.mutateAsync({
+          id: campaignId,
+          input: {
+            status: 'scheduled',
+            scheduled_at: scheduledAt.toISOString(),
+          },
+        });
+      }
+
+      toast({
+        title: 'Campaign scheduled',
+        description: `Your campaign will be sent on ${format(scheduledAt, 'PPP')} at ${scheduleTime}.`,
+      });
+      handleClose();
+    } catch (err) {
+      toast({
+        title: 'Schedule failed',
+        description: 'Failed to schedule campaign. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleLaunchCampaign = async () => {
+    try {
+      if (!campaignId) {
+        const campaign = await createCampaign.mutateAsync({
+          name: campaignName,
+          type: campaignType,
+          goal: campaignGoal,
+          audience_filter: audienceFilter,
+        });
+        setCampaignId(campaign.id);
+        
+        await updateCampaign.mutateAsync({
+          id: campaign.id,
+          input: { status: 'active' },
+        });
+
+        if (filteredCandidates && filteredCandidates.length > 0) {
+          await addRecipients.mutateAsync({
+            campaignId: campaign.id,
+            candidateIds: filteredCandidates.map(c => c.id),
+          });
+        }
+      } else {
+        await updateCampaign.mutateAsync({
+          id: campaignId,
+          input: { status: 'active' },
+        });
+      }
+
+      toast({
+        title: 'Campaign launched!',
+        description: 'Your campaign is now active and emails will begin sending.',
+      });
+      handleClose();
+    } catch (err) {
+      toast({
+        title: 'Launch failed',
+        description: 'Failed to launch campaign. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleClose = () => {
     setCurrentStep('details');
     setCampaignName('');
     setCampaignType('');
+    setCampaignGoal('');
     setSelectedTemplate(null);
     setTemplateBeeJson(null);
     setTemplateHtml(null);
+    setCampaignId(null);
+    setEmailSteps([]);
+    setAudienceFilter({});
+    setSelectedTalentPools([]);
+    setSelectedPipelines([]);
+    setSelectedTags([]);
+    setScheduleDate(undefined);
+    setIsScheduled(false);
     onOpenChange(false);
+  };
+
+  const toggleTalentPool = (poolId: string) => {
+    setSelectedTalentPools(prev => 
+      prev.includes(poolId) ? prev.filter(id => id !== poolId) : [...prev, poolId]
+    );
+  };
+
+  const togglePipeline = (pipelineId: string) => {
+    setSelectedPipelines(prev => 
+      prev.includes(pipelineId) ? prev.filter(id => id !== pipelineId) : [...prev, pipelineId]
+    );
   };
 
   if (currentStep === 'editor') {
@@ -165,7 +381,12 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
 
               <div className="space-y-2">
                 <Label htmlFor="campaign-goal">Campaign Goal</Label>
-                <Input id="campaign-goal" placeholder="What do you want to achieve?" />
+                <Input 
+                  id="campaign-goal" 
+                  placeholder="What do you want to achieve?"
+                  value={campaignGoal}
+                  onChange={(e) => setCampaignGoal(e.target.value)}
+                />
               </div>
 
               <Button 
@@ -183,7 +404,12 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
           )}
 
           {currentStep === 'sequence' && (
-            <SequenceBuilder template={selectedTemplate} onContinue={() => setCurrentStep('audience')} />
+            <SequenceBuilder 
+              template={selectedTemplate} 
+              onContinue={handleSequenceContinue}
+              templateBeeJson={templateBeeJson}
+              templateHtml={templateHtml}
+            />
           )}
 
           {currentStep === 'audience' && (
@@ -193,31 +419,101 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
                   <CardTitle>Target Audience</CardTitle>
                   <CardDescription>Define who should receive this campaign</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Audience Segment</Label>
-                    <Select>
-                      <SelectTrigger><SelectValue placeholder="Select audience segment" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Candidates</SelectItem>
-                        <SelectItem value="active">Active Pipeline</SelectItem>
-                        <SelectItem value="passive">Passive Candidates</SelectItem>
-                        <SelectItem value="frontend">Frontend Developers</SelectItem>
-                        <SelectItem value="backend">Backend Developers</SelectItem>
-                        <SelectItem value="custom">Custom Segment</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <CardContent className="space-y-6">
+                  {/* Talent Pools Selection */}
+                  <div className="space-y-3">
+                    <Label>Filter by Talent Pools</Label>
+                    <ScrollArea className="h-32 border rounded-md p-3">
+                      {talentPools && talentPools.length > 0 ? (
+                        <div className="space-y-2">
+                          {talentPools.map((pool) => (
+                            <div key={pool.id} className="flex items-center space-x-2">
+                              <Checkbox 
+                                id={`pool-${pool.id}`}
+                                checked={selectedTalentPools.includes(pool.id)}
+                                onCheckedChange={() => toggleTalentPool(pool.id)}
+                              />
+                              <label htmlFor={`pool-${pool.id}`} className="text-sm cursor-pointer">
+                                {pool.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No talent pools available</p>
+                      )}
+                    </ScrollArea>
                   </div>
 
+                  {/* Pipelines Selection */}
+                  <div className="space-y-3">
+                    <Label>Filter by Pipelines</Label>
+                    <ScrollArea className="h-32 border rounded-md p-3">
+                      {pipelines && pipelines.length > 0 ? (
+                        <div className="space-y-2">
+                          {pipelines.map((pipeline) => (
+                            <div key={pipeline.id} className="flex items-center space-x-2">
+                              <Checkbox 
+                                id={`pipeline-${pipeline.id}`}
+                                checked={selectedPipelines.includes(pipeline.id)}
+                                onCheckedChange={() => togglePipeline(pipeline.id)}
+                              />
+                              <label htmlFor={`pipeline-${pipeline.id}`} className="text-sm cursor-pointer">
+                                {pipeline.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No pipelines available</p>
+                      )}
+                    </ScrollArea>
+                  </div>
+
+                  {/* Recipient Count */}
                   <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                    <div>
-                      <div className="font-semibold text-foreground">Estimated Recipients</div>
-                      <div className="text-sm text-muted-foreground">Based on current filters</div>
+                    <div className="flex items-center space-x-3">
+                      <Users className="w-5 h-5 text-sky-blue" />
+                      <div>
+                        <div className="font-semibold text-foreground">Estimated Recipients</div>
+                        <div className="text-sm text-muted-foreground">Based on current filters</div>
+                      </div>
                     </div>
-                    <div className="text-3xl font-bold text-sky-blue">247</div>
+                    <div className="text-3xl font-bold text-sky-blue">
+                      {isLoadingCandidates ? (
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                      ) : (
+                        recipientCount || 0
+                      )}
+                    </div>
                   </div>
 
-                  <Button className="w-full bg-gradient-primary hover:opacity-90" onClick={() => setCurrentStep('review')}>
+                  {/* Preview Recipients */}
+                  {filteredCandidates && filteredCandidates.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Preview Recipients</Label>
+                      <ScrollArea className="h-32 border rounded-md p-3">
+                        <div className="space-y-1">
+                          {filteredCandidates.slice(0, 10).map((candidate) => (
+                            <div key={candidate.id} className="text-sm">
+                              {candidate.first_name} {candidate.last_name} - {candidate.email}
+                            </div>
+                          ))}
+                          {filteredCandidates.length > 10 && (
+                            <div className="text-sm text-muted-foreground">
+                              And {filteredCandidates.length - 10} more...
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+
+                  <Button 
+                    className="w-full bg-gradient-primary hover:opacity-90" 
+                    onClick={() => setCurrentStep('review')}
+                    disabled={!filteredCandidates || filteredCandidates.length === 0}
+                  >
                     Continue to Review
                   </Button>
                 </CardContent>
@@ -244,17 +540,102 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground">Recipients</div>
-                      <div className="font-semibold text-foreground">247 candidates</div>
+                      <div className="font-semibold text-foreground">{recipientCount || 0} candidates</div>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground">Emails in Sequence</div>
-                      <div className="font-semibold text-foreground">3 emails</div>
+                      <div className="font-semibold text-foreground">{emailSteps.length} emails</div>
                     </div>
                   </div>
 
+                  {/* Schedule Option */}
+                  <div className="border-t pt-4 space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="schedule-campaign"
+                        checked={isScheduled}
+                        onCheckedChange={(checked) => setIsScheduled(checked === true)}
+                      />
+                      <label htmlFor="schedule-campaign" className="text-sm font-medium cursor-pointer">
+                        Schedule for later
+                      </label>
+                    </div>
+
+                    {isScheduled && (
+                      <div className="flex items-center space-x-4 pl-6">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("w-[200px] justify-start text-left font-normal", !scheduleDate && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {scheduleDate ? format(scheduleDate, 'PPP') : 'Pick a date'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={scheduleDate}
+                              onSelect={setScheduleDate}
+                              initialFocus
+                              disabled={(date) => date < new Date()}
+                            />
+                          </PopoverContent>
+                        </Popover>
+
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <Input
+                            type="time"
+                            value={scheduleTime}
+                            onChange={(e) => setScheduleTime(e.target.value)}
+                            className="w-32"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex space-x-3 mt-6">
-                    <Button variant="outline" className="flex-1"><Save className="w-4 h-4 mr-2" />Save as Draft</Button>
-                    <Button className="flex-1 bg-gradient-primary hover:opacity-90"><Send className="w-4 h-4 mr-2" />Launch Campaign</Button>
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={handleSaveAsDraft}
+                      disabled={createCampaign.isPending || updateCampaign.isPending}
+                    >
+                      {createCampaign.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4 mr-2" />
+                      )}
+                      Save as Draft
+                    </Button>
+                    
+                    {isScheduled ? (
+                      <Button 
+                        className="flex-1 bg-gradient-primary hover:opacity-90"
+                        onClick={handleScheduleCampaign}
+                        disabled={createCampaign.isPending || updateCampaign.isPending || !scheduleDate}
+                      >
+                        {createCampaign.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <CalendarIcon className="w-4 h-4 mr-2" />
+                        )}
+                        Schedule Campaign
+                      </Button>
+                    ) : (
+                      <Button 
+                        className="flex-1 bg-gradient-primary hover:opacity-90"
+                        onClick={handleLaunchCampaign}
+                        disabled={createCampaign.isPending || updateCampaign.isPending}
+                      >
+                        {createCampaign.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4 mr-2" />
+                        )}
+                        Launch Campaign
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,10 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Plus, Trash2, Mail, Clock, Edit, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { BeefreeEmailEditor } from './BeefreeEmailEditor';
+import { CampaignEmail } from '@/types/Campaign';
 
 interface SequenceBuilderProps {
   template?: any;
-  onContinue?: () => void;
+  templateBeeJson?: Record<string, unknown> | null;
+  templateHtml?: string | null;
+  onContinue?: (steps: Partial<CampaignEmail>[]) => void;
 }
 
 interface EmailStep {
@@ -25,7 +28,7 @@ interface EmailStep {
   expanded: boolean;
 }
 
-export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) => {
+export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onContinue }: SequenceBuilderProps) => {
   const [steps, setSteps] = useState<EmailStep[]>([
     {
       id: '1',
@@ -33,8 +36,8 @@ export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) 
       delay: 0,
       delayUnit: 'days',
       subject: 'Initial Outreach',
-      beeJson: template?.bee_json || null,
-      htmlContent: template?.html_content || null,
+      beeJson: templateBeeJson || template?.bee_json || null,
+      htmlContent: templateHtml || template?.html_content || null,
       expanded: true,
     },
     {
@@ -51,9 +54,18 @@ export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) 
 
   const [editingStep, setEditingStep] = useState<string | null>(null);
 
+  // Update first step when template changes
+  useEffect(() => {
+    if (templateBeeJson || templateHtml) {
+      setSteps(prev => prev.map((step, idx) => 
+        idx === 0 ? { ...step, beeJson: templateBeeJson || step.beeJson, htmlContent: templateHtml || step.htmlContent } : step
+      ));
+    }
+  }, [templateBeeJson, templateHtml]);
+
   const addStep = () => {
     const newStep: EmailStep = {
-      id: String(steps.length + 1),
+      id: String(Date.now()),
       order: steps.length + 1,
       delay: 7,
       delayUnit: 'days',
@@ -66,7 +78,7 @@ export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) 
   };
 
   const removeStep = (id: string) => {
-    setSteps(steps.filter(step => step.id !== id));
+    setSteps(steps.filter(step => step.id !== id).map((step, idx) => ({ ...step, order: idx + 1 })));
   };
 
   const toggleStep = (id: string) => {
@@ -80,7 +92,7 @@ export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) 
     if (stepToDuplicate) {
       const newStep = {
         ...stepToDuplicate,
-        id: String(steps.length + 1),
+        id: String(Date.now()),
         order: steps.length + 1,
         subject: `${stepToDuplicate.subject} (Copy)`,
       };
@@ -95,6 +107,26 @@ export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) 
       ));
       setEditingStep(null);
     }
+  };
+
+  const handleContinue = () => {
+    // Convert steps to CampaignEmail format
+    const emailSteps: Partial<CampaignEmail>[] = steps.map(step => {
+      const delayDays = step.delayUnit === 'weeks' ? step.delay * 7 : 
+                        step.delayUnit === 'days' ? step.delay : 0;
+      const delayHours = step.delayUnit === 'hours' ? step.delay : 0;
+      
+      return {
+        step_order: step.order,
+        delay_days: delayDays,
+        delay_hours: delayHours,
+        subject: step.subject,
+        bee_json: step.beeJson || undefined,
+        html_content: step.htmlContent || undefined,
+      };
+    });
+    
+    onContinue?.(emailSteps);
   };
 
   const editingStepData = editingStep ? steps.find(s => s.id === editingStep) : null;
@@ -141,7 +173,7 @@ export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) 
                         value={step.delay}
                         onChange={(e) => {
                           setSteps(steps.map(s => 
-                            s.id === step.id ? { ...s, delay: parseInt(e.target.value) } : s
+                            s.id === step.id ? { ...s, delay: parseInt(e.target.value) || 0 } : s
                           ));
                         }}
                       />
@@ -279,7 +311,7 @@ export const SequenceBuilder = ({ template, onContinue }: SequenceBuilderProps) 
             <div className="pt-4 border-t">
               <Button 
                 className="w-full bg-gradient-primary hover:opacity-90"
-                onClick={onContinue}
+                onClick={handleContinue}
               >
                 Continue to Audience Selection
               </Button>
