@@ -4,13 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmailTemplateEditor } from './EmailTemplateEditor';
 import { SequenceBuilder } from './SequenceBuilder';
 import { TemplateLibrary } from './TemplateLibrary';
-import { ArrowLeft, Save, Send, Eye } from 'lucide-react';
+import { BeefreeEmailEditor } from './BeefreeEmailEditor';
+import { ArrowLeft, Save, Send } from 'lucide-react';
+import { useEmailTemplates } from '@/hooks/useEmailTemplates';
+import { EmailTemplate } from '@/services/emailTemplateService';
+import { Json } from '@/integrations/supabase/types';
 
 interface CampaignBuilderProps {
   open: boolean;
@@ -18,18 +20,71 @@ interface CampaignBuilderProps {
 }
 
 export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) => {
-  const [currentStep, setCurrentStep] = useState<'details' | 'template' | 'sequence' | 'audience' | 'review'>('details');
+  const [currentStep, setCurrentStep] = useState<'details' | 'template' | 'editor' | 'sequence' | 'audience' | 'review'>('details');
   const [campaignName, setCampaignName] = useState('');
   const [campaignType, setCampaignType] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
+  const [templateBeeJson, setTemplateBeeJson] = useState<Record<string, unknown> | null>(null);
+  const [templateHtml, setTemplateHtml] = useState<string | null>(null);
+  
+  const { createTemplate } = useEmailTemplates();
 
-  const handleTemplateSelect = (template: any) => {
+  const handleTemplateSelect = (template: EmailTemplate | null) => {
     setSelectedTemplate(template);
+    if (template?.bee_json && typeof template.bee_json === 'object' && !Array.isArray(template.bee_json)) {
+      setTemplateBeeJson(template.bee_json as Record<string, unknown>);
+    } else {
+      setTemplateBeeJson(null);
+    }
+    setCurrentStep('editor');
+  };
+
+  const handleEditorSave = (beeJson: Record<string, unknown>, html: string) => {
+    setTemplateBeeJson(beeJson);
+    setTemplateHtml(html);
+    
+    if (!selectedTemplate) {
+      createTemplate({
+        name: campaignName || 'Untitled Template',
+        category: campaignType || 'custom',
+        bee_json: beeJson as Json,
+        html_content: html,
+      });
+    }
+    
     setCurrentStep('sequence');
   };
 
+  const handleEditorCancel = () => {
+    setCurrentStep('template');
+  };
+
+  const handleClose = () => {
+    setCurrentStep('details');
+    setCampaignName('');
+    setCampaignType('');
+    setSelectedTemplate(null);
+    setTemplateBeeJson(null);
+    setTemplateHtml(null);
+    onOpenChange(false);
+  };
+
+  if (currentStep === 'editor') {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0">
+          <BeefreeEmailEditor
+            initialTemplate={templateBeeJson}
+            onSave={handleEditorSave}
+            onCancel={handleEditorCancel}
+          />
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-6xl h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <div className="flex items-center justify-between">
@@ -43,7 +98,7 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
               </DialogTitle>
               <DialogDescription>
                 {currentStep === 'details' && 'Set up your campaign details and objectives'}
-                {currentStep === 'template' && 'Select or design your email template'}
+                {currentStep === 'template' && 'Select an existing template or create from scratch'}
                 {currentStep === 'sequence' && 'Create your email sequence and timing'}
                 {currentStep === 'audience' && 'Define who will receive this campaign'}
                 {currentStep === 'review' && 'Review your campaign before launching'}
@@ -56,7 +111,7 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
                 onClick={() => {
                   const steps = ['details', 'template', 'sequence', 'audience', 'review'];
                   const currentIndex = steps.indexOf(currentStep);
-                  setCurrentStep(steps[currentIndex - 1] as any);
+                  setCurrentStep(steps[currentIndex - 1] as typeof currentStep);
                 }}
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -65,7 +120,6 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
             )}
           </div>
           
-          {/* Progress indicator */}
           <div className="flex items-center space-x-2 mt-4">
             {['Details', 'Template', 'Sequence', 'Audience', 'Review'].map((step, index) => (
               <div key={step} className="flex items-center flex-1">
@@ -111,10 +165,7 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
 
               <div className="space-y-2">
                 <Label htmlFor="campaign-goal">Campaign Goal</Label>
-                <Input
-                  id="campaign-goal"
-                  placeholder="What do you want to achieve?"
-                />
+                <Input id="campaign-goal" placeholder="What do you want to achieve?" />
               </div>
 
               <Button 
@@ -132,10 +183,7 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
           )}
 
           {currentStep === 'sequence' && (
-            <SequenceBuilder 
-              template={selectedTemplate}
-              onContinue={() => setCurrentStep('audience')}
-            />
+            <SequenceBuilder template={selectedTemplate} onContinue={() => setCurrentStep('audience')} />
           )}
 
           {currentStep === 'audience' && (
@@ -149,9 +197,7 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
                   <div className="space-y-2">
                     <Label>Audience Segment</Label>
                     <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select audience segment" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select audience segment" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Candidates</SelectItem>
                         <SelectItem value="active">Active Pipeline</SelectItem>
@@ -171,10 +217,7 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
                     <div className="text-3xl font-bold text-sky-blue">247</div>
                   </div>
 
-                  <Button 
-                    className="w-full bg-gradient-primary hover:opacity-90"
-                    onClick={() => setCurrentStep('review')}
-                  >
+                  <Button className="w-full bg-gradient-primary hover:opacity-90" onClick={() => setCurrentStep('review')}>
                     Continue to Review
                   </Button>
                 </CardContent>
@@ -210,14 +253,8 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
                   </div>
 
                   <div className="flex space-x-3 mt-6">
-                    <Button variant="outline" className="flex-1">
-                      <Save className="w-4 h-4 mr-2" />
-                      Save as Draft
-                    </Button>
-                    <Button className="flex-1 bg-gradient-primary hover:opacity-90">
-                      <Send className="w-4 h-4 mr-2" />
-                      Launch Campaign
-                    </Button>
+                    <Button variant="outline" className="flex-1"><Save className="w-4 h-4 mr-2" />Save as Draft</Button>
+                    <Button className="flex-1 bg-gradient-primary hover:opacity-90"><Send className="w-4 h-4 mr-2" />Launch Campaign</Button>
                   </div>
                 </CardContent>
               </Card>
