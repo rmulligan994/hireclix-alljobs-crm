@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface CampaignStats {
   recipients: number;
+  pending: number;
   sent: number;
   opened: number;
   responded: number;
@@ -12,6 +13,7 @@ export interface CampaignStats {
 export function useCampaignStats(campaignId: string) {
   const [stats, setStats] = useState<CampaignStats>({
     recipients: 0,
+    pending: 0,
     sent: 0,
     opened: 0,
     responded: 0,
@@ -31,12 +33,13 @@ export function useCampaignStats(campaignId: string) {
     }
 
     const recipients = data.length;
+    const pending = data.filter(r => r.status === 'pending').length;
     const sent = data.filter(r => r.status !== 'pending').length;
     const opened = data.filter(r => r.status === 'opened' || r.status === 'clicked' || r.status === 'responded').length;
     const responded = data.filter(r => r.status === 'responded').length;
     const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
 
-    setStats({ recipients, sent, opened, responded, responseRate });
+    setStats({ recipients, pending, sent, opened, responded, responseRate });
     setIsLoading(false);
   };
 
@@ -93,12 +96,13 @@ export function useAllCampaignsStats(campaignIds: string[]) {
     campaignIds.forEach(campaignId => {
       const campaignData = data.filter(r => r.campaign_id === campaignId);
       const recipients = campaignData.length;
+      const pending = campaignData.filter(r => r.status === 'pending').length;
       const sent = campaignData.filter(r => r.status !== 'pending').length;
       const opened = campaignData.filter(r => r.status === 'opened' || r.status === 'clicked' || r.status === 'responded').length;
       const responded = campaignData.filter(r => r.status === 'responded').length;
       const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
 
-      newStatsMap[campaignId] = { recipients, sent, opened, responded, responseRate };
+      newStatsMap[campaignId] = { recipients, pending, sent, opened, responded, responseRate };
     });
 
     setStatsMap(newStatsMap);
