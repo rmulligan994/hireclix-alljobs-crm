@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil } from 'lucide-react';
 import { useCampaigns, useUpdateCampaign, useDeleteCampaign } from '@/hooks/useCampaigns';
+import { useAllCampaignsStats } from '@/hooks/useCampaignStats';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,16 +30,26 @@ const Campaigns = () => {
   const deleteCampaign = useDeleteCampaign();
   const { toast } = useToast();
 
+  const campaignIds = useMemo(() => campaigns?.map(c => c.id) || [], [campaigns]);
+  const { statsMap } = useAllCampaignsStats(campaignIds);
+
   const filteredCampaigns = campaigns?.filter(campaign => {
     if (activeTab === 'all') return true;
     return campaign.status === activeTab;
   }) || [];
 
+  // Calculate aggregate stats
+  const totalRecipients = Object.values(statsMap).reduce((sum, s) => sum + s.recipients, 0);
+  const totalOpened = Object.values(statsMap).reduce((sum, s) => sum + s.opened, 0);
+  const totalResponded = Object.values(statsMap).reduce((sum, s) => sum + s.responded, 0);
+  const overallOpenRate = totalRecipients > 0 ? Math.round((totalOpened / totalRecipients) * 100) : 0;
+  const overallResponseRate = totalRecipients > 0 ? Math.round((totalResponded / totalRecipients) * 100) : 0;
+
   const stats = {
     active: campaigns?.filter(c => c.status === 'active').length || 0,
-    totalRecipients: 0,
-    openRate: 0,
-    responseRate: 0,
+    totalRecipients,
+    openRate: overallOpenRate,
+    responseRate: overallResponseRate,
   };
 
   const handlePauseCampaign = async (id: string) => {
@@ -187,7 +198,7 @@ const Campaigns = () => {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-bold text-foreground">--</div>
+                    <div className="text-2xl font-bold text-foreground">{stats.openRate}%</div>
                     <div className="text-sm text-muted-foreground">Open Rate</div>
                   </div>
                   <TrendingUp className="w-8 h-8 text-sunrise" />
@@ -198,7 +209,7 @@ const Campaigns = () => {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-bold text-foreground">--</div>
+                    <div className="text-2xl font-bold text-foreground">{stats.responseRate}%</div>
                     <div className="text-sm text-muted-foreground">Response Rate</div>
                   </div>
                   <Calendar className="w-8 h-8 text-sunrise" />
@@ -342,23 +353,23 @@ const Campaigns = () => {
                     <CardContent>
                       <div className="grid grid-cols-5 gap-4">
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-foreground">--</div>
+                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.recipients ?? 0}</div>
                           <div className="text-xs text-muted-foreground">Recipients</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-foreground">--</div>
+                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.sent ?? 0}</div>
                           <div className="text-xs text-muted-foreground">Sent</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-sky-blue">--</div>
+                          <div className="text-2xl font-bold text-sky-blue">{statsMap[campaign.id]?.opened ?? 0}</div>
                           <div className="text-xs text-muted-foreground">Opened</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-sunrise">--</div>
+                          <div className="text-2xl font-bold text-sunrise">{statsMap[campaign.id]?.responded ?? 0}</div>
                           <div className="text-xs text-muted-foreground">Responded</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-foreground">--</div>
+                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.responseRate ?? 0}%</div>
                           <div className="text-xs text-muted-foreground">Response Rate</div>
                         </div>
                       </div>
