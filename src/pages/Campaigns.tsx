@@ -8,16 +8,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil } from 'lucide-react';
 import { useCampaigns, useUpdateCampaign, useDeleteCampaign } from '@/hooks/useCampaigns';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import type { Campaign } from '@/types/Campaign';
 
 const Campaigns = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [activeTab, setActiveTab] = useState('all');
   const [sendingCampaignId, setSendingCampaignId] = useState<string | null>(null);
   
@@ -90,6 +93,16 @@ const Campaigns = () => {
     } catch {
       toast({ title: 'Failed to delete campaign', variant: 'destructive' });
     }
+  };
+
+  const handleEditCampaign = (campaign: Campaign) => {
+    setEditingCampaign(campaign);
+    setShowCampaignBuilder(true);
+  };
+
+  const handleCloseBuilder = () => {
+    setShowCampaignBuilder(false);
+    setEditingCampaign(null);
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -289,17 +302,39 @@ const Campaigns = () => {
                               Resume
                             </Button>
                           ) : null}
-                          <Button variant="ghost" size="sm">
-                            View Details
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleEditCampaign(campaign)}
+                          >
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Edit
                           </Button>
-                          {campaign.status === 'draft' && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleDeleteCampaign(campaign.id)}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
+                          {(campaign.status === 'draft' || campaign.status === 'paused') && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete "{campaign.name}"? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => handleDeleteCampaign(campaign.id)}
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           )}
                         </div>
                       </div>
@@ -343,7 +378,8 @@ const Campaigns = () => {
 
       <CampaignBuilder 
         open={showCampaignBuilder}
-        onOpenChange={setShowCampaignBuilder}
+        onOpenChange={handleCloseBuilder}
+        editingCampaign={editingCampaign}
       />
     </div>
   );

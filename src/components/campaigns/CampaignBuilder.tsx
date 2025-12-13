@@ -19,7 +19,7 @@ import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCan
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
 import { EmailTemplate } from '@/services/emailTemplateService';
-import { AudienceFilter, CampaignEmail } from '@/types/Campaign';
+import { AudienceFilter, CampaignEmail, Campaign } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -28,9 +28,10 @@ import { cn } from '@/lib/utils';
 interface CampaignBuilderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editingCampaign?: Campaign | null;
 }
 
-export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) => {
+export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: CampaignBuilderProps) => {
   const [currentStep, setCurrentStep] = useState<'details' | 'template' | 'editor' | 'sequence' | 'audience' | 'review'>('details');
   const [campaignName, setCampaignName] = useState('');
   const [campaignType, setCampaignType] = useState('');
@@ -40,6 +41,23 @@ export const CampaignBuilder = ({ open, onOpenChange }: CampaignBuilderProps) =>
   const [templateHtml, setTemplateHtml] = useState<string | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [emailSteps, setEmailSteps] = useState<Partial<CampaignEmail>[]>([]);
+
+  // Initialize from editing campaign
+  useEffect(() => {
+    if (editingCampaign) {
+      setCampaignName(editingCampaign.name);
+      setCampaignType(editingCampaign.type);
+      setCampaignGoal(editingCampaign.goal || '');
+      setCampaignId(editingCampaign.id);
+      if (editingCampaign.audience_filter) {
+        const filter = editingCampaign.audience_filter as AudienceFilter;
+        setAudienceFilter(filter);
+        setSelectedTalentPools(filter.talentPoolIds || []);
+        setSelectedPipelines(filter.pipelineIds || []);
+        setSelectedTags(filter.tags || []);
+      }
+    }
+  }, [editingCampaign]);
   
   // Audience state
   const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>({});
