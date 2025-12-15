@@ -8,10 +8,18 @@ import {
   Settings, 
   Zap,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLocation, Link } from 'react-router-dom';
+import { useAuth, useSignOut } from '@/hooks/useAuth';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const navigationItems = [
   { icon: Home, label: 'Dashboard', path: '/' },
@@ -31,6 +39,11 @@ interface SidebarProps {
 
 export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const location = useLocation();
+  const { user } = useAuth();
+  const signOut = useSignOut();
+
+  const userEmail = user?.email || 'User';
+  const userInitial = userEmail.charAt(0).toUpperCase();
 
   return (
     <div className={`
@@ -88,21 +101,33 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Footer with User Menu */}
       <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-gradient-accent rounded-full flex-shrink-0" />
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="font-body text-sm font-medium text-sidebar-foreground truncate">
-                Sarah Chen
-              </p>
-              <p className="font-body text-xs text-sidebar-foreground/70 truncate">
-                Talent Acquisition Lead
-              </p>
-            </div>
-          )}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-full flex items-center space-x-3 hover:bg-sidebar-accent/50 rounded-lg p-2 transition-colors">
+              <div className="w-8 h-8 bg-gradient-accent rounded-full flex-shrink-0 flex items-center justify-center text-white font-medium text-sm">
+                {userInitial}
+              </div>
+              {!collapsed && (
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="font-body text-sm font-medium text-sidebar-foreground truncate">
+                    {userEmail}
+                  </p>
+                </div>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem 
+              onClick={() => signOut.mutate()}
+              className="text-destructive focus:text-destructive cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
