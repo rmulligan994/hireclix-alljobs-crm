@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   ArrowLeft,
   Mail,
@@ -31,67 +32,38 @@ import {
   ChevronRight,
   Archive,
   ChevronDown,
+  AlertCircle,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useCandidateWithAssociations } from '@/hooks/useCandidates';
+import { format } from 'date-fns';
 
 const CandidateProfile = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
-
-  const candidate = {
-    id: id || '1',
-    name: 'Sarah Johnson',
-    email: 'sarah.johnson@email.com',
-    phone: '+1 (555) 123-4567',
-    source: 'LinkedIn',
-    addedDate: '1/14/2024',
-    updatedDate: '1/16/2024',
-  };
-
-  const aiSummary = [
-    'Senior Frontend Developer with 5+ years React/TypeScript experience',
-    'Strong technical skills, excellent communication, available immediately',
-    'Seeking remote role at $120-140k range',
-  ];
-
   const [archivedPipelinesOpen, setArchivedPipelinesOpen] = useState(false);
 
-  const activePipelineAssociations = [
-    { id: '1', name: 'Senior Frontend Dev - Q1 2024', stage: 'Qualified', lastUpdated: 'Jan 16, 2024' },
-    { id: '2', name: 'Backend Engineer - Remote', stage: 'Contacted', lastUpdated: 'Jan 14, 2024' },
-  ];
+  // Fetch real candidate data
+  const { data: candidate, isLoading, error } = useCandidateWithAssociations(id || '');
 
-  const archivedPipelineAssociations = [
-    { id: '5', name: 'DevOps Engineer - Q4 2023', stage: 'Submitted', lastUpdated: 'Dec 20, 2023' },
-    { id: '6', name: 'UX Designer - Brand Team', stage: 'Engaged', lastUpdated: 'Nov 15, 2023' },
-  ];
-
-  const talentPoolAssociations = [
-    { id: '1', name: 'Senior Engineers', candidateCount: 156 },
-    { id: '2', name: 'Remote-First Candidates', candidateCount: 89 },
-    { id: '3', name: 'JavaScript Experts', candidateCount: 234 },
-  ];
-
-  const currentTags = ['React', 'TypeScript', 'Remote', 'Senior', 'Available'];
-  const suggestedTags = ['Node.js', 'Python', 'Java', 'Mid-level', 'Junior', 'On-site', 'Hybrid', 'Interviewing', 'Considering', 'Security Clearance'];
+  // Placeholder data for features not yet connected to DB
+  const aiSummary = candidate ? [
+    `${candidate.title || 'Professional'} ${candidate.company ? `at ${candidate.company}` : ''}`,
+    candidate.location ? `Located in ${candidate.location}` : 'Location not specified',
+    candidate.tags?.length ? `Skills: ${candidate.tags.slice(0, 3).join(', ')}` : 'No skills listed yet',
+  ] : [];
 
   const resumeVersions = [
     { id: '1', name: 'Resume v1', isLatest: true },
-    { id: '2', name: 'Resume v2', isLatest: false },
   ];
 
   const recruiterNotes = [
     {
       id: '1',
-      date: 'Jan 15, 2024, 05:30 AM',
-      content: 'Strong technical background in React and TypeScript. Excellent communication skills during initial screening.',
-    },
-    {
-      id: '2',
-      date: 'Jan 16, 2024, 09:20 AM',
-      content: 'Available to start in 2 weeks. Looking for remote-first opportunities. Salary expectations: $120-140k.',
+      date: 'Notes feature coming soon',
+      content: 'Connect the notes table to display recruiter notes here.',
     },
   ];
 
@@ -99,23 +71,9 @@ const CandidateProfile = () => {
     {
       id: '1',
       type: 'Email',
-      date: 'Jan 16, 2024, 09:00 AM',
-      description: 'Sent technical assessment and next steps',
-      outcome: 'Acknowledged, assessment in progress',
-    },
-    {
-      id: '2',
-      type: 'Phone Call',
-      date: 'Jan 15, 2024, 05:30 AM',
-      description: '30-minute screening call',
-      outcome: 'Strong fit, proceeding to technical round',
-    },
-    {
-      id: '3',
-      type: 'Outreach',
-      date: 'Jan 14, 2024, 04:00 AM',
-      description: 'Initial LinkedIn outreach message sent',
-      outcome: 'Responded positively',
+      date: 'Communications feature coming soon',
+      description: 'Connect the communications table to display history here.',
+      outcome: 'Pending implementation',
     },
   ];
 
@@ -148,6 +106,80 @@ const CandidateProfile = () => {
       default: return 'bg-muted text-muted-foreground';
     }
   };
+
+  const getInitials = (firstName?: string | null, lastName?: string | null) => {
+    const first = firstName?.charAt(0) || '';
+    const last = lastName?.charAt(0) || '';
+    return (first + last).toUpperCase() || '?';
+  };
+
+  const getFullName = (firstName?: string | null, lastName?: string | null) => {
+    return [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Candidate';
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-background font-body">
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+          <main className="flex-1 p-6 overflow-y-auto">
+            <div className="flex items-start gap-4 mb-6">
+              <Skeleton className="h-9 w-20" />
+              <div>
+                <Skeleton className="h-8 w-48 mb-2" />
+                <Skeleton className="h-4 w-64" />
+              </div>
+            </div>
+            <Card className="mb-6">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <Skeleton className="w-16 h-16 rounded-full" />
+                  <div className="flex-1">
+                    <Skeleton className="h-8 w-48 mb-2" />
+                    <Skeleton className="h-4 w-96" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !candidate) {
+    return (
+      <div className="flex h-screen bg-background font-body">
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+          <main className="flex-1 p-6 overflow-y-auto">
+            <div className="flex items-start gap-4 mb-6">
+              <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="border-border text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Back
+              </Button>
+            </div>
+            <Card className="bg-card border-border">
+              <CardContent className="p-12 text-center">
+                <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                <h2 className="text-xl font-bold text-foreground mb-2">Candidate Not Found</h2>
+                <p className="text-muted-foreground mb-4">
+                  {error ? `Error: ${error.message}` : 'The candidate you are looking for does not exist or you do not have access.'}
+                </p>
+                <Button onClick={() => navigate('/talent')} className="bg-gradient-primary">
+                  View All Candidates
+                </Button>
+              </CardContent>
+            </Card>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -191,32 +223,43 @@ const CandidateProfile = () => {
                 <div className="flex items-center gap-4">
                   <Avatar className="w-16 h-16">
                     <AvatarFallback className="bg-muted text-muted-foreground text-xl">
-                      {candidate.name.split(' ').map(n => n[0]).join('')}
+                      {getInitials(candidate.firstName, candidate.lastName)}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <h2 className="font-heading text-2xl font-bold text-sky-blue mb-2">
-                      {candidate.name}
+                      {getFullName(candidate.firstName, candidate.lastName)}
                     </h2>
                     <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Mail className="w-4 h-4" />
-                        {candidate.email}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-4 h-4" />
-                        {candidate.phone}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-4 h-4" />
-                        Source: {candidate.source}
-                      </div>
+                      {candidate.email && (
+                        <div className="flex items-center gap-1">
+                          <Mail className="w-4 h-4" />
+                          {candidate.email}
+                        </div>
+                      )}
+                      {candidate.phone && (
+                        <div className="flex items-center gap-1">
+                          <Phone className="w-4 h-4" />
+                          {candidate.phone}
+                        </div>
+                      )}
+                      {candidate.source && (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          Source: {candidate.source}
+                        </div>
+                      )}
                     </div>
+                    {(candidate.title || candidate.company) && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {candidate.title}{candidate.title && candidate.company ? ' at ' : ''}{candidate.company}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="text-right text-sm text-muted-foreground">
-                  <p>Added: {candidate.addedDate}</p>
-                  <p>Updated: {candidate.updatedDate}</p>
+                  <p>Added: {format(candidate.createdAt, 'M/d/yyyy')}</p>
+                  <p>Updated: {format(candidate.updatedAt, 'M/d/yyyy')}</p>
                 </div>
               </div>
             </CardContent>
@@ -278,78 +321,37 @@ const CandidateProfile = () => {
                   <GitBranch className="w-4 h-4" />
                   Active Pipelines
                 </h4>
-                <div className="space-y-2">
-                  {activePipelineAssociations.map((pipeline) => (
-                    <div 
-                      key={pipeline.id}
-                      className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 cursor-pointer transition-colors group"
-                      onClick={() => navigate(`/pipelines/${pipeline.id}`)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex flex-col">
-                          <span className="text-foreground font-medium group-hover:text-sky-blue transition-colors">
-                            {pipeline.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            Last updated: {pipeline.lastUpdated}
-                          </span>
+                {candidate.pipelines && candidate.pipelines.length > 0 ? (
+                  <div className="space-y-2">
+                    {candidate.pipelines.map((pipeline) => (
+                      <div 
+                        key={pipeline.pipelineId}
+                        className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 cursor-pointer transition-colors group"
+                        onClick={() => navigate(`/pipelines/${pipeline.pipelineId}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col">
+                            <span className="text-foreground font-medium group-hover:text-sky-blue transition-colors">
+                              {pipeline.pipelineName}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Added: {format(pipeline.addedAt, 'MMM d, yyyy')}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={getStageColor(pipeline.stage)}>
+                            {pipeline.stage}
+                          </Badge>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-sky-blue" />
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={getStageColor(pipeline.stage)}>
-                          {pipeline.stage}
-                        </Badge>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-sky-blue" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Not in any pipelines yet</p>
+                )}
               </div>
-
-              {/* Archived Pipelines - Collapsible */}
-              {archivedPipelineAssociations.length > 0 && (
-                <Collapsible open={archivedPipelinesOpen} onOpenChange={setArchivedPipelinesOpen}>
-                  <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
-                    <Archive className="w-4 h-4" />
-                    Archived Pipelines ({archivedPipelineAssociations.length})
-                    <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${archivedPipelinesOpen ? 'rotate-180' : ''}`} />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3">
-                    <div className="space-y-2">
-                      {archivedPipelineAssociations.map((pipeline) => (
-                        <div 
-                          key={pipeline.id}
-                          className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 cursor-pointer transition-colors group opacity-70"
-                          onClick={() => navigate(`/pipelines/${pipeline.id}`)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex flex-col">
-                              <div className="flex items-center gap-2">
-                                <span className="text-foreground font-medium group-hover:text-sky-blue transition-colors">
-                                  {pipeline.name}
-                                </span>
-                                <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground">
-                                  <Archive className="w-3 h-3 mr-1" />
-                                  Archived
-                                </Badge>
-                              </div>
-                              <span className="text-xs text-muted-foreground">
-                                Last updated: {pipeline.lastUpdated}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge className={getStageColor(pipeline.stage)}>
-                              {pipeline.stage}
-                            </Badge>
-                            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-sky-blue" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
 
               {/* Talent Pools */}
               <div>
@@ -357,19 +359,22 @@ const CandidateProfile = () => {
                   <FolderKanban className="w-4 h-4" />
                   Talent Pools
                 </h4>
-                <div className="flex flex-wrap gap-2">
-                  {talentPoolAssociations.map((pool) => (
-                    <Badge 
-                      key={pool.id}
-                      variant="outline"
-                      className="border-sky-blue text-sky-blue hover:bg-sky-blue/10 cursor-pointer px-3 py-1"
-                      onClick={() => navigate(`/talent?pool=${pool.id}`)}
-                    >
-                      {pool.name}
-                      <span className="ml-1 text-xs text-muted-foreground">({pool.candidateCount})</span>
-                    </Badge>
-                  ))}
-                </div>
+                {candidate.talentPools && candidate.talentPools.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {candidate.talentPools.map((pool) => (
+                      <Badge 
+                        key={pool.poolId}
+                        variant="outline"
+                        className="border-sky-blue text-sky-blue hover:bg-sky-blue/10 cursor-pointer px-3 py-1"
+                        onClick={() => navigate(`/talent-pools/${pool.poolId}`)}
+                      >
+                        {pool.poolName}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Not in any talent pools yet</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -392,28 +397,18 @@ const CandidateProfile = () => {
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Current Tags</p>
                 <div className="flex flex-wrap gap-2">
-                  {currentTags.map((tag) => (
-                    <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-3 py-1">
-                      {tag}
-                      <button className="ml-2 hover:text-white">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">Suggested Tags</p>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedTags.map((tag) => (
-                    <Badge 
-                      key={tag} 
-                      variant="outline" 
-                      className="border-border text-muted-foreground hover:border-sky-blue hover:text-sky-blue cursor-pointer px-3 py-1"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
+                  {candidate.tags && candidate.tags.length > 0 ? (
+                    candidate.tags.map((tag) => (
+                      <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-3 py-1">
+                        {tag}
+                        <button className="ml-2 hover:text-white">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No tags assigned</p>
+                  )}
                 </div>
               </div>
             </CardContent>
