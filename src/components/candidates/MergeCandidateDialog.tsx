@@ -12,19 +12,19 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { GitMerge, User, Mail, Phone, Building, Briefcase, MapPin, Tag, StickyNote, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { MockCandidate } from '@/data/mockCandidates';
+import type { Candidate } from '@/types';
 
 interface MergeCandidateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  existingCandidate: MockCandidate;
+  existingCandidate: Candidate;
   newCandidateData: {
     firstName?: string;
     lastName?: string;
     email?: string;
     phone?: string;
     company?: string;
-    jobTitle?: string;
+    title?: string;
     location?: string;
     source?: string;
     tags?: string[];
@@ -33,7 +33,7 @@ interface MergeCandidateDialogProps {
   onMergeComplete?: () => void;
 }
 
-type MergeField = 'firstName' | 'lastName' | 'email' | 'phone' | 'company' | 'jobTitle' | 'location' | 'source' | 'notes';
+type MergeField = 'firstName' | 'lastName' | 'email' | 'phone' | 'company' | 'title' | 'location' | 'source' | 'notes';
 
 const fieldConfig: { key: MergeField; label: string; icon: React.ElementType }[] = [
   { key: 'firstName', label: 'First Name', icon: User },
@@ -41,7 +41,7 @@ const fieldConfig: { key: MergeField; label: string; icon: React.ElementType }[]
   { key: 'email', label: 'Email', icon: Mail },
   { key: 'phone', label: 'Phone', icon: Phone },
   { key: 'company', label: 'Company', icon: Building },
-  { key: 'jobTitle', label: 'Job Title', icon: Briefcase },
+  { key: 'title', label: 'Job Title', icon: Briefcase },
   { key: 'location', label: 'Location', icon: MapPin },
   { key: 'source', label: 'Source', icon: User },
   { key: 'notes', label: 'Notes', icon: StickyNote },

@@ -38,10 +38,12 @@ import {
   AlertCircle,
   AlertTriangle,
   GitMerge,
+  Loader2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { findDuplicateCandidate, getDuplicateMatchType, MockCandidate } from '@/data/mockCandidates';
+import { useFindDuplicates, useCreateCandidate } from '@/hooks/useCandidates';
 import { MergeCandidateDialog } from './MergeCandidateDialog';
+import type { Candidate } from '@/types';
 
 const candidateSchema = z.object({
   firstName: z.string().trim().max(50, 'First name must be less than 50 characters').optional().or(z.literal('')),
@@ -96,10 +98,12 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdCandidateId, setCreatedCandidateId] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [duplicateCandidate, setDuplicateCandidate] = useState<MockCandidate | null>(null);
+  const [duplicateCandidate, setDuplicateCandidate] = useState<Candidate | null>(null);
   const [duplicateMatchType, setDuplicateMatchType] = useState<'email' | 'phone' | null>(null);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [proceedAnyway, setProceedAnyway] = useState(false);
+
+  const createCandidate = useCreateCandidate();
 
   const {
     register,
@@ -132,36 +136,56 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
   // Get the root error for contactInfo validation
   const contactError = (errors as any).contactInfo?.message as string | undefined;
 
-  // Check for duplicates when email or phone changes
+  // Use real duplicate checking from the database
+  const { data: duplicates } = useFindDuplicates(
+    proceedAnyway ? undefined : email,
+    proceedAnyway ? undefined : phone
+  );
+
+  // Update duplicate state when duplicates are found
   useEffect(() => {
-    if (proceedAnyway) return; // Don't check if user decided to proceed
+    if (proceedAnyway) {
+      setDuplicateCandidate(null);
+      setDuplicateMatchType(null);
+      return;
+    }
     
-    const timeoutId = setTimeout(() => {
-      const duplicate = findDuplicateCandidate(email, phone);
-      if (duplicate) {
-        setDuplicateCandidate(duplicate);
-        setDuplicateMatchType(getDuplicateMatchType(duplicate, email, phone));
-      } else {
-        setDuplicateCandidate(null);
-        setDuplicateMatchType(null);
+    if (duplicates && duplicates.length > 0) {
+      const dup = duplicates[0];
+      setDuplicateCandidate(dup);
+      // Determine match type
+      if (email && dup.email?.toLowerCase() === email.toLowerCase()) {
+        setDuplicateMatchType('email');
+      } else if (phone && dup.phone === phone) {
+        setDuplicateMatchType('phone');
       }
-    }, 300); // Debounce
+    } else {
+      setDuplicateCandidate(null);
+      setDuplicateMatchType(null);
+    }
+  }, [duplicates, email, phone, proceedAnyway]);
 
-    return () => clearTimeout(timeoutId);
-  }, [email, phone, proceedAnyway]);
-
-  const onSubmit = (data: CandidateFormData) => {
-    // In a real app, this would call an API to create the candidate
-    const newCandidateId = `candidate-${Date.now()}`;
-    setCreatedCandidateId(newCandidateId);
-    setShowSuccess(true);
-    setProceedAnyway(false);
-    setDuplicateCandidate(null);
-    
-    toast({
-      title: 'Candidate created',
-      description: `${data.firstName || 'New'} ${data.lastName || 'Candidate'} has been added successfully.`,
-    });
+  const onSubmit = async (data: CandidateFormData) => {
+    try {
+      const result = await createCandidate.mutateAsync({
+        firstName: data.firstName || undefined,
+        lastName: data.lastName || undefined,
+        email: data.email || undefined,
+        phone: data.phone || undefined,
+        company: data.company || undefined,
+        title: data.jobTitle || undefined,
+        location: data.location || undefined,
+        source: data.source || undefined,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+      });
+      
+      setCreatedCandidateId(result.id);
+      setShowSuccess(true);
+      setProceedAnyway(false);
+      setDuplicateCandidate(null);
+    } catch (error) {
+      // Error is handled by the mutation's onError
+    }
   };
 
   const handleSaveAndAddAnother = (data: CandidateFormData) => {
@@ -307,7 +331,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
                       {duplicateCandidate.firstName} {duplicateCandidate.lastName}
-                      {duplicateCandidate.jobTitle && ` • ${duplicateCandidate.jobTitle}`}
+                      {duplicateCandidate.title && ` • ${duplicateCandidate.title}`}
                       {duplicateCandidate.company && ` at ${duplicateCandidate.company}`}
                     </p>
                   </div>
@@ -574,7 +598,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
             email: getValues('email'),
             phone: getValues('phone'),
             company: getValues('company'),
-            jobTitle: getValues('jobTitle'),
+            title: getValues('jobTitle'),
             location: getValues('location'),
             source: getValues('source'),
             tags: selectedTags,
