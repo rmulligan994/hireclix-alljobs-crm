@@ -7,11 +7,14 @@ import { PipelineChart } from '@/components/dashboard/PipelineChart';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
+import { useCandidateStats } from '@/hooks/useCandidates';
+import { useActivePipelineCount } from '@/hooks/usePipelines';
+import { useTalentPoolCount } from '@/hooks/useTalentPools';
 import { 
   Users, 
   Calendar, 
   GitBranch, 
-  Briefcase,
+  FolderOpen,
   TrendingUp,
   Plus
 } from 'lucide-react';
@@ -21,6 +24,10 @@ const Index = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
+  
+  const { data: candidateStats, isLoading: candidatesLoading } = useCandidateStats();
+  const { data: activePipelineCount, isLoading: pipelinesLoading } = useActivePipelineCount();
+  const { data: talentPoolCount, isLoading: poolsLoading } = useTalentPoolCount();
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -77,22 +84,22 @@ const Index = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <MetricCard
                 title="Total Candidates"
-                value="1,247"
+                value={candidatesLoading ? "..." : (candidateStats?.total?.toLocaleString() ?? "0")}
                 icon={Users}
               />
               <MetricCard
                 title="Active Pipelines"
-                value="4"
+                value={pipelinesLoading ? "..." : (activePipelineCount?.toLocaleString() ?? "0")}
                 icon={GitBranch}
               />
               <MetricCard
-                title="Open Jobs"
-                value="24"
-                icon={Briefcase}
+                title="Talent Pools"
+                value={poolsLoading ? "..." : (talentPoolCount?.toLocaleString() ?? "0")}
+                icon={FolderOpen}
               />
               <MetricCard
-                title="Placements This Month"
-                value="12"
+                title="New This Week"
+                value={candidatesLoading ? "..." : (candidateStats?.newThisWeek?.toLocaleString() ?? "0")}
                 icon={TrendingUp}
               />
             </div>
