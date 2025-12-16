@@ -12,6 +12,16 @@ import { Card, CardContent } from '@/components/ui/card';
 import { GitMerge, Eye, Mail, Phone, AlertTriangle, CheckCircle } from 'lucide-react';
 import { findAllDuplicates, MockCandidate } from '@/data/mockCandidates';
 import { MergeCandidateDialog } from './MergeCandidateDialog';
+import type { Candidate } from '@/types';
+
+// Helper to convert MockCandidate to Candidate type for MergeCandidateDialog
+const toCandidate = (mock: MockCandidate): Candidate => ({
+  ...mock,
+  title: mock.jobTitle,
+  tags: mock.tags || [],
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
 
 interface FindDuplicatesDialogProps {
   open: boolean;
@@ -152,14 +162,14 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
         <MergeCandidateDialog
           open={mergeDialogOpen}
           onOpenChange={setMergeDialogOpen}
-          existingCandidate={selectedPair.existing}
+          existingCandidate={toCandidate(selectedPair.existing)}
           newCandidateData={{
             firstName: selectedPair.duplicate.firstName,
             lastName: selectedPair.duplicate.lastName,
             email: selectedPair.duplicate.email,
             phone: selectedPair.duplicate.phone,
             company: selectedPair.duplicate.company,
-            jobTitle: selectedPair.duplicate.jobTitle,
+            title: selectedPair.duplicate.jobTitle,
             location: selectedPair.duplicate.location,
             source: selectedPair.duplicate.source,
             tags: selectedPair.duplicate.tags,
