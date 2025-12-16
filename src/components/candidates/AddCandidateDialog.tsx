@@ -62,7 +62,7 @@ const candidateSchema = z.object({
   path: ['contactInfo'],
 }).refine((data) => {
   if (data.email && data.email.trim().length > 0) {
-    const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(data.email.trim());
   }
   return true;
