@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
+import { AddToPipelineDialog } from '@/components/candidates/AddToPipelineDialog';
+import { AddToTalentPoolDialog } from '@/components/candidates/AddToTalentPoolDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +38,7 @@ import {
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useCandidateWithAssociations } from '@/hooks/useCandidates';
+import { useCandidateListContext } from '@/contexts/CandidateListContext';
 import { format } from 'date-fns';
 
 const CandidateProfile = () => {
@@ -44,9 +47,19 @@ const CandidateProfile = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [archivedPipelinesOpen, setArchivedPipelinesOpen] = useState(false);
+  const [addToPipelineOpen, setAddToPipelineOpen] = useState(false);
+  const [addToPoolOpen, setAddToPoolOpen] = useState(false);
 
   // Fetch real candidate data
   const { data: candidate, isLoading, error } = useCandidateWithAssociations(id || '');
+
+  // Candidate list navigation
+  const { getNextCandidateId, getPreviousCandidateId, getCurrentIndex, getTotalCount } = useCandidateListContext();
+  const currentIndex = id ? getCurrentIndex(id) : -1;
+  const totalCount = getTotalCount();
+  const nextCandidateId = id ? getNextCandidateId(id) : null;
+  const previousCandidateId = id ? getPreviousCandidateId(id) : null;
+  const hasListContext = currentIndex !== -1 && totalCount > 0;
 
   // Placeholder data for features not yet connected to DB
   const aiSummary = candidate ? [
@@ -115,6 +128,18 @@ const CandidateProfile = () => {
 
   const getFullName = (firstName?: string | null, lastName?: string | null) => {
     return [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Candidate';
+  };
+
+  const handleNavigateNext = () => {
+    if (nextCandidateId) {
+      navigate(`/candidates/${nextCandidateId}`);
+    }
+  };
+
+  const handleNavigatePrevious = () => {
+    if (previousCandidateId) {
+      navigate(`/candidates/${previousCandidateId}`);
+    }
   };
 
   // Loading state
@@ -195,25 +220,52 @@ const CandidateProfile = () => {
         />
 
         <main className="flex-1 p-6 overflow-y-auto">
-          {/* Back Button & Page Title */}
-          <div className="flex items-start gap-4 mb-6">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(-1)}
-              className="border-border text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              Back
-            </Button>
-            <div>
-              <h1 className="font-heading text-2xl font-bold text-foreground">
-                Candidate Profile
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                View and manage candidate information
-              </p>
+          {/* Back Button & Page Title & Navigation */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-start gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(-1)}
+                className="border-border text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Back
+              </Button>
+              <div>
+                <h1 className="font-heading text-2xl font-bold text-foreground">
+                  Candidate Profile
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  View and manage candidate information
+                  {hasListContext && ` • ${currentIndex + 1} of ${totalCount}`}
+                </p>
+              </div>
             </div>
+            {hasListContext && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNavigatePrevious}
+                  disabled={!previousCandidateId}
+                  className="border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNavigateNext}
+                  disabled={!nextCandidateId}
+                  className="border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Candidate Header Card */}
@@ -303,11 +355,21 @@ const CandidateProfile = () => {
                   Pipelines & Talent Pools
                 </CardTitle>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-border text-muted-foreground hover:text-foreground"
+                    onClick={() => setAddToPipelineOpen(true)}
+                  >
                     <Plus className="w-4 h-4 mr-1" />
                     Add to Pipeline
                   </Button>
-                  <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-border text-muted-foreground hover:text-foreground"
+                    onClick={() => setAddToPoolOpen(true)}
+                  >
                     <Plus className="w-4 h-4 mr-1" />
                     Add to Talent Pool
                   </Button>
@@ -541,6 +603,21 @@ const CandidateProfile = () => {
       <AICopilot
         open={copilotOpen}
         onClose={() => setCopilotOpen(false)}
+      />
+
+      <AddToPipelineDialog
+        open={addToPipelineOpen}
+        onOpenChange={setAddToPipelineOpen}
+        candidateId={id || ''}
+        candidateName={getFullName(candidate.firstName, candidate.lastName)}
+      />
+
+      <AddToTalentPoolDialog
+        open={addToPoolOpen}
+        onOpenChange={setAddToPoolOpen}
+        candidateId={id || ''}
+        candidateName={getFullName(candidate.firstName, candidate.lastName)}
+        existingPoolIds={candidate.talentPools?.map(p => p.poolId) || []}
       />
     </div>
   );

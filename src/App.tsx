@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { CandidateListProvider } from "@/contexts/CandidateListContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import TalentPool from "./pages/TalentPool";
@@ -24,29 +25,31 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/talent" element={<ProtectedRoute><TalentPool /></ProtectedRoute>} />
-            <Route path="/talent/:id" element={<ProtectedRoute><CandidateProfile /></ProtectedRoute>} />
-            <Route path="/candidates/:id" element={<ProtectedRoute><CandidateProfile /></ProtectedRoute>} />
-            <Route path="/talent-pools" element={<ProtectedRoute><TalentPools /></ProtectedRoute>} />
-            <Route path="/talent-pools/:id" element={<ProtectedRoute><TalentPoolDetail /></ProtectedRoute>} />
-            <Route path="/pipelines" element={<ProtectedRoute><Pipelines /></ProtectedRoute>} />
-            <Route path="/pipelines/:id" element={<ProtectedRoute><PipelineDetail /></ProtectedRoute>} />
-            <Route path="/campaigns" element={<ProtectedRoute><Campaigns /></ProtectedRoute>} />
-            <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-            <Route path="/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+      <CandidateListProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/talent" element={<ProtectedRoute><TalentPool /></ProtectedRoute>} />
+              <Route path="/talent/:id" element={<ProtectedRoute><CandidateProfile /></ProtectedRoute>} />
+              <Route path="/candidates/:id" element={<ProtectedRoute><CandidateProfile /></ProtectedRoute>} />
+              <Route path="/talent-pools" element={<ProtectedRoute><TalentPools /></ProtectedRoute>} />
+              <Route path="/talent-pools/:id" element={<ProtectedRoute><TalentPoolDetail /></ProtectedRoute>} />
+              <Route path="/pipelines" element={<ProtectedRoute><Pipelines /></ProtectedRoute>} />
+              <Route path="/pipelines/:id" element={<ProtectedRoute><PipelineDetail /></ProtectedRoute>} />
+              <Route path="/campaigns" element={<ProtectedRoute><Campaigns /></ProtectedRoute>} />
+              <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+              <Route path="/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </CandidateListProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );
