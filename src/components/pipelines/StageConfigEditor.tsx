@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { GripVertical, Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
-import { PipelineStage, PipelineTemplate, defaultTemplates, generateId } from '@/data/pipelineStages';
+import { defaultTemplates } from '@/data/pipelineStages';
+import type { PipelineStage } from '@/types';
 
 interface StageConfigEditorProps {
   stages: PipelineStage[];
@@ -14,9 +15,9 @@ interface StageConfigEditorProps {
 export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) {
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
 
-  const handleTemplateSelect = (template: PipelineTemplate) => {
+  const handleTemplateSelect = (template: typeof defaultTemplates[0]) => {
     const newStages = template.stages.map((stage, index) => ({
-      id: generateId(),
+      id: crypto.randomUUID(),
       name: stage.name,
       order: index,
     }));
@@ -25,7 +26,7 @@ export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) 
 
   const handleAddStage = () => {
     const newStage: PipelineStage = {
-      id: generateId(),
+      id: crypto.randomUUID(),
       name: 'New Stage',
       order: stages.length,
     };

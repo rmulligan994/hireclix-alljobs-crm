@@ -10,10 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { GitBranch, Settings, CheckCircle } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { GitBranch, Settings, CheckCircle, Loader2 } from 'lucide-react';
 import { StageConfigEditor } from './StageConfigEditor';
-import { PipelineStage, defaultTemplates, generateId } from '@/data/pipelineStages';
+import { defaultTemplates } from '@/data/pipelineStages';
+import { useCreatePipeline } from '@/hooks/usePipelines';
+import type { PipelineStage } from '@/types';
 
 interface CreatePipelineDialogProps {
   open: boolean;
@@ -23,13 +24,13 @@ interface CreatePipelineDialogProps {
 
 export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: CreatePipelineDialogProps) {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const createPipeline = useCreatePipeline();
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [stages, setStages] = useState<PipelineStage[]>(() => 
     defaultTemplates[0].stages.map((stage, index) => ({
-      id: generateId(),
+      id: crypto.randomUUID(),
       name: stage.name,
       order: index,
     }))
@@ -37,47 +38,38 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
 
   const isValid = title.trim().length > 0 && stages.length >= 2;
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!isValid) return;
 
-    const newPipeline = {
-      id: generateId(),
-      title: title.trim(),
-      description: description.trim(),
-      status: 'active' as const,
-      stages: stages.sort((a, b) => a.order - b.order),
-      candidates: [],
-      createdAt: new Date().toISOString().split('T')[0],
-    };
+    try {
+      const createdPipeline = await createPipeline.mutateAsync({
+        name: title.trim(),
+        description: description.trim() || undefined,
+        stages: stages.sort((a, b) => a.order - b.order),
+      });
 
-    onPipelineCreated?.(newPipeline);
-    
-    toast({
-      title: 'Pipeline created',
-      description: `"${title}" has been created with ${stages.length} stages.`,
-    });
+      onPipelineCreated?.(createdPipeline);
+      onOpenChange(false);
+      resetForm();
+      navigate(`/pipelines/${createdPipeline.id}`);
+    } catch (error) {
+      // Error is handled by the mutation hook
+    }
+  };
 
-    onOpenChange(false);
+  const resetForm = () => {
     setTitle('');
     setDescription('');
     setStages(defaultTemplates[0].stages.map((stage, index) => ({
-      id: generateId(),
+      id: crypto.randomUUID(),
       name: stage.name,
       order: index,
     })));
-    
-    navigate(`/pipelines/${newPipeline.id}`);
   };
 
   const handleClose = () => {
     onOpenChange(false);
-    setTitle('');
-    setDescription('');
-    setStages(defaultTemplates[0].stages.map((stage, index) => ({
-      id: generateId(),
-      name: stage.name,
-      order: index,
-    })));
+    resetForm();
   };
 
   return (
@@ -143,11 +135,15 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={!isValid}
+              disabled={!isValid || createPipeline.isPending}
               className="flex-1 bg-gradient-primary hover:opacity-90 disabled:opacity-50"
             >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Create Pipeline
+              {createPipeline.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4 mr-2" />
+              )}
+              {createPipeline.isPending ? 'Creating...' : 'Create Pipeline'}
             </Button>
           </div>
         </div>
