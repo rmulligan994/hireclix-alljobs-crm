@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import type { 
   Pipeline, 
   PipelineWithCandidates, 
@@ -127,12 +128,14 @@ export const pipelineService = {
   create: async (data: CreatePipelineData): Promise<Pipeline> => {
     const { data: user } = await supabase.auth.getUser();
     
+    const stagesToInsert = (data.stages || defaultStages) as unknown as Json;
+    
     const { data: result, error } = await supabase
       .from('pipelines')
       .insert([{
         name: data.name,
         description: data.description,
-        stages: JSON.stringify(data.stages || defaultStages),
+        stages: stagesToInsert,
         status: 'active',
         created_by: user?.user?.id,
       }])
