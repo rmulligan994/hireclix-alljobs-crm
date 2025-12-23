@@ -33,6 +33,7 @@ import {
 } from '@/components/candidates/search';
 import { useCandidateSearch } from '@/hooks/useCandidateSearch';
 import { useCandidates, useCandidateStats } from '@/hooks/useCandidates';
+import { useCandidateListContext } from '@/contexts/CandidateListContext';
 
 // Mock data for filter options - in production, these would come from the database
 const mockFilterOptions = {
@@ -231,6 +232,9 @@ const TalentPool = () => {
     setIsSearching,
   } = useCandidateSearch();
 
+  // Candidate list context for navigation
+  const { setCandidateList } = useCandidateListContext();
+
   // Fetch real data from database (will be used alongside mock data)
   const { data: dbCandidates, isLoading } = useCandidates();
   const { data: stats } = useCandidateStats();
@@ -346,6 +350,11 @@ const TalentPool = () => {
 
     return results;
   }, [dbCandidates, debouncedSearchQuery, filters, sortOption]);
+
+  // Update candidate list context when filtered candidates change
+  useEffect(() => {
+    setCandidateList(filteredCandidates.map(c => c.id));
+  }, [filteredCandidates, setCandidateList]);
 
   // Generate search suggestions from real candidates
   const searchSuggestions = useMemo(() => {
@@ -646,8 +655,12 @@ const TalentPool = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredCandidates.map((candidate) => (
-                    <TableRow key={candidate.id} className="hover:bg-sky-blue/5">
-                      <TableCell>
+                    <TableRow 
+                      key={candidate.id} 
+                      className="hover:bg-sky-blue/5 cursor-pointer"
+                      onClick={() => navigate(`/candidates/${candidate.id}`)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedCandidates.includes(candidate.id)}
                           onCheckedChange={() => toggleSelectCandidate(candidate.id)}
@@ -655,7 +668,9 @@ const TalentPool = () => {
                       </TableCell>
                       <TableCell className="font-medium">
                         <div>
-                          <div className="text-foreground">{candidate.firstName} {candidate.lastName}</div>
+                          <div className="text-foreground hover:text-sky-blue transition-colors">
+                            {candidate.firstName} {candidate.lastName}
+                          </div>
                           <div className="flex items-center text-xs text-muted-foreground mt-1">
                             <Mail className="w-3 h-3 mr-1" />
                             <Phone className="w-3 h-3 ml-2 mr-1" />
@@ -668,7 +683,7 @@ const TalentPool = () => {
                           <div className="text-xs text-muted-foreground">{candidate.company}</div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => handleLocationClick(candidate.location || '')}
                           className="flex items-center text-muted-foreground hover:text-sky-blue transition-colors"
@@ -677,7 +692,7 @@ const TalentPool = () => {
                           {candidate.location}
                         </button>
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex flex-wrap gap-1">
                           {candidate.skills.map((skill) => (
                             <Badge 
@@ -691,7 +706,7 @@ const TalentPool = () => {
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex flex-wrap gap-1 max-w-xs">
                           {candidate.pipelineAssociations.length === 0 ? (
                             <span className="text-xs text-muted-foreground">Not in pipeline</span>
@@ -700,10 +715,7 @@ const TalentPool = () => {
                               <Badge 
                                 key={`${pipeline.id}-${pipeline.name}`}
                                 className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${getStageColor(pipeline.stage)}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePipelineClick(pipeline.name);
-                                }}
+                                onClick={() => handlePipelineClick(pipeline.name)}
                               >
                                 {pipeline.name.length > 15 ? `${pipeline.name.slice(0, 15)}...` : pipeline.name}: {pipeline.stage}
                               </Badge>
@@ -712,12 +724,12 @@ const TalentPool = () => {
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{candidate.lastContact}</TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           className="text-sky-blue hover:bg-sky-blue/10"
-                          onClick={() => navigate(`/talent/${candidate.id}`)}
+                          onClick={() => navigate(`/candidates/${candidate.id}`)}
                         >
                           View
                         </Button>

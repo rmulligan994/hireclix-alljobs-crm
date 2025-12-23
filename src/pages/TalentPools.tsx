@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
+import { CreateTalentPoolDialog } from '@/components/talent-pools/CreateTalentPoolDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Search, Users, Calendar, ChevronRight } from 'lucide-react';
+import { Plus, Search, Users, Calendar, ChevronRight, FolderOpen } from 'lucide-react';
 import { useTalentPoolsWithCounts } from '@/hooks/useTalentPools';
 
 const TalentPools = () => {
@@ -16,6 +17,7 @@ const TalentPools = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const { data: talentPools, isLoading } = useTalentPoolsWithCounts();
 
@@ -48,7 +50,10 @@ const TalentPools = () => {
                   Create and manage curated segments of candidates
                 </p>
               </div>
-              <Button className="bg-gradient-primary hover:opacity-90">
+              <Button 
+                className="bg-gradient-primary hover:opacity-90"
+                onClick={() => setCreateDialogOpen(true)}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Create Pool
               </Button>
@@ -68,8 +73,8 @@ const TalentPools = () => {
             </div>
           </div>
 
-          {/* Talent Pools Grid */}
-          {isLoading ? (
+          {/* Loading State */}
+          {isLoading && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map((i) => (
                 <Card key={i} className="bg-card border-border">
@@ -87,7 +92,34 @@ const TalentPools = () => {
                 </Card>
               ))}
             </div>
-          ) : (
+          )}
+
+          {/* Empty State - No pools exist */}
+          {!isLoading && (!talentPools || talentPools.length === 0) && (
+            <div className="bg-card rounded-lg border border-border p-12">
+              <div className="text-center max-w-md mx-auto">
+                <div className="w-20 h-20 rounded-full bg-sky-blue/10 flex items-center justify-center mx-auto mb-6">
+                  <FolderOpen className="w-10 h-10 text-sky-blue" />
+                </div>
+                <h2 className="font-heading text-xl font-bold text-foreground mb-3">
+                  No talent pools yet
+                </h2>
+                <p className="text-muted-foreground mb-6">
+                  Create your first talent pool to start organizing candidates into curated segments.
+                </p>
+                <Button 
+                  className="bg-gradient-primary hover:opacity-90"
+                  onClick={() => setCreateDialogOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Pool
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Talent Pools Grid */}
+          {!isLoading && talentPools && talentPools.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredPools.map((pool) => (
                 <Card 
@@ -125,7 +157,8 @@ const TalentPools = () => {
             </div>
           )}
 
-          {!isLoading && filteredPools.length === 0 && (
+          {/* No results for search */}
+          {!isLoading && talentPools && talentPools.length > 0 && filteredPools.length === 0 && (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No talent pools found matching your search.</p>
             </div>
@@ -136,6 +169,11 @@ const TalentPools = () => {
       <AICopilot 
         open={copilotOpen}
         onClose={() => setCopilotOpen(false)}
+      />
+
+      <CreateTalentPoolDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
       />
     </div>
   );
