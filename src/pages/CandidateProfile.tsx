@@ -5,6 +5,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddToPipelineDialog } from '@/components/candidates/AddToPipelineDialog';
 import { AddToTalentPoolDialog } from '@/components/candidates/AddToTalentPoolDialog';
+import { QuickNoteDialog } from '@/components/pipelines/QuickNoteDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +40,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useCandidateWithAssociations } from '@/hooks/useCandidates';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
+import { useNotes, useCreateNote } from '@/hooks/useCommunications';
 import { format } from 'date-fns';
 
 const CandidateProfile = () => {
@@ -49,9 +51,14 @@ const CandidateProfile = () => {
   const [archivedPipelinesOpen, setArchivedPipelinesOpen] = useState(false);
   const [addToPipelineOpen, setAddToPipelineOpen] = useState(false);
   const [addToPoolOpen, setAddToPoolOpen] = useState(false);
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
 
   // Fetch real candidate data
   const { data: candidate, isLoading, error } = useCandidateWithAssociations(id || '');
+
+  // Notes
+  const { data: notes = [], isLoading: notesLoading } = useNotes(id || '');
+  const createNote = useCreateNote();
 
   // Candidate list navigation
   const { getNextCandidateId, getPreviousCandidateId, getCurrentIndex, getTotalCount } = useCandidateListContext();
@@ -70,14 +77,6 @@ const CandidateProfile = () => {
 
   const resumeVersions = [
     { id: '1', name: 'Resume v1', isLatest: true },
-  ];
-
-  const recruiterNotes = [
-    {
-      id: '1',
-      date: 'Notes feature coming soon',
-      content: 'Connect the notes table to display recruiter notes here.',
-    },
   ];
 
   const communicationHistory = [
@@ -539,25 +538,43 @@ const CandidateProfile = () => {
                   <CardTitle className="flex items-center gap-2 text-sky-blue">
                     <StickyNote className="w-5 h-5" />
                     Recruiter Notes
+                    {notes.length > 0 && (
+                      <Badge variant="secondary" className="ml-1">{notes.length}</Badge>
+                    )}
                   </CardTitle>
-                  <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                  <Button
+                    className="bg-gradient-primary hover:opacity-90"
+                    size="sm"
+                    onClick={() => setAddNoteOpen(true)}
+                    disabled={!id}
+                  >
                     <Plus className="w-4 h-4 mr-1" />
                     Add Note
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recruiterNotes.map((note) => (
-                    <div key={note.id} className="pb-4 border-b border-border last:border-0 last:pb-0">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                        <FileText className="w-3 h-3" />
-                        {note.date}
+                {notesLoading ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-3/4" />
+                  </div>
+                ) : notes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4">No notes yet. Add a note to track your thoughts about this candidate.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {notes.map((note) => (
+                      <div key={note.id} className="pb-4 border-b border-border last:border-0 last:pb-0">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <StickyNote className="w-3 h-3" />
+                          {format(note.createdAt, 'MMM d, yyyy')}
+                        </div>
+                        <p className="text-foreground text-sm whitespace-pre-wrap">{note.content}</p>
                       </div>
-                      <p className="text-foreground text-sm">{note.content}</p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -618,6 +635,17 @@ const CandidateProfile = () => {
         candidateId={id || ''}
         candidateName={getFullName(candidate.firstName, candidate.lastName)}
         existingPoolIds={candidate.talentPools?.map(p => p.poolId) || []}
+      />
+
+      <QuickNoteDialog
+        open={addNoteOpen}
+        onOpenChange={setAddNoteOpen}
+        candidateName={getFullName(candidate.firstName, candidate.lastName)}
+        onSaveNote={(content) => {
+          if (id) {
+            createNote.mutate({ candidateId: id, content });
+          }
+        }}
       />
     </div>
   );

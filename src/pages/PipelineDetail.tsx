@@ -48,6 +48,7 @@ import {
 import { usePipelineWithCandidates, useAddCandidateToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
 import { useCandidates } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
+import { useCreateNote } from '@/hooks/useCommunications';
 import { PipelineStage } from '@/types/Pipeline';
 
 interface CandidateInStage {
@@ -64,6 +65,7 @@ const PipelineDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const createNote = useCreateNote();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
@@ -589,8 +591,8 @@ const PipelineDetail = () => {
           open={noteDialogOpen}
           onOpenChange={setNoteDialogOpen}
           candidateName={noteCandidate.name}
-          onSaveNote={(note) => {
-            toast({ title: 'Note saved', description: `Note added for ${noteCandidate.name}` });
+          onSaveNote={(content) => {
+            createNote.mutate({ candidateId: noteCandidate.id, content });
           }}
         />
       )}

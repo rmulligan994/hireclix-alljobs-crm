@@ -8,7 +8,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { StickyNote } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 interface QuickNoteDialogProps {
   open: boolean;
@@ -23,19 +22,12 @@ export function QuickNoteDialog({
   candidateName,
   onSaveNote,
 }: QuickNoteDialogProps) {
-  const { toast } = useToast();
   const [note, setNote] = useState('');
 
   const handleSave = () => {
     if (!note.trim()) return;
-    
+
     onSaveNote(note.trim());
-    
-    toast({
-      title: 'Note added',
-      description: `Note added for ${candidateName}`,
-    });
-    
     setNote('');
     onOpenChange(false);
   };

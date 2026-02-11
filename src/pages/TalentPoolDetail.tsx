@@ -53,6 +53,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useCreateNote } from '@/hooks/useCommunications';
 import { useTalentPoolWithCandidates, useRemoveCandidateFromPool, useAddCandidatesToPool } from '@/hooks/useTalentPools';
 import { useCandidates } from '@/hooks/useCandidates';
 
@@ -71,6 +72,7 @@ const TalentPoolDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const createNote = useCreateNote();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -470,8 +472,8 @@ const TalentPoolDetail = () => {
           open={noteDialogOpen}
           onOpenChange={setNoteDialogOpen}
           candidateName={noteCandidate.name}
-          onSaveNote={(note) => {
-            toast({ title: 'Note saved', description: `Note added for ${noteCandidate.name}` });
+          onSaveNote={(content) => {
+            createNote.mutate({ candidateId: noteCandidate.id, content });
           }}
         />
       )}
