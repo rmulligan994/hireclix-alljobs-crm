@@ -1,3 +1,5 @@
+"use client";
+
 import { 
   Home, 
   Users, 
@@ -12,7 +14,8 @@ import {
   LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useLocation, Link } from 'react-router-dom';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth, useSignOut } from '@/hooks/useAuth';
 import {
   DropdownMenu,
@@ -38,7 +41,7 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
-  const location = useLocation();
+  const pathname = usePathname();
   const { user } = useAuth();
   const signOut = useSignOut();
 
@@ -79,11 +82,11 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
       <nav className="flex-1 p-4 space-y-2">
         {navigationItems.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path;
+          const isActive = pathname === item.path || (item.path !== '/' && pathname?.startsWith(item.path + '/'));
           return (
             <Link
               key={item.path}
-              to={item.path}
+              href={item.path}
               className={`
                 w-full flex items-center space-x-3 px-3 py-3 rounded-lg
                 font-body text-sm transition-all duration-200

@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -23,7 +25,7 @@ interface CreatePipelineDialogProps {
 }
 
 export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: CreatePipelineDialogProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const createPipeline = useCreatePipeline();
   
   const [title, setTitle] = useState('');
@@ -51,7 +53,7 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
       onPipelineCreated?.(createdPipeline);
       onOpenChange(false);
       resetForm();
-      navigate(`/pipelines/${createdPipeline.id}`);
+      router.push(`/pipelines/${createdPipeline.id}`);
     } catch (error) {
       // Error is handled by the mutation hook
     }

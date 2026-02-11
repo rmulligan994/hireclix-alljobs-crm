@@ -1,0 +1,44 @@
+# =============================================================================
+# Deploy to all client instances on push to main
+# =============================================================================
+# Adds migrations + edge functions to every Supabase project in instances.yaml
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN - Get from: supabase login, then supabase tokens
+#   Or create at: https://supabase.com/dashboard/account/tokens
+# =============================================================================
+
+name: Deploy to All Instances
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - 'deployments/**'
+      - '.github/workflows/deploy-instances.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase
+
+      - name: Authenticate
+        run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy to all instances
+        run: ./scripts/deploy-all.sh
+        env:
+          # Optional: if db push prompts for password, some setups use this
+          # SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

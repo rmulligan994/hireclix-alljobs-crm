@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -29,7 +31,7 @@ interface FindDuplicatesDialogProps {
 }
 
 export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialogProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [selectedPair, setSelectedPair] = useState<{
     existing: MockCandidate;
@@ -40,7 +42,7 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
 
   const handleReview = (candidate: MockCandidate) => {
     onOpenChange(false);
-    navigate(`/talent/${candidate.id}`);
+    router.push(`/talent/${candidate.id}`);
   };
 
   const handleMerge = (existing: MockCandidate, duplicate: MockCandidate) => {

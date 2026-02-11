@@ -1,0 +1,20 @@
+# =============================================================================
+# Multi-Instance Deployment Configuration
+# =============================================================================
+# Each client gets a separate Supabase project = complete data isolation.
+# Deploy from central repo: ./scripts/deploy-all.sh
+#
+# HOW TO ADD A NEW CLIENT:
+# 1. Create Supabase project at supabase.com/dashboard
+# 2. Add project_ref to instances list below (from Settings → General)
+# 3. Run: ./scripts/deploy-all.sh
+# =============================================================================
+
+instances:
+  # Example: Client "Acme Corp"
+  - name: acme-corp
+    project_ref: "your-project-id-here"  # From Supabase Dashboard → Settings → General
+
+  # Uncomment and add more clients:
+  # - name: beta-inc
+  #   project_ref: "another-project-id"

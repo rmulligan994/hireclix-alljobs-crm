@@ -23,7 +23,7 @@ export interface BackendConfig {
 
 export const backendConfig: BackendConfig = {
   provider: 'lovable',
-  apiUrl: import.meta.env.VITE_SUPABASE_URL || '',
+  apiUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   enableRealtime: true,
   enableOfflineMode: false,
 };

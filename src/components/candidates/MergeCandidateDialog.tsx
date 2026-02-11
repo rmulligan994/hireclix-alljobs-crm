@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -54,7 +56,7 @@ export function MergeCandidateDialog({
   newCandidateData,
   onMergeComplete,
 }: MergeCandidateDialogProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { toast } = useToast();
   
   // Initialize selections - prefer existing data if new is empty
@@ -79,7 +81,7 @@ export function MergeCandidateDialog({
     });
     onOpenChange(false);
     onMergeComplete?.();
-    navigate(`/talent/${existingCandidate.id}`);
+    router.push(`/talent/${existingCandidate.id}`);
   };
 
   const getDisplayValue = (field: MergeField, source: 'existing' | 'new') => {

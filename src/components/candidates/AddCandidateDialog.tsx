@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -94,7 +96,7 @@ const sourceOptions = [
 const suggestedTags = ['React', 'TypeScript', 'Python', 'Java', 'Remote', 'Senior', 'Mid-level', 'Junior'];
 
 export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { toast } = useToast();
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdCandidateId, setCreatedCandidateId] = useState<string | null>(null);
@@ -214,7 +216,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
     setShowSuccess(false);
     reset();
     setSelectedTags([]);
-    navigate(`/candidates/${createdCandidateId}`);
+    router.push(`/candidates/${createdCandidateId}`);
   };
 
   const handleAddToPipeline = () => {
@@ -223,7 +225,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
     reset();
     setSelectedTags([]);
     // Navigate to pipelines or show pipeline selection
-    navigate('/pipelines');
+    router.push('/pipelines');
   };
 
   const handleAddAnother = () => {
@@ -257,7 +259,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
   const handleViewExistingProfile = () => {
     if (duplicateCandidate) {
       onOpenChange(false);
-      navigate(`/talent/${duplicateCandidate.id}`);
+      router.push(`/talent/${duplicateCandidate.id}`);
     }
   };
 

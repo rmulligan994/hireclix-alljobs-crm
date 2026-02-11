@@ -1,4 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+"use client";
+
+import { useRouter } from 'next/navigation';
 import { Search, Briefcase, Users, BarChart3, LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
@@ -37,7 +39,7 @@ const actions: QuickAction[] = [
 ];
 
 export const QuickActions = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   return (
     <div className="mb-8">
@@ -50,7 +52,7 @@ export const QuickActions = () => {
           return (
             <Card
               key={action.title}
-              onClick={() => navigate(action.path)}
+              onClick={() => router.push(action.path)}
               className="p-6 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:border-sky-blue/50 group"
             >
               <div className="flex flex-col items-center text-center">

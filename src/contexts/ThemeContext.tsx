@@ -12,6 +12,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'dark';
     const stored = localStorage.getItem('beacon-theme');
     return (stored as Theme) || 'dark';
   });
@@ -20,7 +21,9 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
-    localStorage.setItem('beacon-theme', theme);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('beacon-theme', theme);
+    }
   }, [theme]);
 
   const toggleTheme = () => {

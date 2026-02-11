@@ -144,7 +144,7 @@ export const talentPoolService = {
     if (data.description !== undefined) updateData.description = data.description;
 
     const { data: result, error } = await supabase
-      .from('pipelines')
+      .from('talent_pools')
       .update(updateData)
       .eq('id', id)
       .select()
