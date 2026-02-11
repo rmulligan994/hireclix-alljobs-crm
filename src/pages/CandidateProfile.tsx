@@ -563,16 +563,20 @@ const CandidateProfile = () => {
                 ) : notes.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic py-4">No notes yet. Add a note to track your thoughts about this candidate.</p>
                 ) : (
-                  <div className="space-y-4">
-                    {notes.map((note) => (
-                      <div key={note.id} className="pb-4 border-b border-border last:border-0 last:pb-0">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                          <StickyNote className="w-3 h-3" />
-                          {format(note.createdAt, 'MMM d, yyyy')}
+                  <div className="max-h-64 overflow-y-auto pr-1">
+                    <div className="space-y-4">
+                      {notes.map((note) => (
+                        <div key={note.id} className="pb-4 border-b border-border last:border-0 last:pb-0">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                            <StickyNote className="w-3 h-3" />
+                            {format(note.createdAt, 'MMM d, yyyy')}
+                          </div>
+                          <div className="max-h-20 overflow-y-auto overflow-x-hidden">
+                            <p className="text-foreground text-sm whitespace-pre-wrap">{note.content}</p>
+                          </div>
                         </div>
-                        <p className="text-foreground text-sm whitespace-pre-wrap">{note.content}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </CardContent>

@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFindDuplicates, useCreateCandidate } from '@/hooks/useCandidates';
+import { communicationService } from '@/services';
 import { MergeCandidateDialog } from './MergeCandidateDialog';
 import type { Candidate } from '@/types';
 
@@ -178,7 +179,16 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
         source: data.source || undefined,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
       });
-      
+
+      // Write initial note to notes table if provided
+      const notesContent = data.notes?.trim();
+      if (notesContent && result.id) {
+        await communicationService.createNote({
+          candidateId: result.id,
+          content: notesContent,
+        });
+      }
+
       setCreatedCandidateId(result.id);
       setShowSuccess(true);
       setProceedAnyway(false);
