@@ -43,7 +43,7 @@ const defaultTemplate = {
   },
 };
 
-// Merge tags for personalization - including CRM/Job context
+// Merge tags for personalization - aligned with send-campaign-email replaceMergeTags
 const mergeTags = [
   // Candidate fields
   { name: 'First Name', value: '{{firstName}}' },
@@ -51,21 +51,20 @@ const mergeTags = [
   { name: 'Full Name', value: '{{fullName}}' },
   { name: 'Email', value: '{{email}}' },
   { name: 'Company', value: '{{company}}' },
-  { name: 'Job Title', value: '{{jobTitle}}' },
+  { name: 'Title', value: '{{title}}' },
   { name: 'Skills', value: '{{skills}}' },
   { name: 'Location', value: '{{location}}' },
-  // Job/Pipeline context
-  { name: 'Pipeline Name', value: '{{pipeline.name}}' },
-  { name: 'Pipeline Stage', value: '{{pipeline.stage}}' },
-  { name: 'Job Req Title', value: '{{jobReq.title}}' },
-  { name: 'Job Req Company', value: '{{jobReq.company}}' },
-  { name: 'Job Req Location', value: '{{jobReq.location}}' },
-  { name: 'Job Apply Link', value: '{{jobReq.applyLink}}' },
-  // Sender fields
+  { name: 'Source', value: '{{source}}' },
+  { name: 'LinkedIn URL', value: '{{linkedinUrl}}' },
+  // Campaign
+  { name: 'Campaign Name', value: '{{campaignName}}' },
+  { name: 'Current Date', value: '{{currentDate}}' },
+  { name: 'Current Time', value: '{{currentTime}}' },
+  // Sender (from profile + org settings)
   { name: 'Sender Name', value: '{{senderName}}' },
   { name: 'Sender Company', value: '{{senderCompany}}' },
+  { name: 'Sender Brand', value: '{{senderBrand}}' },
   { name: 'Sender Email', value: '{{senderEmail}}' },
-  { name: 'Sender Phone', value: '{{senderPhone}}' },
 ];
 
 // Special links for email actions

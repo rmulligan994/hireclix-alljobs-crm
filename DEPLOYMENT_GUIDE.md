@@ -80,6 +80,7 @@ These are set in the Supabase Dashboard (not in `.env`):
 | `MAILGUN_FROM` | (Optional) From address, e.g. `Beacon CRM <noreply@mg.yourcompany.com>` | Defaults to `noreply@{MAILGUN_DOMAIN}` |
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | Webhook signing key for event verification | Mailgun → Sending → Webhooks → Signing key |
 | `MAILGUN_REGION` | (Optional) Set to `EU` for EU region | Omit for US (default) |
+| `APP_URL` | (Optional) Fallback for unsubscribe links if not set in Settings → Organization | e.g. `https://your-app.com` |
 | `BEE_CLIENT_ID` | BeeFree email editor client ID | [BeeFree Dashboard](https://developers.beefree.io/) |
 | `BEE_CLIENT_SECRET` | BeeFree email editor secret | [BeeFree Dashboard](https://developers.beefree.io/) |
 

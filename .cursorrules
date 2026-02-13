@@ -1,0 +1,10 @@
+# Supabase Project Configuration
+
+## CRITICAL: Correct Supabase Project Only
+
+- **CORRECT PROJECT** (use this): `xvkeruwiravjnzikrtkp` → https://xvkeruwiravjnzikrtkp.supabase.co
+- **WRONG PROJECT** (do NOT use): `xiyryfkhfaprjzjapeag` → https://xiyryfkhfaprjzjapeag.supabase.co
+
+When configuring Supabase (config.toml, .env, migrations, edge functions, secrets):
+- Link, deploy, and commit ONLY to project `xvkeruwiravjnzikrtkp`
+- Never use project `xiyryfkhfaprjzjapeag`

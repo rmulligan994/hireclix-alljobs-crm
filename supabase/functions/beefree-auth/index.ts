@@ -37,17 +37,19 @@ serve(async (req) => {
 
     console.log('Authenticating with BeeFree for uid:', uid);
 
-    // Call BeeFree's authentication endpoint
-    const response = await fetch('https://auth.getbee.io/apiauth', {
+    // BeeFree V2 auth (legacy /apiauth deprecated Jan 2026)
+    // https://docs.beefree.io/beefree-sdk/getting-started/readme/installation/authorization-process-in-detail
+    const response = await fetch('https://auth.getbee.io/loginV2', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
-      body: new URLSearchParams({
-        grant_type: 'password',
+      body: JSON.stringify({
         client_id: clientId,
         client_secret: clientSecret,
-      }).toString(),
+        uid,
+      }),
     });
 
     if (!response.ok) {

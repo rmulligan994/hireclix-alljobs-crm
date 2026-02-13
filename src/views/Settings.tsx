@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
@@ -12,15 +12,41 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Save, Plus, Trash2, Copy, GitBranch } from 'lucide-react';
+import { Save, Plus, Trash2, Copy, GitBranch, Building2 } from 'lucide-react';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
+import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const { toast } = useToast();
   const [customTemplates, setCustomTemplates] = useState<PipelineTemplate[]>([]);
+  const { settings: orgSettings, update: updateOrgSettings, isUpdating: isUpdatingOrg } = useOrganizationSettings();
+  const [orgCompany, setOrgCompany] = useState('');
+  const [orgBrand, setOrgBrand] = useState('');
+  const [orgBaseUrl, setOrgBaseUrl] = useState('');
+
+  useEffect(() => {
+    if (orgSettings) {
+      setOrgCompany(orgSettings.company_name || '');
+      setOrgBrand(orgSettings.brand_name || '');
+      setOrgBaseUrl(orgSettings.base_url || '');
+    }
+  }, [orgSettings]);
+
+  const handleSaveOrganization = async () => {
+    try {
+      await updateOrgSettings({
+        company_name: orgCompany || null,
+        brand_name: orgBrand || null,
+        base_url: orgBaseUrl || null,
+      });
+      toast({ title: 'Organization settings saved' });
+    } catch {
+      toast({ title: 'Failed to save', variant: 'destructive' });
+    }
+  };
 
   const handleDuplicateTemplate = (template: PipelineTemplate) => {
     const newTemplate: PipelineTemplate = {
@@ -69,6 +95,7 @@ const Settings = () => {
           <Tabs defaultValue="profile" className="w-full">
             <TabsList className="bg-muted">
               <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="organization">Organization</TabsTrigger>
               <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
               <TabsTrigger value="templates">Pipeline Templates</TabsTrigger>
@@ -116,6 +143,60 @@ const Settings = () => {
                   <Button className="bg-gradient-primary hover:opacity-90">
                     <Save className="w-4 h-4 mr-2" />
                     Save Changes
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="organization" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-sky-blue" />
+                    Organization Settings
+                  </CardTitle>
+                  <CardDescription>
+                    Instance-wide settings for campaign emails. Used in merge tags ({{senderCompany}}, {{senderBrand}}).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="orgCompany">Company Name</Label>
+                    <Input
+                      id="orgCompany"
+                      value={orgCompany}
+                      onChange={(e) => setOrgCompany(e.target.value)}
+                      placeholder="Your company name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="orgBrand">Brand Name</Label>
+                    <Input
+                      id="orgBrand"
+                      value={orgBrand}
+                      onChange={(e) => setOrgBrand(e.target.value)}
+                      placeholder="Your brand name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="orgBaseUrl">Base URL</Label>
+                    <Input
+                      id="orgBaseUrl"
+                      value={orgBaseUrl}
+                      onChange={(e) => setOrgBaseUrl(e.target.value)}
+                      placeholder="https://your-app.com"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Used for unsubscribe links. Include protocol (https://).
+                    </p>
+                  </div>
+                  <Button
+                    className="bg-gradient-primary hover:opacity-90"
+                    onClick={handleSaveOrganization}
+                    disabled={isUpdatingOrg}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Organization
                   </Button>
                 </CardContent>
               </Card>

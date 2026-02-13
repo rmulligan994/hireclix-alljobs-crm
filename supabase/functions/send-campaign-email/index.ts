@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get recipients to send to
+    // Get recipients to send to (pending only; unsubscribed/bounced/complained are excluded)
     let recipientsQuery = supabase
       .from("campaign_recipients")
       .select(`
@@ -88,7 +88,10 @@ Deno.serve(async (req) => {
           email,
           company,
           title,
-          location
+          location,
+          source,
+          tags,
+          linkedin_url
         )
       `)
       .eq("campaign_id", campaignId)
@@ -116,6 +119,20 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Fetch sender (campaign owner profile) and org settings for merge tags
+    const { data: sender } = await supabase
+      .from("profiles")
+      .select("first_name, last_name, email, company")
+      .eq("user_id", campaign.user_id)
+      .single();
+    const senderData = sender || { first_name: "", last_name: "", email: "", company: "" };
+
+    const { data: orgRows } = await supabase
+      .from("organization_settings")
+      .select("company_name, brand_name, base_url")
+      .limit(1);
+    const org = orgRows?.[0] || { company_name: "", brand_name: "", base_url: "" };
+
     console.log(`Found ${recipients.length} pending recipients`);
 
     // For now, send the first email in the sequence
@@ -138,9 +155,17 @@ Deno.serve(async (req) => {
       }
 
       // Replace merge tags in subject and content
-      const personalizedSubject = replaceMergeTags(firstEmail.subject, candidate, campaign);
+      const mergeContext = {
+        candidate,
+        campaign,
+        sender: senderData,
+        org,
+        recipientId: recipient.id,
+        baseUrl: org.base_url || Deno.env.get("APP_URL") || "",
+      };
+      const personalizedSubject = replaceMergeTags(firstEmail.subject, mergeContext);
       const personalizedHtml = firstEmail.html_content
-        ? replaceMergeTags(firstEmail.html_content, candidate, campaign)
+        ? replaceMergeTags(firstEmail.html_content, mergeContext)
         : `<p>Hello ${candidate.first_name || "there"},</p><p>This is a campaign email.</p>`;
 
       try {
@@ -238,15 +263,42 @@ Deno.serve(async (req) => {
   }
 });
 
-function replaceMergeTags(content: string, candidate: any, campaign: any): string {
+function replaceMergeTags(content: string, ctx: {
+  candidate: any;
+  campaign: any;
+  sender: any;
+  org: any;
+  recipientId: string;
+  baseUrl: string;
+}): string {
+  const { candidate, campaign, sender, org, recipientId, baseUrl } = ctx;
+  const fullName = [candidate.first_name, candidate.last_name].filter(Boolean).join(" ") || "";
+  const skills = Array.isArray(candidate.tags) ? candidate.tags.join(", ") : (candidate.tags || "");
+  const senderName = [sender.first_name, sender.last_name].filter(Boolean).join(" ") || "";
+  const senderCompany = org.company_name || sender.company || "";
+  const unsubscribeLink = baseUrl
+    ? `${baseUrl.replace(/\/$/, "")}/unsubscribe?r=${recipientId}`
+    : "#";
+
   return content
     .replace(/\{\{firstName\}\}/g, candidate.first_name || "")
     .replace(/\{\{lastName\}\}/g, candidate.last_name || "")
+    .replace(/\{\{fullName\}\}/g, fullName)
     .replace(/\{\{email\}\}/g, candidate.email || "")
     .replace(/\{\{company\}\}/g, candidate.company || "")
     .replace(/\{\{title\}\}/g, candidate.title || "")
+    .replace(/\{\{jobTitle\}\}/g, candidate.title || "")
+    .replace(/\{\{skills\}\}/g, skills)
     .replace(/\{\{location\}\}/g, candidate.location || "")
+    .replace(/\{\{source\}\}/g, candidate.source || "")
+    .replace(/\{\{linkedinUrl\}\}/g, candidate.linkedin_url || "")
     .replace(/\{\{campaignName\}\}/g, campaign.name || "")
     .replace(/\{\{currentDate\}\}/g, new Date().toLocaleDateString())
-    .replace(/\{\{currentTime\}\}/g, new Date().toLocaleTimeString());
+    .replace(/\{\{currentTime\}\}/g, new Date().toLocaleTimeString())
+    .replace(/\{\{senderName\}\}/g, senderName)
+    .replace(/\{\{senderCompany\}\}/g, senderCompany)
+    .replace(/\{\{senderBrand\}\}/g, org.brand_name || "")
+    .replace(/\{\{senderEmail\}\}/g, sender.email || "")
+    .replace(/\{\{unsubscribeLink\}\}/g, unsubscribeLink)
+    .replace(/\{\{viewInBrowserLink\}\}/g, "#");
 }
