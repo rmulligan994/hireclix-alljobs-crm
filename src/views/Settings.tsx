@@ -264,10 +264,10 @@ const Settings = () => {
                       id="orgBaseUrl"
                       value={orgBaseUrl}
                       onChange={(e) => setOrgBaseUrl(e.target.value)}
-                      placeholder="https://your-app.com"
+                      placeholder="https://hireclix-all-jobs.webflow.io/crm"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Used for unsubscribe links. Include protocol (https://).
+                      Full URL where your app lives (e.g. https://yoursite.com/crm). Required for unsubscribe links in emails.
                     </p>
                   </div>
                   <Button

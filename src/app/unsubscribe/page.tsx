@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { supabase } from "@/integrations/supabase/client";
 
 function UnsubscribeContent() {
   const searchParams = useSearchParams();
@@ -16,22 +17,20 @@ function UnsubscribeContent() {
       return;
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) {
-      setStatus("error");
-      setMessage("Configuration error.");
-      return;
-    }
-
-    fetch(`${supabaseUrl}/functions/v1/unsubscribe?r=${encodeURIComponent(r)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
+    supabase.functions
+      .invoke("unsubscribe", { body: { r } })
+      .then(({ data, error }) => {
+        if (error) {
+          setStatus("error");
+          setMessage(error.message || "Something went wrong.");
+          return;
+        }
+        if (data?.success) {
           setStatus("success");
           setMessage("You have been successfully unsubscribed.");
         } else {
           setStatus("error");
-          setMessage(data.error || "Something went wrong.");
+          setMessage(data?.error || "Something went wrong.");
         }
       })
       .catch(() => {

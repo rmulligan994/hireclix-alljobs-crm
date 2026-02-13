@@ -19,7 +19,16 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const recipientId = url.searchParams.get("r");
+    let recipientId = url.searchParams.get("r");
+    // Also accept POST body (for supabase.functions.invoke)
+    if (!recipientId && req.method === "POST") {
+      try {
+        const body = await req.json();
+        recipientId = body?.r ?? body?.recipientId ?? null;
+      } catch {
+        // ignore parse error
+      }
+    }
 
     if (!recipientId) {
       return new Response(
