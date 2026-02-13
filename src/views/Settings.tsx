@@ -32,7 +32,7 @@ const Settings = () => {
   const userId = currentUser?.id;
   const profile = currentUser?.profile;
   const updateProfile = useUpdateProfile();
-  const { data: allProfiles = [], isLoading: teamLoading } = useAllProfiles();
+  const { data: allProfiles = [], isLoading: teamLoading, isError: teamError } = useAllProfiles();
 
   const [profileFirstName, setProfileFirstName] = useState('');
   const [profileLastName, setProfileLastName] = useState('');
@@ -508,6 +508,8 @@ const Settings = () => {
                 <CardContent className="space-y-4">
                   {teamLoading ? (
                     <p className="text-muted-foreground">Loading team...</p>
+                  ) : teamError ? (
+                    <p className="text-destructive">Failed to load team. Run the migration: supabase db push</p>
                   ) : allProfiles.length === 0 ? (
                     <p className="text-muted-foreground">No team members yet.</p>
                   ) : (

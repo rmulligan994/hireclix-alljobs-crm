@@ -53,6 +53,7 @@ export const useAllProfiles = () => {
   return useQuery({
     queryKey: ['profiles'],
     queryFn: () => userService.getAllProfiles(),
+    staleTime: 0, // Always fetch fresh - never use cached team list
   });
 };
 
