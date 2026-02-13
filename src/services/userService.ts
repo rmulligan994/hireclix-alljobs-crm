@@ -107,6 +107,19 @@ export const userService = {
   },
 
   /**
+   * Get all user profiles (for Team list)
+   */
+  getAllProfiles: async (): Promise<Profile[]> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map(mapRowToProfile);
+  },
+
+  /**
    * Get user profile
    */
   getProfile: async (userId: string): Promise<Profile | null> => {

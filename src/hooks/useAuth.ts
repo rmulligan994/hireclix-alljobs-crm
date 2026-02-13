@@ -49,6 +49,13 @@ export const useProfile = (userId: string) => {
   });
 };
 
+export const useAllProfiles = () => {
+  return useQuery({
+    queryKey: ['profiles'],
+    queryFn: () => userService.getAllProfiles(),
+  });
+};
+
 export const useSignUp = () => {
   const queryClient = useQueryClient();
 
@@ -111,6 +118,7 @@ export const useUpdateProfile = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['profile', variables.userId] });
       queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
       toast.success('Profile updated successfully');
     },
     onError: (error: Error) => {

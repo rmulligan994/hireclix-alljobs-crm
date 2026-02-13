@@ -12,6 +12,7 @@ import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { useCandidateStats } from '@/hooks/useCandidates';
 import { useActivePipelineCount } from '@/hooks/usePipelines';
 import { useTalentPoolCount } from '@/hooks/useTalentPools';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { 
   Users, 
   Calendar, 
@@ -26,7 +27,10 @@ const Index = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
-  
+
+  const { data: currentUser } = useCurrentUser();
+  const rawName = currentUser?.profile?.firstName || currentUser?.email?.split('@')[0] || 'there';
+  const firstName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
   const { data: candidateStats, isLoading: candidatesLoading } = useCandidateStats();
   const { data: activePipelineCount, isLoading: pipelinesLoading } = useActivePipelineCount();
   const { data: talentPoolCount, isLoading: poolsLoading } = useTalentPoolCount();
@@ -56,7 +60,7 @@ const Index = () => {
                   Dashboard
                 </h1>
                 <p className="font-body text-muted-foreground">
-                  Welcome back, Sarah! Here's what's happening with your talent pipeline.
+                  Welcome back, {firstName}! Here's what's happening with your talent pipeline.
                 </p>
               </div>
               <div className="flex items-center space-x-3">

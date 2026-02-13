@@ -16,7 +16,7 @@ import { Save, Plus, Trash2, Copy, GitBranch, Building2 } from 'lucide-react';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
-import { useCurrentUser, useUpdateProfile } from '@/hooks/useAuth';
+import { useCurrentUser, useUpdateProfile, useAllProfiles } from '@/hooks/useAuth';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -32,6 +32,7 @@ const Settings = () => {
   const userId = currentUser?.id;
   const profile = currentUser?.profile;
   const updateProfile = useUpdateProfile();
+  const { data: allProfiles = [], isLoading: teamLoading } = useAllProfiles();
 
   const [profileFirstName, setProfileFirstName] = useState('');
   const [profileLastName, setProfileLastName] = useState('');
@@ -151,7 +152,7 @@ const Settings = () => {
                 <CardHeader>
                   <CardTitle>Profile Information</CardTitle>
                   <CardDescription>
-                    Update your personal and company information. Used in campaign email merge tags ({{senderName}}, {{senderCompany}}).
+                    Update your personal and company information. Used in campaign email merge tags ({'{{senderName}}'}, {'{{senderCompany}}'}).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -235,7 +236,7 @@ const Settings = () => {
                     Organization Settings
                   </CardTitle>
                   <CardDescription>
-                    Instance-wide settings for campaign emails. Used in merge tags ({{senderCompany}}, {{senderBrand}}).
+                    Instance-wide settings for campaign emails. Used in merge tags ({'{{senderCompany}}'}, {'{{senderBrand}}'}).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -501,30 +502,43 @@ const Settings = () => {
                 <CardHeader>
                   <CardTitle>Team Members</CardTitle>
                   <CardDescription>
-                    Manage team access and permissions
+                    All users in your organization
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    {[
-                      { name: 'Sarah Chen', email: 'sarah.chen@company.com', role: 'Admin' },
-                      { name: 'Mike Johnson', email: 'mike.j@company.com', role: 'Recruiter' },
-                      { name: 'Emma Davis', email: 'emma.d@company.com', role: 'Recruiter' },
-                    ].map((member) => (
-                      <div key={member.email} className="flex items-center justify-between p-4 border border-border rounded-lg">
-                        <div>
-                          <div className="font-medium text-foreground">{member.name}</div>
-                          <div className="text-sm text-muted-foreground">{member.email}</div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <Badge className="bg-sky-blue/20 text-sky-blue border-sky-blue">
-                            {member.role}
-                          </Badge>
-                          <Button variant="ghost" size="sm">Manage</Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {teamLoading ? (
+                    <p className="text-muted-foreground">Loading team...</p>
+                  ) : allProfiles.length === 0 ? (
+                    <p className="text-muted-foreground">No team members yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {allProfiles.map((p) => {
+                        const name = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'Unknown';
+                        const isCurrentUser = p.userId === userId;
+                        return (
+                          <div key={p.id} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                            <div>
+                              <div className="font-medium text-foreground">
+                                {name}
+                                {isCurrentUser && (
+                                  <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-muted-foreground">{p.email}</div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <Badge className="bg-sky-blue/20 text-sky-blue border-sky-blue">
+                                {isCurrentUser ? 'Admin' : 'Member'}
+                              </Badge>
+                              {!isCurrentUser && (
+                                <Button variant="ghost" size="sm">Manage</Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   <Separator />
 
