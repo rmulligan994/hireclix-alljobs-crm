@@ -49,11 +49,13 @@ export const useProfile = (userId: string) => {
   });
 };
 
-export const useAllProfiles = () => {
+export const useAllProfiles = (enabled = true) => {
   return useQuery({
     queryKey: ['profiles'],
     queryFn: () => userService.getAllProfiles(),
+    enabled,
     staleTime: 0, // Always fetch fresh - never use cached team list
+    refetchOnMount: 'always',
   });
 };
 

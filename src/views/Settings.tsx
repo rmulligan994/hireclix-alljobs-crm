@@ -32,7 +32,7 @@ const Settings = () => {
   const userId = currentUser?.id;
   const profile = currentUser?.profile;
   const updateProfile = useUpdateProfile();
-  const { data: allProfiles = [], isLoading: teamLoading, isError: teamError } = useAllProfiles();
+  const { data: allProfiles = [], isLoading: teamLoading, isError: teamError, refetch: refetchTeam } = useAllProfiles(!!userId);
 
   const [profileFirstName, setProfileFirstName] = useState('');
   const [profileLastName, setProfileLastName] = useState('');
@@ -502,7 +502,7 @@ const Settings = () => {
                 <CardHeader>
                   <CardTitle>Team Members</CardTitle>
                   <CardDescription>
-                    All users in your organization
+                    All users in your organization (loaded from database)
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -544,9 +544,14 @@ const Settings = () => {
 
                   <Separator />
 
-                  <Button className="bg-gradient-primary hover:opacity-90">
-                    Invite Team Member
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => refetchTeam()} disabled={teamLoading}>
+                      Refresh
+                    </Button>
+                    <Button className="bg-gradient-primary hover:opacity-90">
+                      Invite Team Member
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
