@@ -41,7 +41,7 @@ echo ""
 # Configure Edge Function secrets reminder
 echo "Then configure secrets in Supabase Dashboard for project $PROJECT_REF:"
 echo "  Edge Functions → Secrets:"
-echo "    RESEND_API_KEY"
+echo "    MAILGUN_API_KEY"
 echo "    BEE_CLIENT_ID"
 echo "    BEE_CLIENT_SECRET"
 echo ""

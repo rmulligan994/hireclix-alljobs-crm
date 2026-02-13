@@ -7,6 +7,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddToPipelineDialog } from '@/components/candidates/AddToPipelineDialog';
 import { AddToTalentPoolDialog } from '@/components/candidates/AddToTalentPoolDialog';
+import { LogCommunicationDialog } from '@/components/candidates/LogCommunicationDialog';
 import { QuickNoteDialog } from '@/components/pipelines/QuickNoteDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,7 @@ import {
   ExternalLink,
   PhoneCall,
   Send,
+  Calendar,
   GitBranch,
   FolderKanban,
   ChevronRight,
@@ -42,7 +44,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useCandidateWithAssociations } from '@/hooks/useCandidates';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
-import { useNotes, useCreateNote } from '@/hooks/useCommunications';
+import { useNotes, useCreateNote, useCommunications } from '@/hooks/useCommunications';
 import { format } from 'date-fns';
 
 const CandidateProfile = ({ id }: { id: string }) => {
@@ -53,6 +55,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
   const [addToPipelineOpen, setAddToPipelineOpen] = useState(false);
   const [addToPoolOpen, setAddToPoolOpen] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
+  const [logCommOpen, setLogCommOpen] = useState(false);
 
   // Fetch real candidate data
   const { data: candidate, isLoading, error } = useCandidateWithAssociations(id || '');
@@ -60,6 +63,9 @@ const CandidateProfile = ({ id }: { id: string }) => {
   // Notes
   const { data: notes = [], isLoading: notesLoading } = useNotes(id || '');
   const createNote = useCreateNote();
+
+  // Communications
+  const { data: communications = [], isLoading: communicationsLoading } = useCommunications(id || '');
 
   // Candidate list navigation
   const { getNextCandidateId, getPreviousCandidateId, getCurrentIndex, getTotalCount } = useCandidateListContext();
@@ -80,31 +86,33 @@ const CandidateProfile = ({ id }: { id: string }) => {
     { id: '1', name: 'Resume v1', isLatest: true },
   ];
 
-  const communicationHistory = [
-    {
-      id: '1',
-      type: 'Email',
-      date: 'Communications feature coming soon',
-      description: 'Connect the communications table to display history here.',
-      outcome: 'Pending implementation',
-    },
-  ];
-
   const getCommIcon = (type: string) => {
     switch (type) {
-      case 'Email': return <Mail className="w-4 h-4" />;
-      case 'Phone Call': return <PhoneCall className="w-4 h-4" />;
-      case 'Outreach': return <Send className="w-4 h-4" />;
+      case 'email': return <Mail className="w-4 h-4" />;
+      case 'call': return <PhoneCall className="w-4 h-4" />;
+      case 'meeting': return <Calendar className="w-4 h-4" />;
+      case 'message': return <Send className="w-4 h-4" />;
       default: return <Mail className="w-4 h-4" />;
     }
   };
 
   const getCommBadgeStyle = (type: string) => {
     switch (type) {
-      case 'Email': return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
-      case 'Phone Call': return 'bg-sunrise/20 text-sunrise border-sunrise';
-      case 'Outreach': return 'bg-deep-sea/50 text-sky-blue border-deep-sea';
+      case 'email': return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
+      case 'call': return 'bg-sunrise/20 text-sunrise border-sunrise';
+      case 'meeting': return 'bg-deep-sea/50 text-sky-blue border-deep-sea';
+      case 'message': return 'bg-muted text-foreground border-border';
       default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const getCommLabel = (type: string) => {
+    switch (type) {
+      case 'email': return 'Email';
+      case 'call': return 'Phone Call';
+      case 'meeting': return 'Meeting';
+      case 'message': return 'Message';
+      default: return type;
     }
   };
 
@@ -591,32 +599,66 @@ const CandidateProfile = ({ id }: { id: string }) => {
                 <CardTitle className="flex items-center gap-2 text-sky-blue">
                   <Clock className="w-5 h-5" />
                   Communication History
+                  {communications.length > 0 && (
+                    <Badge variant="secondary" className="ml-1">{communications.length}</Badge>
+                  )}
                 </CardTitle>
-                <Button className="bg-gradient-primary hover:opacity-90" size="sm">
+                <Button
+                  className="bg-gradient-primary hover:opacity-90"
+                  size="sm"
+                  onClick={() => setLogCommOpen(true)}
+                  disabled={!id}
+                >
                   <Plus className="w-4 h-4 mr-1" />
                   Log Communication
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {communicationHistory.map((comm, idx) => (
-                  <div key={comm.id} className="relative pl-8 pb-4 border-b border-border last:border-0 last:pb-0">
-                    {idx < communicationHistory.length - 1 && (
-                      <div className="absolute left-3 top-6 w-0.5 h-[calc(100%-8px)] bg-border" />
-                    )}
-                    <div className="absolute left-0 top-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                      {getCommIcon(comm.type)}
+              {communicationsLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-3/4" />
+                </div>
+              ) : communications.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic py-4">
+                  No communications yet. Log an email, call, meeting, or message to track your interactions.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {communications.map((comm, idx) => (
+                    <div key={comm.id} className="relative pl-8 pb-4 border-b border-border last:border-0 last:pb-0">
+                      {idx < communications.length - 1 && (
+                        <div className="absolute left-3 top-6 w-0.5 h-[calc(100%-8px)] bg-border" />
+                      )}
+                      <div className="absolute left-0 top-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                        {getCommIcon(comm.type)}
+                      </div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={getCommBadgeStyle(comm.type)}>{getCommLabel(comm.type)}</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {format(comm.occurredAt, 'MMM d, yyyy')}
+                        </span>
+                        {comm.direction && (
+                          <span className="text-xs text-muted-foreground">
+                            • {comm.direction}
+                          </span>
+                        )}
+                      </div>
+                      {comm.subject && (
+                        <p className="text-foreground text-sm font-medium">{comm.subject}</p>
+                      )}
+                      {comm.content && (
+                        <p className="text-foreground text-sm mt-1 whitespace-pre-wrap">{comm.content}</p>
+                      )}
+                      {!comm.subject && !comm.content && (
+                        <p className="text-sm text-muted-foreground italic">No details</p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge className={getCommBadgeStyle(comm.type)}>{comm.type}</Badge>
-                      <span className="text-xs text-muted-foreground">{comm.date}</span>
-                    </div>
-                    <p className="text-foreground text-sm">{comm.description}</p>
-                    <p className="text-sm text-muted-foreground italic">Outcome: {comm.outcome}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </main>
@@ -651,6 +693,12 @@ const CandidateProfile = ({ id }: { id: string }) => {
             createNote.mutate({ candidateId: id, content });
           }
         }}
+      />
+
+      <LogCommunicationDialog
+        open={logCommOpen}
+        onOpenChange={setLogCommOpen}
+        candidateId={id || ''}
       />
     </div>
   );

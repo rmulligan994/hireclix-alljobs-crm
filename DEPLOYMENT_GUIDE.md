@@ -20,7 +20,7 @@
 
 ### Before You Begin
 - [ ] Supabase account created
-- [ ] Resend account created (for email)
+- [ ] Mailgun account created (for email)
 - [ ] BeeFree account created (for email editor)
 - [ ] Webflow account with Cloud hosting
 - [ ] Node.js 18+ installed locally
@@ -49,8 +49,9 @@ Create a `.env` file in the project root:
 
 # Supabase Configuration
 # Get these from: Supabase Dashboard → Settings → API
-VITE_SUPABASE_URL=https://your-project-id.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# Use NEXT_PUBLIC_ prefix for Next.js (client-side access)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 # ===========================================
 # OPTIONAL: For swapping to different backends
@@ -74,27 +75,24 @@ These are set in the Supabase Dashboard (not in `.env`):
 
 | Secret Name | Description | Where to Get |
 |-------------|-------------|--------------|
-| `RESEND_API_KEY` | API key for sending emails | [Resend Dashboard](https://resend.com/api-keys) |
+| `MAILGUN_API_KEY` | API key for sending emails | [Mailgun Dashboard](https://app.mailgun.com/app/account/security/api_keys) |
+| `MAILGUN_DOMAIN` | Your verified sending domain (e.g. `mg.yourcompany.com`) | [Mailgun Domains](https://app.mailgun.com/app/sending/domains) |
+| `MAILGUN_FROM` | (Optional) From address, e.g. `Beacon CRM <noreply@mg.yourcompany.com>` | Defaults to `noreply@{MAILGUN_DOMAIN}` |
+| `MAILGUN_WEBHOOK_SIGNING_KEY` | Webhook signing key for event verification | Mailgun → Sending → Webhooks → Signing key |
+| `MAILGUN_REGION` | (Optional) Set to `EU` for EU region | Omit for US (default) |
 | `BEE_CLIENT_ID` | BeeFree email editor client ID | [BeeFree Dashboard](https://developers.beefree.io/) |
 | `BEE_CLIENT_SECRET` | BeeFree email editor secret | [BeeFree Dashboard](https://developers.beefree.io/) |
 
 > **Note**: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are automatically available in Edge Functions.
 
-### Step 3: Email Domain Setup (Resend)
+### Step 3: Email Domain Setup (Mailgun)
 
-1. Go to [Resend Dashboard](https://resend.com/domains)
-2. Add your sending domain (e.g., `mail.yourcompany.com`)
-3. Add the DNS records they provide
+1. Go to [Mailgun Dashboard](https://app.mailgun.com/app/sending/domains)
+2. Add your sending domain (e.g., `mg.yourcompany.com`)
+3. Add the DNS records (SPF, DKIM) they provide
 4. Wait for verification (usually 5-30 minutes)
-5. Update the "from" address in the Edge Function:
-
-```typescript
-// File: supabase/functions/send-campaign-email/index.ts
-// Line ~149 - Change this:
-from: "Beacon CRM <noreply@product.hireclix.com>",
-// To your verified domain:
-from: "Your CRM <noreply@mail.yourcompany.com>",
-```
+5. Set `MAILGUN_FROM` secret if you want a custom from address (e.g. `Your CRM <noreply@mg.yourcompany.com>`)
+6. Configure webhooks for analytics: Sending → Webhooks → add URL `https://YOUR_PROJECT.supabase.co/functions/v1/mailgun-webhook` for Delivered, Opened, Clicks, Permanent Failures
 
 ---
 
@@ -233,7 +231,7 @@ Implementation requires:
 | **Real Analytics** | ❌ Mock data | Create database queries, update components | 4-8 hours |
 | **Real Activity Feed** | ❌ Mock data | Query recent activity from DB | 2-3 hours |
 | **Real Pipeline Chart** | ❌ Mock data | Aggregate pipeline_candidates data | 2-3 hours |
-| **Email Tracking Webhooks** | ❌ Missing | Set up Resend webhooks for opens/clicks | 4-6 hours |
+| **Email Tracking Webhooks** | ✅ Mailgun | Webhooks update campaign_recipients (opened/clicked) | — |
 | **Unsubscribe Handling** | ❌ Missing | Create unsubscribe endpoint + page | 3-4 hours |
 | **Notes in Profile** | ⚠️ Service exists | Wire up UI to `communicationService` | 1-2 hours |
 | **Communications in Profile** | ⚠️ Service exists | Wire up UI to `communicationService` | 1-2 hours |
@@ -286,19 +284,22 @@ Implementation requires:
 
 4. **Set Edge Function Secrets**
    ```bash
-   supabase secrets set RESEND_API_KEY=re_xxxxx
+   supabase secrets set MAILGUN_API_KEY=key-xxxxx
+   supabase secrets set MAILGUN_DOMAIN=mg.yourcompany.com
+   supabase secrets set MAILGUN_WEBHOOK_SIGNING_KEY=your-signing-key
    supabase secrets set BEE_CLIENT_ID=your-client-id
    supabase secrets set BEE_CLIENT_SECRET=your-secret
    ```
 
-### Resend Email Setup
+### Mailgun Email Setup
 
-1. Create account at [resend.com](https://resend.com)
-2. Verify your sending domain
-3. Copy API key to Supabase secrets
-4. (Optional) Set up webhooks for tracking:
-   - Webhook URL: `https://your-project.supabase.co/functions/v1/email-webhook`
-   - Events: `email.sent`, `email.delivered`, `email.opened`, `email.clicked`, `email.bounced`
+1. Create account at [mailgun.com](https://www.mailgun.com)
+2. Add and verify your sending domain in [Mailgun Domains](https://app.mailgun.com/app/sending/domains)
+3. Copy API key and domain to Supabase secrets
+4. Configure webhooks for analytics (Sending → Webhooks):
+   - Webhook URL: `https://YOUR_PROJECT.supabase.co/functions/v1/mailgun-webhook`
+   - Events: Delivered, Opened, Clicks, Permanent Failures
+   - Copy the Signing key to `MAILGUN_WEBHOOK_SIGNING_KEY` secret
 
 ### BeeFree Email Editor Setup
 
@@ -456,7 +457,7 @@ supabase gen types typescript --local > src/integrations/supabase/types.ts
 ## Support & Resources
 
 - **Supabase Docs**: https://supabase.com/docs
-- **Resend Docs**: https://resend.com/docs
+- **Mailgun Docs**: https://documentation.mailgun.com/docs/mailgun
 - **BeeFree Docs**: https://docs.beefree.io
 - **React Query**: https://tanstack.com/query
 - **Shadcn/UI**: https://ui.shadcn.com

@@ -17,9 +17,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    if (!RESEND_API_KEY) {
-      console.error("RESEND_API_KEY is not configured");
+    const MAILGUN_API_KEY = Deno.env.get("MAILGUN_API_KEY");
+    const MAILGUN_DOMAIN = Deno.env.get("MAILGUN_DOMAIN");
+    const MAILGUN_FROM = Deno.env.get("MAILGUN_FROM") || `Beacon CRM <noreply@${MAILGUN_DOMAIN}>`;
+
+    if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
+      console.error("MAILGUN_API_KEY and MAILGUN_DOMAIN must be configured");
       return new Response(
         JSON.stringify({ error: "Email service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -120,9 +123,15 @@ Deno.serve(async (req) => {
     let sentCount = 0;
     const errors: string[] = [];
 
+    // Mailgun API: US region (use https://api.eu.mailgun.net for EU)
+    const mailgunBaseUrl = Deno.env.get("MAILGUN_REGION") === "EU"
+      ? "https://api.eu.mailgun.net"
+      : "https://api.mailgun.net";
+    const mailgunUrl = `${mailgunBaseUrl}/v3/${MAILGUN_DOMAIN}/messages`;
+
     for (const recipient of recipients) {
       const candidate = recipient.candidates as any;
-      
+
       if (!candidate?.email) {
         console.log(`Skipping recipient ${recipient.id} - no email address`);
         continue;
@@ -130,41 +139,64 @@ Deno.serve(async (req) => {
 
       // Replace merge tags in subject and content
       const personalizedSubject = replaceMergeTags(firstEmail.subject, candidate, campaign);
-      const personalizedHtml = firstEmail.html_content 
+      const personalizedHtml = firstEmail.html_content
         ? replaceMergeTags(firstEmail.html_content, candidate, campaign)
-        : `<p>Hello ${candidate.first_name || 'there'},</p><p>This is a campaign email.</p>`;
+        : `<p>Hello ${candidate.first_name || "there"},</p><p>This is a campaign email.</p>`;
 
       try {
         console.log(`Sending email to ${candidate.email}`);
 
-        const response = await fetch("https://api.resend.com/emails", {
+        // Mailgun expects multipart/form-data
+        const formData = new FormData();
+        formData.append("from", MAILGUN_FROM);
+        formData.append("to", candidate.email);
+        formData.append("subject", personalizedSubject);
+        formData.append("html", personalizedHtml);
+        formData.append("o:tracking", "yes"); // Enable open and click tracking for analytics
+        formData.append("o:tag", `campaign-${campaignId}`); // Tag for Mailgun analytics
+        // Custom metadata for webhook correlation (visible in events)
+        formData.append("v:recipient_id", recipient.id);
+        formData.append("v:campaign_id", campaignId);
+        formData.append("v:candidate_id", recipient.candidate_id);
+
+        const response = await fetch(mailgunUrl, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${RESEND_API_KEY}`,
+            Authorization: `Basic ${btoa(`api:${MAILGUN_API_KEY}`)}`,
           },
-          body: JSON.stringify({
-            from: "Beacon CRM <noreply@product.hireclix.com>",
-            to: [candidate.email],
-            subject: personalizedSubject,
-            html: personalizedHtml,
-          }),
+          body: formData,
         });
 
-        // Add delay to respect rate limits (2 requests per second max)
-        await new Promise(resolve => setTimeout(resolve, 600));
+        // Add delay to respect rate limits
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
         if (response.ok) {
-          console.log(`Email sent successfully to ${candidate.email}`);
-          
-          // Update recipient status
+          const result = await response.json();
+          const messageId = result.id; // e.g. "<20230201120000.1.ABC123@domain.com>"
+
+          console.log(`Email sent successfully to ${candidate.email}, message-id: ${messageId}`);
+
+          // Update recipient status and store message_id for webhook correlation
           await supabase
             .from("campaign_recipients")
-            .update({ 
-              status: "sent", 
-              sent_at: new Date().toISOString() 
+            .update({
+              status: "sent",
+              sent_at: new Date().toISOString(),
+              message_id: messageId,
             })
             .eq("id", recipient.id);
+
+          // Log to communications for activity feed and analytics
+          await supabase.from("communications").insert({
+            candidate_id: recipient.candidate_id,
+            type: "email",
+            subject: personalizedSubject,
+            content: personalizedHtml.replace(/<[^>]*>/g, "").slice(0, 500), // Plain text excerpt
+            direction: "outbound",
+            occurred_at: new Date().toISOString(),
+            campaign_recipient_id: recipient.id,
+            external_message_id: messageId,
+          });
 
           sentCount++;
         } else {
@@ -174,12 +206,12 @@ Deno.serve(async (req) => {
         }
       } catch (err) {
         console.error(`Error sending to ${candidate.email}:`, err);
-        errors.push(`${candidate.email}: ${err.message}`);
+        errors.push(`${candidate.email}: ${(err as Error).message}`);
       }
     }
 
     // Update campaign status if all emails sent
-    if (campaign.status === 'scheduled' || campaign.status === 'draft') {
+    if (campaign.status === "scheduled" || campaign.status === "draft") {
       await supabase
         .from("campaigns")
         .update({ status: "active" })
@@ -189,18 +221,18 @@ Deno.serve(async (req) => {
     console.log(`Campaign ${campaignId}: Sent ${sentCount} emails`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        sent: sentCount, 
+      JSON.stringify({
+        success: true,
+        sent: sentCount,
         total: recipients.length,
-        errors: errors.length > 0 ? errors : undefined
+        errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error in send-campaign-email:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -208,13 +240,13 @@ Deno.serve(async (req) => {
 
 function replaceMergeTags(content: string, candidate: any, campaign: any): string {
   return content
-    .replace(/\{\{firstName\}\}/g, candidate.first_name || '')
-    .replace(/\{\{lastName\}\}/g, candidate.last_name || '')
-    .replace(/\{\{email\}\}/g, candidate.email || '')
-    .replace(/\{\{company\}\}/g, candidate.company || '')
-    .replace(/\{\{title\}\}/g, candidate.title || '')
-    .replace(/\{\{location\}\}/g, candidate.location || '')
-    .replace(/\{\{campaignName\}\}/g, campaign.name || '')
+    .replace(/\{\{firstName\}\}/g, candidate.first_name || "")
+    .replace(/\{\{lastName\}\}/g, candidate.last_name || "")
+    .replace(/\{\{email\}\}/g, candidate.email || "")
+    .replace(/\{\{company\}\}/g, candidate.company || "")
+    .replace(/\{\{title\}\}/g, candidate.title || "")
+    .replace(/\{\{location\}\}/g, candidate.location || "")
+    .replace(/\{\{campaignName\}\}/g, campaign.name || "")
     .replace(/\{\{currentDate\}\}/g, new Date().toLocaleDateString())
     .replace(/\{\{currentTime\}\}/g, new Date().toLocaleTimeString());
 }

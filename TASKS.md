@@ -71,14 +71,16 @@
 **Location**: Supabase Dashboard → Edge Functions → Secrets
 
 **Steps**:
-1. [ ] Get Resend API key from https://resend.com/api-keys
-2. [ ] Get Beefree credentials from https://developers.beefree.io/
-3. [ ] In Supabase Dashboard, add secrets:
-   - `RESEND_API_KEY` = your-resend-key
+1. [ ] Get Mailgun API key from https://app.mailgun.com/app/account/security/api_keys
+2. [ ] Add sending domain in Mailgun and get `MAILGUN_DOMAIN`
+3. [ ] Get Beefree credentials from https://developers.beefree.io/
+4. [ ] In Supabase Dashboard, add secrets:
+   - `MAILGUN_API_KEY` = your-mailgun-key
+   - `MAILGUN_DOMAIN` = mg.yourdomain.com
+   - `MAILGUN_WEBHOOK_SIGNING_KEY` = from Mailgun webhook settings
    - `BEE_CLIENT_ID` = your-bee-client-id
    - `BEE_CLIENT_SECRET` = your-bee-secret
-   - `EMAIL_FROM_ADDRESS` = noreply@yourdomain.com
-4. [ ] Deploy edge functions: `supabase functions deploy`
+5. [ ] Deploy edge functions: `supabase functions deploy`
 
 ---
 
@@ -338,14 +340,14 @@
 ---
 
 ### EMAIL-001: Email Tracking Webhooks
-**Time**: 4-6 hours
+**Time**: 4-6 hours | **Status**: ✅ Implemented (Mailgun)
 
 **Steps**:
-1. [ ] Create `supabase/functions/email-webhook/index.ts`
-2. [ ] Set up Resend webhook endpoint
-3. [ ] Handle events: delivered, opened, clicked, bounced
-4. [ ] Update communications table with tracking data
-5. [ ] Configure webhook URL in Resend dashboard
+1. [x] Create `supabase/functions/mailgun-webhook/index.ts`
+2. [x] Set up Mailgun webhook endpoint
+3. [x] Handle events: delivered, opened, clicked, failed
+4. [x] Update campaign_recipients with opened_at, clicked_at
+5. [ ] Configure webhook URL in Mailgun dashboard: `https://YOUR_PROJECT.supabase.co/functions/v1/mailgun-webhook`
 6. [ ] Test with real email sends
 
 ---

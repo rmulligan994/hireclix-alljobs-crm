@@ -29,7 +29,7 @@ export interface CampaignRecipient {
   id: string;
   campaign_id: string;
   candidate_id: string;
-  status: 'pending' | 'sent' | 'opened' | 'clicked' | 'responded' | 'bounced';
+  status: 'pending' | 'sent' | 'opened' | 'clicked' | 'responded' | 'bounced' | 'complained' | 'unsubscribed' | 'failed' | 'rejected';
   sent_at?: string;
   opened_at?: string;
   clicked_at?: string;
