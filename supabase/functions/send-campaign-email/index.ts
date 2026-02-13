@@ -122,10 +122,10 @@ Deno.serve(async (req) => {
     // Fetch sender (campaign owner profile) and org settings for merge tags
     const { data: sender } = await supabase
       .from("profiles")
-      .select("first_name, last_name, email, company")
+      .select("first_name, last_name, email, company, title")
       .eq("user_id", campaign.user_id)
       .single();
-    const senderData = sender || { first_name: "", last_name: "", email: "", company: "" };
+    const senderData = sender || { first_name: "", last_name: "", email: "", company: "", title: "" };
 
     const { data: orgRows } = await supabase
       .from("organization_settings")
@@ -164,9 +164,19 @@ Deno.serve(async (req) => {
         baseUrl: org.base_url || Deno.env.get("APP_URL") || "",
       };
       const personalizedSubject = replaceMergeTags(firstEmail.subject, mergeContext);
-      const personalizedHtml = firstEmail.html_content
+      let personalizedHtml = firstEmail.html_content
         ? replaceMergeTags(firstEmail.html_content, mergeContext)
         : `<p>Hello ${candidate.first_name || "there"},</p><p>This is a campaign email.</p>`;
+
+      // Append a proper unsubscribe footer so the link is always present and clickable
+      const unsubscribeUrl = mergeContext.baseUrl
+        ? `${mergeContext.baseUrl.replace(/\/$/, "")}/unsubscribe?r=${recipient.id}`
+        : "#";
+      const unsubscribeFooter = `
+<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;font-size:12px;color:#6b7280;font-family:Arial,sans-serif">
+  <a href="${unsubscribeUrl}" style="color:#54A3DA;text-decoration:underline">Unsubscribe</a> from future emails
+</div>`;
+      personalizedHtml = appendUnsubscribeFooter(personalizedHtml, unsubscribeFooter);
 
       try {
         console.log(`Sending email to ${candidate.email}`);
@@ -262,6 +272,15 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+/** Appends unsubscribe footer before </body> or at end of HTML */
+function appendUnsubscribeFooter(html: string, footer: string): string {
+  const trimmed = html.trim();
+  if (trimmed.endsWith("</body>")) {
+    return trimmed.replace(/<\/body>/i, `${footer}</body>`);
+  }
+  return trimmed + footer;
+}
 
 function replaceMergeTags(content: string, ctx: {
   candidate: any;

@@ -16,6 +16,7 @@ import { Save, Plus, Trash2, Copy, GitBranch, Building2 } from 'lucide-react';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
+import { useCurrentUser, useProfile, useUpdateProfile } from '@/hooks/useAuth';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -27,6 +28,29 @@ const Settings = () => {
   const [orgBrand, setOrgBrand] = useState('');
   const [orgBaseUrl, setOrgBaseUrl] = useState('');
 
+  const { data: currentUser } = useCurrentUser();
+  const userId = currentUser?.id;
+  const { data: profile, isLoading: profileLoading } = useProfile(userId ?? '');
+  const updateProfile = useUpdateProfile();
+
+  const [profileFirstName, setProfileFirstName] = useState('');
+  const [profileLastName, setProfileLastName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileTitle, setProfileTitle] = useState('');
+  const [profileCompany, setProfileCompany] = useState('');
+
+  useEffect(() => {
+    if (profile) {
+      setProfileFirstName(profile.firstName ?? '');
+      setProfileLastName(profile.lastName ?? '');
+      setProfileEmail(profile.email ?? currentUser?.email ?? '');
+      setProfileTitle(profile.title ?? '');
+      setProfileCompany(profile.company ?? '');
+    } else if (currentUser?.email && !profile) {
+      setProfileEmail(currentUser.email);
+    }
+  }, [profile, currentUser?.email]);
+
   useEffect(() => {
     if (orgSettings) {
       setOrgCompany(orgSettings.company_name || '');
@@ -34,6 +58,27 @@ const Settings = () => {
       setOrgBaseUrl(orgSettings.base_url || '');
     }
   }, [orgSettings]);
+
+  const handleSaveProfile = async () => {
+    if (!userId) {
+      toast({ title: 'Please sign in to save your profile', variant: 'destructive' });
+      return;
+    }
+    try {
+      await updateProfile.mutateAsync({
+        userId,
+        data: {
+          firstName: profileFirstName || undefined,
+          lastName: profileLastName || undefined,
+          email: profileEmail || undefined,
+          title: profileTitle || undefined,
+          company: profileCompany || undefined,
+        },
+      });
+    } catch {
+      toast({ title: 'Failed to save profile', variant: 'destructive' });
+    }
+  };
 
   const handleSaveOrganization = async () => {
     try {
@@ -108,42 +153,78 @@ const Settings = () => {
                 <CardHeader>
                   <CardTitle>Profile Information</CardTitle>
                   <CardDescription>
-                    Update your personal and company information
+                    Update your personal and company information. Used in campaign email merge tags ({{senderName}}, {{senderCompany}}).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" defaultValue="Sarah" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" defaultValue="Chen" />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" defaultValue="sarah.chen@company.com" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Job Title</Label>
-                    <Input id="title" defaultValue="Talent Acquisition Lead" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Company</Label>
-                    <Input id="company" defaultValue="Tech Innovations Inc." />
-                  </div>
+                  {profileLoading ? (
+                    <p className="text-muted-foreground">Loading profile...</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="firstName">First Name</Label>
+                          <Input
+                            id="firstName"
+                            value={profileFirstName}
+                            onChange={(e) => setProfileFirstName(e.target.value)}
+                            placeholder="Your first name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="lastName">Last Name</Label>
+                          <Input
+                            id="lastName"
+                            value={profileLastName}
+                            onChange={(e) => setProfileLastName(e.target.value)}
+                            placeholder="Your last name"
+                          />
+                        </div>
+                      </div>
 
-                  <Separator />
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={profileEmail}
+                          onChange={(e) => setProfileEmail(e.target.value)}
+                          placeholder="your@email.com"
+                        />
+                      </div>
 
-                  <Button className="bg-gradient-primary hover:opacity-90">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </Button>
+                      <div className="space-y-2">
+                        <Label htmlFor="title">Job Title</Label>
+                        <Input
+                          id="title"
+                          value={profileTitle}
+                          onChange={(e) => setProfileTitle(e.target.value)}
+                          placeholder="e.g. Talent Acquisition Lead"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="company">Company</Label>
+                        <Input
+                          id="company"
+                          value={profileCompany}
+                          onChange={(e) => setProfileCompany(e.target.value)}
+                          placeholder="Your company name"
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <Button
+                        className="bg-gradient-primary hover:opacity-90"
+                        onClick={handleSaveProfile}
+                        disabled={updateProfile.isPending}
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        {updateProfile.isPending ? 'Saving...' : 'Save Changes'}
+                      </Button>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

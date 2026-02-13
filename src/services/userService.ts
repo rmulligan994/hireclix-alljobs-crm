@@ -14,6 +14,8 @@ const mapRowToProfile = (row: any): Profile => ({
   firstName: row.first_name,
   lastName: row.last_name,
   email: row.email,
+  title: row.title,
+  company: row.company,
   avatarUrl: row.avatar_url,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at),
@@ -126,6 +128,8 @@ export const userService = {
     if (data.firstName !== undefined) updateData.first_name = data.firstName;
     if (data.lastName !== undefined) updateData.last_name = data.lastName;
     if (data.email !== undefined) updateData.email = data.email;
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.company !== undefined) updateData.company = data.company;
     if (data.avatarUrl !== undefined) updateData.avatar_url = data.avatarUrl;
 
     const { data: result, error } = await supabase
