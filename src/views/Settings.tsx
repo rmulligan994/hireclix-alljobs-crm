@@ -16,7 +16,7 @@ import { Save, Plus, Trash2, Copy, GitBranch, Building2 } from 'lucide-react';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
-import { useCurrentUser, useProfile, useUpdateProfile } from '@/hooks/useAuth';
+import { useCurrentUser, useUpdateProfile } from '@/hooks/useAuth';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -28,9 +28,9 @@ const Settings = () => {
   const [orgBrand, setOrgBrand] = useState('');
   const [orgBaseUrl, setOrgBaseUrl] = useState('');
 
-  const { data: currentUser } = useCurrentUser();
+  const { data: currentUser, isLoading: currentUserLoading } = useCurrentUser();
   const userId = currentUser?.id;
-  const { data: profile, isLoading: profileLoading } = useProfile(userId ?? '');
+  const profile = currentUser?.profile;
   const updateProfile = useUpdateProfile();
 
   const [profileFirstName, setProfileFirstName] = useState('');
@@ -40,16 +40,14 @@ const Settings = () => {
   const [profileCompany, setProfileCompany] = useState('');
 
   useEffect(() => {
-    if (profile) {
-      setProfileFirstName(profile.firstName ?? '');
-      setProfileLastName(profile.lastName ?? '');
-      setProfileEmail(profile.email ?? currentUser?.email ?? '');
-      setProfileTitle(profile.title ?? '');
-      setProfileCompany(profile.company ?? '');
-    } else if (currentUser?.email && !profile) {
-      setProfileEmail(currentUser.email);
+    if (currentUser) {
+      setProfileFirstName(profile?.firstName ?? '');
+      setProfileLastName(profile?.lastName ?? '');
+      setProfileEmail(profile?.email ?? currentUser.email ?? '');
+      setProfileTitle(profile?.title ?? '');
+      setProfileCompany(profile?.company ?? '');
     }
-  }, [profile, currentUser?.email]);
+  }, [currentUser, profile]);
 
   useEffect(() => {
     if (orgSettings) {
@@ -157,7 +155,7 @@ const Settings = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {profileLoading ? (
+                  {currentUserLoading ? (
                     <p className="text-muted-foreground">Loading profile...</p>
                   ) : (
                     <>
