@@ -84,10 +84,30 @@ export async function getSourceStats(dateRange?: DateRange): Promise<SourceStat[
 }
 
 /**
- * Get pipeline conversion funnel - candidates per stage across all pipelines
+ * Build stage ID -> stage name map from all pipelines.
+ * pipeline_candidates.stage stores stage IDs (UUIDs), not names.
+ */
+async function getStageNameMap(): Promise<Map<string, string>> {
+  const { data: pipelines, error } = await supabase.from('pipelines').select('id, stages');
+
+  if (error) throw error;
+
+  const map = new Map<string, string>();
+  for (const p of pipelines || []) {
+    const stages = (p.stages as { id: string; name: string }[]) || [];
+    for (const s of stages) {
+      if (s?.id && s?.name) map.set(s.id, s.name);
+    }
+  }
+  return map;
+}
+
+/**
+ * Get pipeline conversion funnel - candidates per stage across all pipelines.
+ * Resolves stage IDs (UUIDs) to human-readable stage names.
  */
 export async function getConversionFunnel(dateRange?: DateRange): Promise<ConversionStage[]> {
-  let query = supabase.from('pipeline_candidates').select('stage, added_at, updated_at');
+  let query = supabase.from('pipeline_candidates').select('stage, added_at');
 
   if (dateRange) {
     query = query
@@ -99,10 +119,13 @@ export async function getConversionFunnel(dateRange?: DateRange): Promise<Conver
 
   if (error) throw error;
 
+  const stageNameMap = await getStageNameMap();
+
   const grouped = new Map<string, number>();
   for (const row of data || []) {
-    const stage = row.stage || 'Unknown';
-    grouped.set(stage, (grouped.get(stage) || 0) + 1);
+    const stageId = row.stage || '';
+    const stageName = stageNameMap.get(stageId) || (stageId ? 'Unknown stage' : 'Unknown');
+    grouped.set(stageName, (grouped.get(stageName) || 0) + 1);
   }
 
   // Sort by count descending for bar chart
@@ -135,7 +158,7 @@ export async function getHiringTimeline(dateRange?: DateRange): Promise<Timeline
   const startStr = start.toISOString();
   const endStr = end.toISOString();
 
-  const [candidatesRes, pipelineRes] = await Promise.all([
+  const [candidatesRes, pipelineRes, stageNameMap] = await Promise.all([
     supabase
       .from('candidates')
       .select('created_at')
@@ -146,6 +169,7 @@ export async function getHiringTimeline(dateRange?: DateRange): Promise<Timeline
       .select('stage, updated_at')
       .gte('updated_at', startStr)
       .lte('updated_at', endStr),
+    getStageNameMap(),
   ]);
 
   if (candidatesRes.error) throw candidatesRes.error;
@@ -157,11 +181,15 @@ export async function getHiringTimeline(dateRange?: DateRange): Promise<Timeline
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  for (let d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
+  // Iterate by month start so we include all months in range (e.g. Last 30 days = Jan + Feb)
+  const d = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endMonthStart = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (d <= endMonthStart) {
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     monthKeys.add(key);
     candidatesByMonth.set(key, 0);
     hiredByMonth.set(key, 0);
+    d.setMonth(d.getMonth() + 1);
   }
 
   for (const row of candidatesRes.data || []) {
@@ -173,7 +201,8 @@ export async function getHiringTimeline(dateRange?: DateRange): Promise<Timeline
   }
 
   for (const row of pipelineRes.data || []) {
-    if (!isHiredStage(row.stage)) continue;
+    const stageName = stageNameMap.get(row.stage || '') || '';
+    if (!isHiredStage(stageName)) continue;
     const date = new Date(row.updated_at);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     if (monthKeys.has(key)) {
@@ -182,12 +211,15 @@ export async function getHiringTimeline(dateRange?: DateRange): Promise<Timeline
   }
 
   const sortedKeys = Array.from(monthKeys).sort();
+  const years = new Set(sortedKeys.map((k) => k.split('-')[0]));
+  const multiYear = years.size > 1;
 
   return sortedKeys.map((key) => {
     const [year, month] = key.split('-');
     const monthIndex = parseInt(month, 10) - 1;
+    const monthLabel = multiYear ? `${monthNames[monthIndex]} '${year.slice(-2)}` : monthNames[monthIndex];
     return {
-      month: monthNames[monthIndex],
+      month: monthLabel,
       monthKey: key,
       candidates: candidatesByMonth.get(key) || 0,
       hired: hiredByMonth.get(key) || 0,

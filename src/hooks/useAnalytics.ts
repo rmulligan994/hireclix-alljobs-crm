@@ -10,18 +10,24 @@ import {
  * React Query hooks for analytics data
  */
 
-export type DatePreset = '7' | '30' | '90' | 'all';
+export type DatePreset = '7' | '30' | '90' | 'all' | 'custom';
 
 export function getDateRangeFromPreset(preset: DatePreset): DateRange | undefined {
-  if (preset === 'all') return undefined;
+  if (preset === 'all' || preset === 'custom') return undefined;
 
   const end = new Date();
   const start = new Date();
   const days = parseInt(preset, 10);
   start.setDate(start.getDate() - days);
+  return normalizeDateRange({ start, end });
+}
+
+/** Normalize start to midnight and end to end-of-day for consistent date range queries */
+export function normalizeDateRange(range: DateRange): DateRange {
+  const start = new Date(range.start);
+  const end = new Date(range.end);
   start.setHours(0, 0, 0, 0);
   end.setHours(23, 59, 59, 999);
-
   return { start, end };
 }
 

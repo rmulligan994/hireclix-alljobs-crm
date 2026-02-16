@@ -14,6 +14,13 @@ export const useCandidates = () => {
   });
 };
 
+export const useCandidatesWithEnrichment = () => {
+  return useQuery({
+    queryKey: ['candidates', 'enriched'],
+    queryFn: candidateService.getListWithEnrichment,
+  });
+};
+
 export const useCandidate = (id: string) => {
   return useQuery({
     queryKey: ['candidates', id],

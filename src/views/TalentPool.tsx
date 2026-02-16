@@ -34,8 +34,21 @@ import {
   type FilterOption,
 } from '@/components/candidates/search';
 import { useCandidateSearch } from '@/hooks/useCandidateSearch';
-import { useCandidates, useCandidateStats } from '@/hooks/useCandidates';
+import { useCandidatesWithEnrichment, useCandidateStats } from '@/hooks/useCandidates';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
+
+function formatLastContact(date: Date | null): string {
+  if (!date) return 'Never';
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} years ago`;
+}
 
 // Mock data for filter options - in production, these would come from the database
 const mockFilterOptions = {
@@ -237,8 +250,8 @@ const TalentPool = () => {
   // Candidate list context for navigation
   const { setCandidateList } = useCandidateListContext();
 
-  // Fetch real data from database (will be used alongside mock data)
-  const { data: dbCandidates, isLoading } = useCandidates();
+  // Fetch real data from database with pipeline associations and last contact
+  const { data: dbCandidates, isLoading } = useCandidatesWithEnrichment();
   const { data: stats } = useCandidateStats();
 
   // Simulate search loading
@@ -251,9 +264,8 @@ const TalentPool = () => {
     }
   }, [debouncedSearchQuery, searchQuery, setIsSearching]);
 
-  // Filter and sort candidates - use real database candidates
+  // Filter and sort candidates - use real database candidates with enrichment
   const filteredCandidates = useMemo(() => {
-    // Convert database candidates to the expected format
     const candidates = (dbCandidates || []).map(c => ({
       id: c.id,
       firstName: c.firstName || '',
@@ -264,9 +276,9 @@ const TalentPool = () => {
       company: c.company || '',
       location: c.location || '',
       skills: c.tags || [],
-      pipelineAssociations: [] as { id: string; name: string; stage: string }[],
+      pipelineAssociations: c.pipelineAssociations || [],
       source: c.source || '',
-      lastContact: 'Never',
+      lastContact: formatLastContact(c.lastContactAt),
       createdAt: new Date(c.createdAt),
     }));
 
@@ -709,19 +721,26 @@ const TalentPool = () => {
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-wrap gap-1 max-w-xs">
+                        <div className="flex flex-col gap-1 max-w-xs">
                           {candidate.pipelineAssociations.length === 0 ? (
                             <span className="text-xs text-muted-foreground">Not in pipeline</span>
                           ) : (
-                            candidate.pipelineAssociations.map((pipeline) => (
-                              <Badge 
-                                key={`${pipeline.id}-${pipeline.name}`}
-                                className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${getStageColor(pipeline.stage)}`}
-                                onClick={() => handlePipelineClick(pipeline.name)}
-                              >
-                                {pipeline.name.length > 15 ? `${pipeline.name.slice(0, 15)}...` : pipeline.name}: {pipeline.stage}
-                              </Badge>
-                            ))
+                            <>
+                              <span className="text-xs text-muted-foreground">
+                                {candidate.pipelineAssociations.length} pipeline{candidate.pipelineAssociations.length !== 1 ? 's' : ''}
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {candidate.pipelineAssociations.map((pipeline) => (
+                                  <Badge 
+                                    key={`${pipeline.id}-${pipeline.name}`}
+                                    className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${getStageColor(pipeline.stage)}`}
+                                    onClick={() => handlePipelineClick(pipeline.name)}
+                                  >
+                                    {pipeline.name.length > 15 ? `${pipeline.name.slice(0, 15)}...` : pipeline.name}: {pipeline.stage}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </>
                           )}
                         </div>
                       </TableCell>

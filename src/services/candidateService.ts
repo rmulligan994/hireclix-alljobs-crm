@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { 
   Candidate, 
   CandidateWithPipelines, 
+  CandidateListEnriched,
   CreateCandidateData, 
   UpdateCandidateData 
 } from '@/types/Candidate';
@@ -245,5 +246,66 @@ export const candidateService = {
 
     if (error) throw error;
     return count || 0;
+  },
+
+  /**
+   * Get all candidates with pipeline associations (stage names) and last contact date.
+   * Last contact = most recent of: communications.occurred_at, campaign_recipients.sent_at
+   */
+  getListWithEnrichment: async (): Promise<CandidateListEnriched[]> => {
+    const [candidatesRes, pipelineRes, pipelinesRes, commsRes, campaignRes] = await Promise.all([
+      supabase.from('candidates').select('*').order('created_at', { ascending: false }),
+      supabase.from('pipeline_candidates').select('candidate_id, pipeline_id, stage, pipelines(id, name)'),
+      supabase.from('pipelines').select('id, stages'),
+      supabase.from('communications').select('candidate_id, occurred_at'),
+      supabase.from('campaign_recipients').select('candidate_id, sent_at').not('sent_at', 'is', null),
+    ]);
+
+    if (candidatesRes.error) throw candidatesRes.error;
+    if (pipelineRes.error) throw pipelineRes.error;
+    if (pipelinesRes.error) throw pipelinesRes.error;
+    if (commsRes.error) throw commsRes.error;
+    if (campaignRes.error) throw campaignRes.error;
+
+    const candidates = (candidatesRes.data || []).map(mapRowToCandidate);
+
+    const stageNameMap = new Map<string, string>();
+    for (const p of pipelinesRes.data || []) {
+      const stages = (p.stages as { id: string; name: string }[]) || [];
+      for (const s of stages) {
+        if (s?.id && s?.name) stageNameMap.set(s.id, s.name);
+      }
+    }
+
+    const pipelineByCandidate = new Map<string, { id: string; name: string; stage: string }[]>();
+    for (const pc of pipelineRes.data || []) {
+      const stageName = stageNameMap.get(pc.stage) || pc.stage;
+      const pipelineName = (pc.pipelines as { id: string; name: string } | null)?.name || pc.pipeline_id;
+      const list = pipelineByCandidate.get(pc.candidate_id) || [];
+      list.push({
+        id: pc.pipeline_id,
+        name: pipelineName,
+        stage: stageName,
+      });
+      pipelineByCandidate.set(pc.candidate_id, list);
+    }
+
+    const lastContactByCandidate = new Map<string, Date>();
+    for (const c of commsRes.data || []) {
+      const at = new Date(c.occurred_at);
+      const existing = lastContactByCandidate.get(c.candidate_id);
+      if (!existing || at > existing) lastContactByCandidate.set(c.candidate_id, at);
+    }
+    for (const r of campaignRes.data || []) {
+      const at = new Date(r.sent_at!);
+      const existing = lastContactByCandidate.get(r.candidate_id);
+      if (!existing || at > existing) lastContactByCandidate.set(r.candidate_id, at);
+    }
+
+    return candidates.map((c) => ({
+      ...c,
+      pipelineAssociations: pipelineByCandidate.get(c.id) || [],
+      lastContactAt: lastContactByCandidate.get(c.id) || null,
+    }));
   },
 };

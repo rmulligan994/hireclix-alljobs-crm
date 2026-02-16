@@ -7,7 +7,10 @@ import { AICopilot } from '@/components/dashboard/AICopilot';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, Loader2, BarChart3 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Download, Loader2, BarChart3, Calendar } from 'lucide-react';
+import { format } from 'date-fns';
 import { 
   BarChart, 
   Bar, 
@@ -28,22 +31,37 @@ import {
   useConversionFunnel,
   useHiringTimeline,
   getDateRangeFromPreset,
+  normalizeDateRange,
   type DatePreset,
 } from '@/hooks/useAnalytics';
+import type { DateRange } from '@/services/analyticsService';
 
 const DATE_PRESETS: { label: string; value: DatePreset }[] = [
   { label: 'Last 7 Days', value: '7' },
   { label: 'Last 30 Days', value: '30' },
   { label: 'Last 90 Days', value: '90' },
   { label: 'All Time', value: 'all' },
+  { label: 'Custom', value: 'custom' },
 ];
+
+function getDefaultCustomRange(): DateRange {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 30);
+  return normalizeDateRange({ start, end });
+}
 
 const Analytics = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [datePreset, setDatePreset] = useState<DatePreset>('30');
+  const [customRange, setCustomRange] = useState<DateRange>(getDefaultCustomRange);
+  const [customPopoverOpen, setCustomPopoverOpen] = useState(false);
 
-  const dateRange = getDateRangeFromPreset(datePreset);
+  const dateRange: DateRange | undefined =
+    datePreset === 'custom'
+      ? customRange
+      : getDateRangeFromPreset(datePreset);
 
   const { data: sourceData = [], isLoading: sourceLoading } = useSourceStats(dateRange);
   const { data: conversionData = [], isLoading: conversionLoading } = useConversionFunnel(dateRange);
@@ -80,7 +98,7 @@ const Analytics = () => {
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex rounded-lg border border-border overflow-hidden">
-                  {DATE_PRESETS.map((preset) => (
+                  {DATE_PRESETS.filter((p) => p.value !== 'custom').map((preset) => (
                     <Button
                       key={preset.value}
                       variant="ghost"
@@ -95,6 +113,59 @@ const Analytics = () => {
                       {preset.label}
                     </Button>
                   ))}
+                  <Popover open={customPopoverOpen} onOpenChange={setCustomPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={`rounded-none border-0 ${
+                          datePreset === 'custom'
+                            ? 'bg-sky-blue/10 text-sky-blue border-b-2 border-sky-blue'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {datePreset === 'custom'
+                          ? `${format(customRange.start, 'MMM d')} – ${format(customRange.end, 'MMM d')}`
+                          : 'Custom'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-4 bg-popover" align="start">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground">Start date</label>
+                          <CalendarComponent
+                            mode="single"
+                            selected={customRange.start}
+                            onSelect={(d) =>
+                              d && setCustomRange((prev) => normalizeDateRange({ start: d, end: prev.end }))
+                            }
+                            disabled={(d) => d > customRange.end}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground">End date</label>
+                          <CalendarComponent
+                            mode="single"
+                            selected={customRange.end}
+                            onSelect={(d) =>
+                              d && setCustomRange((prev) => normalizeDateRange({ start: prev.start, end: d }))
+                            }
+                            disabled={(d) => d < customRange.start}
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          onClick={() => {
+                            setDatePreset('custom');
+                            setCustomPopoverOpen(false);
+                          }}
+                        >
+                          Apply
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white" disabled>
                   <Download className="w-4 h-4 mr-2" />
