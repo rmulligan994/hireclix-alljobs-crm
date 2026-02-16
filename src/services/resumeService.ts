@@ -125,25 +125,17 @@ export const resumeService = {
   },
 
   /**
-   * Get URL for viewing/downloading via API proxy (bypasses storage 404 issues).
-   * Uses server-side service role to fetch the file.
+   * Get URL for viewing/downloading. Uses Supabase signed URL (works from any domain, e.g. Webflow).
    */
-  getResumeApiUrl: async (resumeId: string): Promise<string> => {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError || !session?.access_token) {
-      throw new Error('You must be signed in to view resumes.');
-    }
-    const base = typeof window !== 'undefined' ? window.location.origin : '';
-    const url = new URL(`/api/resumes/${resumeId}`, base);
-    url.searchParams.set('token', session.access_token);
-    return url.toString();
+  getResumeUrl: async (resumeId: string): Promise<string> => {
+    return resumeService.getSignedUrl(resumeId);
   },
 
   /**
-   * Get file as blob for download via API proxy.
+   * Get file as blob for download.
    */
   getFileBlob: async (resumeId: string): Promise<Blob> => {
-    const url = await resumeService.getResumeApiUrl(resumeId);
+    const url = await resumeService.getResumeUrl(resumeId);
     const res = await fetch(url);
     if (!res.ok) {
       const text = await res.text();
