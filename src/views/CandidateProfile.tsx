@@ -40,11 +40,23 @@ import {
   Archive,
   ChevronDown,
   AlertCircle,
+  MoreHorizontal,
+  Star,
+  Trash2,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UploadResumeDialog } from '@/components/candidates/UploadResumeDialog';
 import { useCandidateWithAssociations } from '@/hooks/useCandidates';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
 import { useNotes, useCreateNote, useCommunications } from '@/hooks/useCommunications';
+import { useResumes, useUploadResume, useSetPrimaryResume, useDeleteResume } from '@/hooks/useResumes';
+import { resumeService } from '@/services';
 import { format } from 'date-fns';
 
 const CandidateProfile = ({ id }: { id: string }) => {
@@ -56,6 +68,8 @@ const CandidateProfile = ({ id }: { id: string }) => {
   const [addToPoolOpen, setAddToPoolOpen] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [logCommOpen, setLogCommOpen] = useState(false);
+  const [uploadResumeOpen, setUploadResumeOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Fetch real candidate data
   const { data: candidate, isLoading, error } = useCandidateWithAssociations(id || '');
@@ -66,6 +80,13 @@ const CandidateProfile = ({ id }: { id: string }) => {
 
   // Communications
   const { data: communications = [], isLoading: communicationsLoading } = useCommunications(id || '');
+
+  // Resumes
+  const { data: resumes = [], isLoading: resumesLoading } = useResumes(id || '');
+  const uploadResume = useUploadResume(id || '');
+  const setPrimaryResume = useSetPrimaryResume(id || '');
+  const deleteResume = useDeleteResume(id || '');
+  const primaryResume = resumes.find((r) => r.isPrimary) ?? resumes[0];
 
   // Candidate list navigation
   const { getNextCandidateId, getPreviousCandidateId, getCurrentIndex, getTotalCount } = useCandidateListContext();
@@ -82,9 +103,35 @@ const CandidateProfile = ({ id }: { id: string }) => {
     candidate.tags?.length ? `Skills: ${candidate.tags.slice(0, 3).join(', ')}` : 'No skills listed yet',
   ] : [];
 
-  const resumeVersions = [
-    { id: '1', name: 'Resume v1', isLatest: true },
-  ];
+  const handleViewResume = async (resumeId: string) => {
+    try {
+      const url = await resumeService.getSignedUrl(resumeId);
+      window.open(url, '_blank');
+    } catch {
+      // toast handled by caller if needed
+    }
+  };
+
+  const handleDownloadResume = async (resumeId: string, fileName: string) => {
+    try {
+      const url = await resumeService.getSignedUrl(resumeId);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+    } catch {
+      // toast handled by caller if needed
+    }
+  };
+
+  const handlePreviewResume = async (resumeId: string) => {
+    try {
+      const url = await resumeService.getSignedUrl(resumeId);
+      setPreviewUrl(url);
+    } catch {
+      // toast handled by caller if needed
+    }
+  };
 
   const getCommIcon = (type: string) => {
     switch (type) {
@@ -493,50 +540,153 @@ const CandidateProfile = ({ id }: { id: string }) => {
                   <CardTitle className="flex items-center gap-2 text-sky-blue">
                     <FileText className="w-5 h-5" />
                     Resume Versions
-                    <Badge variant="secondary" className="ml-1">{resumeVersions.length}</Badge>
+                    <Badge variant="secondary" className="ml-1">{resumes.length}</Badge>
                   </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                    onClick={() => setUploadResumeOpen(true)}
+                    disabled={!id}
+                  >
+                    <Upload className="w-4 h-4 mr-1" />
+                    Upload
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {resumeVersions.map((resume) => (
-                  <div 
-                    key={resume.id} 
-                    className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-foreground">{resume.name}</span>
-                      {resume.isLatest && (
-                        <Badge variant="secondary" className="text-xs">Latest</Badge>
+                {resumesLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                ) : resumes.length === 0 ? (
+                  <div className="p-6 border border-dashed border-border rounded-lg text-center">
+                    <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No resumes uploaded yet</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => setUploadResumeOpen(true)}
+                    >
+                      <Upload className="w-4 h-4 mr-1" />
+                      Upload Resume
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {resumes.map((resume) => (
+                      <div
+                        key={resume.id}
+                        className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-sky-blue/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="text-foreground font-medium block truncate">{resume.fileName}</span>
+                            <span className="text-xs text-muted-foreground">
+                              v{resume.version} · {format(resume.uploadedAt, 'MMM d, yyyy')}
+                              {resume.fileSize && ` · ${(resume.fileSize / 1024).toFixed(1)} KB`}
+                            </span>
+                          </div>
+                          {resume.isPrimary && (
+                            <Badge variant="secondary" className="text-xs flex-shrink-0">Primary</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => handlePreviewResume(resume.id)}
+                            title="Preview"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => handleViewResume(resume.id)}
+                            title="Open in new tab"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => handleDownloadResume(resume.id, resume.fileName)}
+                            title="Download"
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {!resume.isPrimary && (
+                                <DropdownMenuItem onClick={() => setPrimaryResume.mutate(resume.id)}>
+                                  <Star className="w-4 h-4 mr-2" />
+                                  Set as primary
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => deleteResume.mutate(resume.id)}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-border text-muted-foreground hover:text-foreground"
+                        onClick={() => setUploadResumeOpen(true)}
+                      >
+                        <Upload className="w-4 h-4 mr-1" />
+                        Upload New Version
+                      </Button>
+                      {primaryResume && (
+                        <Button
+                          className="bg-gradient-primary hover:opacity-90"
+                          size="sm"
+                          onClick={() => handleViewResume(primaryResume.id)}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-1" />
+                          Open Primary in New Tab
+                        </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                
-                <div className="flex items-center gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
-                    <Upload className="w-4 h-4 mr-1" />
-                    Upload New Version
-                  </Button>
-                  <Button className="bg-gradient-primary hover:opacity-90" size="sm">
-                    <ExternalLink className="w-4 h-4 mr-1" />
-                    Open in New Tab
-                  </Button>
-                </div>
 
-                <div className="p-6 border border-dashed border-border rounded-lg text-center">
-                  <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Resume preview would appear here</p>
-                  <p className="text-xs text-muted-foreground">Integration with PDF viewer coming soon</p>
-                </div>
+                    {previewUrl && (
+                      <div className="mt-4 border border-border rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border">
+                          <span className="text-sm font-medium">Preview</span>
+                          <Button variant="ghost" size="sm" onClick={() => setPreviewUrl(null)}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <iframe
+                          src={previewUrl}
+                          className="w-full h-96"
+                          title="Resume preview"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -699,6 +849,15 @@ const CandidateProfile = ({ id }: { id: string }) => {
         open={logCommOpen}
         onOpenChange={setLogCommOpen}
         candidateId={id || ''}
+      />
+
+      <UploadResumeDialog
+        open={uploadResumeOpen}
+        onOpenChange={setUploadResumeOpen}
+        onUpload={async (file) => {
+          await uploadResume.mutateAsync(file);
+        }}
+        isUploading={uploadResume.isPending}
       />
     </div>
   );

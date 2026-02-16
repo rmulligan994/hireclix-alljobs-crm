@@ -12,6 +12,7 @@
  */
 
 export { candidateService } from './candidateService';
+export { resumeService } from './resumeService';
 export { pipelineService } from './pipelineService';
 export {
   getSourceStats,

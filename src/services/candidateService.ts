@@ -61,7 +61,8 @@ export const candidateService = {
   },
 
   /**
-   * Get a candidate with their pipeline and talent pool associations
+   * Get a candidate with their pipeline and talent pool associations.
+   * Resolves pipeline stage IDs to human-readable stage names.
    */
   getByIdWithAssociations: async (id: string): Promise<CandidateWithPipelines | null> => {
     const { data: candidate, error: candidateError } = await supabase
@@ -73,42 +74,41 @@ export const candidateService = {
     if (candidateError) throw candidateError;
     if (!candidate) return null;
 
-    // Get pipeline associations
-    const { data: pipelineData, error: pipelineError } = await supabase
-      .from('pipeline_candidates')
-      .select(`
-        stage,
-        added_at,
-        pipeline_id,
-        pipelines (id, name)
-      `)
-      .eq('candidate_id', id);
+    const [pipelineRes, poolRes, pipelinesRes] = await Promise.all([
+      supabase
+        .from('pipeline_candidates')
+        .select('stage, added_at, pipeline_id, pipelines (id, name)')
+        .eq('candidate_id', id),
+      supabase
+        .from('talent_pool_candidates')
+        .select('added_at, talent_pool_id, talent_pools (id, name)')
+        .eq('candidate_id', id),
+      supabase.from('pipelines').select('id, stages'),
+    ]);
 
-    if (pipelineError) throw pipelineError;
+    if (pipelineRes.error) throw pipelineRes.error;
+    if (poolRes.error) throw poolRes.error;
+    if (pipelinesRes.error) throw pipelinesRes.error;
 
-    // Get talent pool associations
-    const { data: poolData, error: poolError } = await supabase
-      .from('talent_pool_candidates')
-      .select(`
-        added_at,
-        talent_pool_id,
-        talent_pools (id, name)
-      `)
-      .eq('candidate_id', id);
-
-    if (poolError) throw poolError;
+    const stageNameMap = new Map<string, string>();
+    for (const p of pipelinesRes.data || []) {
+      const stages = (p.stages as { id: string; name: string }[]) || [];
+      for (const s of stages) {
+        if (s?.id && s?.name) stageNameMap.set(s.id, s.name);
+      }
+    }
 
     return {
       ...mapRowToCandidate(candidate),
-      pipelines: (pipelineData || []).map((p: any) => ({
+      pipelines: (pipelineRes.data || []).map((p: any) => ({
         pipelineId: p.pipeline_id,
-        pipelineName: p.pipelines?.name || '',
-        stage: p.stage,
+        pipelineName: (p.pipelines as { id: string; name: string } | null)?.name || '',
+        stage: stageNameMap.get(p.stage) || p.stage,
         addedAt: new Date(p.added_at),
       })),
-      talentPools: (poolData || []).map((p: any) => ({
+      talentPools: (poolRes.data || []).map((p: any) => ({
         poolId: p.talent_pool_id,
-        poolName: p.talent_pools?.name || '',
+        poolName: (p.talent_pools as { id: string; name: string } | null)?.name || '',
         addedAt: new Date(p.added_at),
       })),
     };

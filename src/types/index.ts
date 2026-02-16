@@ -5,3 +5,4 @@ export * from './TalentPool';
 export * from './User';
 export * from './Communication';
 export * from './Note';
+export * from './Resume';
