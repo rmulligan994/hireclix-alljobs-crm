@@ -104,7 +104,7 @@ export const resumeService = {
   },
 
   /**
-   * Get a signed URL for viewing/downloading
+   * Get a signed URL for viewing/downloading (Supabase storage - may return 404)
    */
   getSignedUrl: async (resumeId: string, expiresIn = SIGNED_URL_EXPIRY): Promise<string> => {
     const { data: resume, error: fetchError } = await supabase
@@ -125,15 +125,29 @@ export const resumeService = {
   },
 
   /**
-   * Get file as blob for download.
-   * Uses createSignedUrl + fetch (avoids 400 from storage.download on private buckets).
-   * Caller can fall back to opening getSignedUrl() in new tab if fetch fails (e.g. CORS).
+   * Get URL for viewing/downloading via API proxy (bypasses storage 404 issues).
+   * Uses server-side service role to fetch the file.
+   */
+  getResumeApiUrl: async (resumeId: string): Promise<string> => {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.access_token) {
+      throw new Error('You must be signed in to view resumes.');
+    }
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    const url = new URL(`/api/resumes/${resumeId}`, base);
+    url.searchParams.set('token', session.access_token);
+    return url.toString();
+  },
+
+  /**
+   * Get file as blob for download via API proxy.
    */
   getFileBlob: async (resumeId: string): Promise<Blob> => {
-    const url = await resumeService.getSignedUrl(resumeId);
+    const url = await resumeService.getResumeApiUrl(resumeId);
     const res = await fetch(url);
     if (!res.ok) {
-      throw new Error(`Failed to load file: ${res.status} ${res.statusText}`);
+      const text = await res.text();
+      throw new Error(text || `Failed to load file: ${res.status}`);
     }
     return res.blob();
   },

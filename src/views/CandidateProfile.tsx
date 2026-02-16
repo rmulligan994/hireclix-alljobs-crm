@@ -117,7 +117,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
 
   const handleViewResume = async (resumeId: string) => {
     try {
-      const url = await resumeService.getSignedUrl(resumeId);
+      const url = await resumeService.getResumeApiUrl(resumeId);
       window.open(url, '_blank');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to open resume');
@@ -135,7 +135,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
       URL.revokeObjectURL(url);
     } catch (e) {
       try {
-        const url = await resumeService.getSignedUrl(resumeId);
+        const url = await resumeService.getResumeApiUrl(resumeId);
         const a = document.createElement('a');
         a.href = url;
         a.download = fileName;
@@ -151,7 +151,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
   const handlePreviewResume = async (resumeId: string) => {
     try {
       if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-      const url = await resumeService.getSignedUrl(resumeId);
+      const url = await resumeService.getResumeApiUrl(resumeId);
       setPreviewUrl(url);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load preview');
