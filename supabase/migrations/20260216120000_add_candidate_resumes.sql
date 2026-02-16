@@ -34,5 +34,29 @@ CREATE POLICY "Authenticated users can update candidate resumes"
 CREATE POLICY "Authenticated users can delete candidate resumes"
   ON public.candidate_resumes FOR DELETE TO authenticated USING (true);
 
--- Note: Create the 'resumes' storage bucket via Supabase Dashboard (Storage > New bucket)
--- or run: supabase.storage.createBucket('resumes', { public: false, fileSizeLimit: 10485760 })
+-- Create resumes storage bucket (required for resume uploads)
+-- Uses storage.buckets - run this migration to create the bucket before first upload
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('resumes', 'resumes', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies for resumes bucket
+DROP POLICY IF EXISTS "Authenticated users can upload resumes" ON storage.objects;
+CREATE POLICY "Authenticated users can upload resumes"
+  ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'resumes');
+
+DROP POLICY IF EXISTS "Authenticated users can read resumes" ON storage.objects;
+CREATE POLICY "Authenticated users can read resumes"
+  ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'resumes');
+
+DROP POLICY IF EXISTS "Authenticated users can update resumes" ON storage.objects;
+CREATE POLICY "Authenticated users can update resumes"
+  ON storage.objects FOR UPDATE TO authenticated
+  USING (bucket_id = 'resumes');
+
+DROP POLICY IF EXISTS "Authenticated users can delete resumes" ON storage.objects;
+CREATE POLICY "Authenticated users can delete resumes"
+  ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'resumes');

@@ -17,21 +17,6 @@ const mapRowToResume = (row: any): CandidateResume => ({
   uploadedBy: row.uploaded_by,
 });
 
-async function ensureBucket() {
-  const { data: buckets } = await supabase.storage.listBuckets();
-  if (!buckets?.some((b) => b.name === BUCKET)) {
-    await supabase.storage.createBucket(BUCKET, {
-      public: false,
-      fileSizeLimit: 10 * 1024 * 1024, // 10MB
-      allowedMimeTypes: [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      ],
-    });
-  }
-}
-
 export const resumeService = {
   /**
    * List all resumes for a candidate, newest first (version order)
@@ -51,8 +36,6 @@ export const resumeService = {
    * Upload a new resume version
    */
   upload: async (candidateId: string, file: File): Promise<CandidateResume> => {
-    await ensureBucket();
-
     const { data: user } = await supabase.auth.getUser();
     const ext = file.name.split('.').pop() || 'pdf';
     const filePath = `${candidateId}/${crypto.randomUUID()}.${ext}`;
@@ -64,7 +47,14 @@ export const resumeService = {
         upsert: false,
       });
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      if (uploadError.message?.toLowerCase().includes('bucket') || uploadError.message?.toLowerCase().includes('not found')) {
+        throw new Error(
+          'Resumes bucket not found. Run the database migration (supabase db push) to create it, or create a "resumes" bucket in Supabase Dashboard → Storage.'
+        );
+      }
+      throw uploadError;
+    }
 
     const { data: existing } = await supabase
       .from('candidate_resumes')

@@ -61,14 +61,14 @@ export function UploadResumeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md overflow-hidden">
         <DialogHeader>
           <DialogTitle>Upload Resume</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-hidden">
           <div
             className={cn(
-              'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
+              'border-2 border-dashed rounded-lg p-6 text-center transition-colors min-w-0 overflow-hidden',
               dragOver ? 'border-sky-blue bg-sky-blue/5' : 'border-border',
               file && 'border-sky-blue bg-sky-blue/5'
             )}
@@ -85,10 +85,10 @@ export function UploadResumeDialog({
               onChange={handleFileChange}
             />
             {file ? (
-              <div className="flex items-center justify-center gap-2">
-                <FileText className="w-8 h-8 text-sky-blue" />
-                <div className="text-left">
-                  <p className="font-medium text-foreground">{file.name}</p>
+              <div className="flex items-center justify-center gap-2 min-w-0">
+                <FileText className="w-8 h-8 text-sky-blue flex-shrink-0" />
+                <div className="text-left min-w-0 flex-1">
+                  <p className="font-medium text-foreground truncate block">{file.name}</p>
                   <p className="text-sm text-muted-foreground">
                     {(file.size / 1024).toFixed(1)} KB
                   </p>
@@ -96,7 +96,7 @@ export function UploadResumeDialog({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-8 w-8 flex-shrink-0"
                   onClick={(e) => { e.stopPropagation(); setFile(null); }}
                 >
                   <X className="w-4 h-4" />
