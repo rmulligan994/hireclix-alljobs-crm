@@ -7,7 +7,7 @@ import { AICopilot } from '@/components/dashboard/AICopilot';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, Calendar } from 'lucide-react';
+import { Download, Loader2, BarChart3 } from 'lucide-react';
 import { 
   BarChart, 
   Bar, 
@@ -23,35 +23,36 @@ import {
   Pie,
   Cell
 } from 'recharts';
+import {
+  useSourceStats,
+  useConversionFunnel,
+  useHiringTimeline,
+  getDateRangeFromPreset,
+  type DatePreset,
+} from '@/hooks/useAnalytics';
+
+const DATE_PRESETS: { label: string; value: DatePreset }[] = [
+  { label: 'Last 7 Days', value: '7' },
+  { label: 'Last 30 Days', value: '30' },
+  { label: 'Last 90 Days', value: '90' },
+  { label: 'All Time', value: 'all' },
+];
 
 const Analytics = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [datePreset, setDatePreset] = useState<DatePreset>('30');
 
-  const sourceData = [
-    { name: 'LinkedIn', value: 145, color: '#54A3DA' },
-    { name: 'Referrals', value: 89, color: '#0B3555' },
-    { name: 'Direct', value: 67, color: '#FAA21B' },
-    { name: 'Job Boards', value: 45, color: '#C4C8CC' },
-  ];
+  const dateRange = getDateRangeFromPreset(datePreset);
 
-  const conversionData = [
-    { stage: 'Sourced', count: 346 },
-    { stage: 'Contacted', count: 278 },
-    { stage: 'Engaged', count: 189 },
-    { stage: 'Qualified', count: 123 },
-    { stage: 'Submitted', count: 67 },
-    { stage: 'Hired', count: 34 },
-  ];
+  const { data: sourceData = [], isLoading: sourceLoading } = useSourceStats(dateRange);
+  const { data: conversionData = [], isLoading: conversionLoading } = useConversionFunnel(dateRange);
+  const { data: timelineData = [], isLoading: timelineLoading } = useHiringTimeline(dateRange);
 
-  const timelineData = [
-    { month: 'Jan', candidates: 45, hired: 4 },
-    { month: 'Feb', candidates: 52, hired: 6 },
-    { month: 'Mar', candidates: 48, hired: 5 },
-    { month: 'Apr', candidates: 67, hired: 8 },
-    { month: 'May', candidates: 71, hired: 7 },
-    { month: 'Jun', candidates: 63, hired: 4 },
-  ];
+  const hasSourceData = sourceData.length > 0;
+  const hasConversionData = conversionData.length > 0;
+  const hasTimelineData = timelineData.length > 0;
+  const totalSourceCount = sourceData.reduce((sum, s) => sum + s.value, 0);
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -77,12 +78,25 @@ const Analytics = () => {
                   Track performance metrics and insights
                 </p>
               </div>
-              <div className="flex items-center space-x-3">
-                <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Last 30 Days
-                </Button>
-                <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  {DATE_PRESETS.map((preset) => (
+                    <Button
+                      key={preset.value}
+                      variant="ghost"
+                      size="sm"
+                      className={`rounded-none border-0 ${
+                        datePreset === preset.value
+                          ? 'bg-sky-blue/10 text-sky-blue border-b-2 border-sky-blue'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setDatePreset(preset.value)}
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
+                <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white" disabled>
                   <Download className="w-4 h-4 mr-2" />
                   Export Report
                 </Button>
@@ -105,34 +119,47 @@ const Analytics = () => {
                   <CardTitle>Candidate Pipeline Over Time</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={timelineData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))' 
-                        }} 
-                      />
-                      <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="candidates" 
-                        stroke="#54A3DA" 
-                        strokeWidth={2}
-                        name="New Candidates"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="hired" 
-                        stroke="#FAA21B" 
-                        strokeWidth={2}
-                        name="Hired"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  {timelineLoading ? (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                      <Loader2 className="w-8 h-8 animate-spin mr-2" />
+                      Loading timeline...
+                    </div>
+                  ) : !hasTimelineData ? (
+                    <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                      <BarChart3 className="w-12 h-12 mb-4 opacity-50" />
+                      <p>No timeline data for this period</p>
+                      <p className="text-sm mt-1">Add candidates to see trends over time</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={timelineData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+                        <YAxis stroke="hsl(var(--muted-foreground))" />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))' 
+                          }} 
+                        />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="candidates" 
+                          stroke="#54A3DA" 
+                          strokeWidth={2}
+                          name="New Candidates"
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="hired" 
+                          stroke="#FAA21B" 
+                          strokeWidth={2}
+                          name="Hired"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </CardContent>
               </Card>
 
@@ -143,30 +170,43 @@ const Analytics = () => {
                     <CardTitle>Candidate Sources</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie
-                          data={sourceData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                          outerRadius={100}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {sourceData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))', 
-                            border: '1px solid hsl(var(--border))' 
-                          }} 
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    {sourceLoading ? (
+                      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                        <Loader2 className="w-8 h-8 animate-spin mr-2" />
+                        Loading sources...
+                      </div>
+                    ) : !hasSourceData ? (
+                      <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                        <BarChart3 className="w-12 h-12 mb-4 opacity-50" />
+                        <p>No source data for this period</p>
+                        <p className="text-sm mt-1">Add candidates with a source to see distribution</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={sourceData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {sourceData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))' 
+                            }} 
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -176,20 +216,33 @@ const Analytics = () => {
                     <CardTitle>Pipeline Conversion Funnel</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={conversionData} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
-                        <YAxis dataKey="stage" type="category" stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))', 
-                            border: '1px solid hsl(var(--border))' 
-                          }} 
-                        />
-                        <Bar dataKey="count" fill="#54A3DA" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {conversionLoading ? (
+                      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                        <Loader2 className="w-8 h-8 animate-spin mr-2" />
+                        Loading funnel...
+                      </div>
+                    ) : !hasConversionData ? (
+                      <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                        <BarChart3 className="w-12 h-12 mb-4 opacity-50" />
+                        <p>No pipeline data for this period</p>
+                        <p className="text-sm mt-1">Add candidates to pipelines to see the funnel</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={conversionData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
+                          <YAxis dataKey="stage" type="category" stroke="hsl(var(--muted-foreground))" width={100} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))' 
+                            }} 
+                          />
+                          <Bar dataKey="count" fill="#54A3DA" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -201,28 +254,41 @@ const Analytics = () => {
                   <CardTitle>Source Performance Details</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {sourceData.map((source) => (
-                      <div key={source.name} className="flex items-center justify-between p-4 border border-border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div 
-                            className="w-4 h-4 rounded-full" 
-                            style={{ backgroundColor: source.color }}
-                          />
-                          <div>
-                            <div className="font-medium text-foreground">{source.name}</div>
-                            <div className="text-sm text-muted-foreground">{source.value} candidates</div>
+                  {sourceLoading ? (
+                    <div className="flex items-center justify-center py-12 text-muted-foreground">
+                      <Loader2 className="w-8 h-8 animate-spin mr-2" />
+                      Loading sources...
+                    </div>
+                  ) : !hasSourceData ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <BarChart3 className="w-12 h-12 mb-4 opacity-50" />
+                      <p>No source data for this period</p>
+                      <p className="text-sm mt-1">Add candidates with a source to see performance details</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {sourceData.map((source) => (
+                        <div key={source.name} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <div 
+                              className="w-4 h-4 rounded-full" 
+                              style={{ backgroundColor: source.color }}
+                            />
+                            <div>
+                              <div className="font-medium text-foreground">{source.name}</div>
+                              <div className="text-sm text-muted-foreground">{source.value} candidates</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-semibold text-foreground">
+                              {totalSourceCount > 0 ? ((source.value / totalSourceCount) * 100).toFixed(1) : 0}%
+                            </div>
+                            <div className="text-sm text-muted-foreground">of total</div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-lg font-semibold text-foreground">
-                            {((source.value / sourceData.reduce((a, b) => a + b.value, 0)) * 100).toFixed(1)}%
-                          </div>
-                          <div className="text-sm text-muted-foreground">of total</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

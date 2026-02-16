@@ -13,6 +13,15 @@
 
 export { candidateService } from './candidateService';
 export { pipelineService } from './pipelineService';
+export {
+  getSourceStats,
+  getConversionFunnel,
+  getHiringTimeline,
+  type DateRange,
+  type SourceStat,
+  type ConversionStage,
+  type TimelinePoint,
+} from './analyticsService';
 export { talentPoolService } from './talentPoolService';
 export { userService } from './userService';
 export { communicationService } from './communicationService';
