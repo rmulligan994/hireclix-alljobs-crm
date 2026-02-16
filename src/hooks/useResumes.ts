@@ -2,6 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { resumeService } from '@/services';
 import { toast } from 'sonner';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const msg = (error as { message?: string }).message;
+    if (typeof msg === 'string' && msg) return msg;
+  }
+  if (typeof error === 'string' && error) return error;
+  return fallback;
+}
+
 export function useResumes(candidateId: string) {
   return useQuery({
     queryKey: ['resumes', candidateId],
@@ -19,8 +29,8 @@ export function useUploadResume(candidateId: string) {
       queryClient.invalidateQueries({ queryKey: ['resumes', candidateId] });
       toast.success('Resume uploaded successfully');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to upload: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(`Failed to upload: ${getErrorMessage(error, 'Unknown error')}`);
     },
   });
 }
@@ -34,8 +44,8 @@ export function useSetPrimaryResume(candidateId: string) {
       queryClient.invalidateQueries({ queryKey: ['resumes', candidateId] });
       toast.success('Primary resume updated');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to update: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(`Failed to update: ${getErrorMessage(error, 'Unknown error')}`);
     },
   });
 }
@@ -49,8 +59,8 @@ export function useDeleteResume(candidateId: string) {
       queryClient.invalidateQueries({ queryKey: ['resumes', candidateId] });
       toast.success('Resume deleted');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to delete: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(`Failed to delete: ${getErrorMessage(error, 'Unknown error')}`);
     },
   });
 }

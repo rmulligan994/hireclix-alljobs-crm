@@ -117,10 +117,8 @@ const CandidateProfile = ({ id }: { id: string }) => {
 
   const handleViewResume = async (resumeId: string) => {
     try {
-      const blob = await resumeService.getFileBlob(resumeId);
-      const url = URL.createObjectURL(blob);
+      const url = await resumeService.getSignedUrl(resumeId);
       window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to open resume');
     }
@@ -136,15 +134,25 @@ const CandidateProfile = ({ id }: { id: string }) => {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to download resume');
+      try {
+        const url = await resumeService.getSignedUrl(resumeId);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.click();
+      } catch {
+        toast.error(e instanceof Error ? e.message : 'Failed to download resume');
+      }
     }
   };
 
   const handlePreviewResume = async (resumeId: string) => {
     try {
       if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-      const blob = await resumeService.getFileBlob(resumeId);
-      setPreviewUrl(URL.createObjectURL(blob));
+      const url = await resumeService.getSignedUrl(resumeId);
+      setPreviewUrl(url);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load preview');
     }

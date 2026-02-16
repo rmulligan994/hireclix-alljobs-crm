@@ -65,7 +65,7 @@ export const resumeService = {
           'Upload denied by storage permissions. Ensure you are signed in and the database migration has been applied (supabase db push).'
         );
       }
-      throw uploadError;
+      throw new Error(uploadError.message || 'Storage upload failed');
     }
 
     const { data: existing } = await supabase
@@ -99,7 +99,7 @@ export const resumeService = {
       .select()
       .single();
 
-    if (insertError) throw insertError;
+    if (insertError) throw new Error(insertError.message || 'Failed to save resume record');
     return mapRowToResume(row);
   },
 
@@ -125,23 +125,17 @@ export const resumeService = {
   },
 
   /**
-   * Get file as blob for download/preview (uses storage.download - more reliable than signed URLs)
+   * Get file as blob for download.
+   * Uses createSignedUrl + fetch (avoids 400 from storage.download on private buckets).
+   * Caller can fall back to opening getSignedUrl() in new tab if fetch fails (e.g. CORS).
    */
   getFileBlob: async (resumeId: string): Promise<Blob> => {
-    const { data: resume, error: fetchError } = await supabase
-      .from('candidate_resumes')
-      .select('file_path')
-      .eq('id', resumeId)
-      .single();
-
-    if (fetchError || !resume) throw new Error('Resume not found');
-
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .download(resume.file_path);
-
-    if (error || !data) throw new Error(error?.message ?? 'Failed to load file');
-    return data;
+    const url = await resumeService.getSignedUrl(resumeId);
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to load file: ${res.status} ${res.statusText}`);
+    }
+    return res.blob();
   },
 
   /**
