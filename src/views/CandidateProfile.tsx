@@ -117,8 +117,10 @@ const CandidateProfile = ({ id }: { id: string }) => {
 
   const handleViewResume = async (resumeId: string) => {
     try {
-      const url = await resumeService.getSignedUrl(resumeId);
+      const blob = await resumeService.getFileBlob(resumeId);
+      const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to open resume');
     }
@@ -126,25 +128,13 @@ const CandidateProfile = ({ id }: { id: string }) => {
 
   const handleDownloadResume = async (resumeId: string, fileName: string) => {
     try {
-      const url = await resumeService.getSignedUrl(resumeId);
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Failed to fetch file');
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(blobUrl);
-      } catch {
-        // Fallback: open in new tab if fetch fails (e.g. CORS)
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.target = '_blank';
-        a.click();
-      }
+      const blob = await resumeService.getFileBlob(resumeId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to download resume');
     }
@@ -152,11 +142,17 @@ const CandidateProfile = ({ id }: { id: string }) => {
 
   const handlePreviewResume = async (resumeId: string) => {
     try {
-      const url = await resumeService.getSignedUrl(resumeId);
-      setPreviewUrl(url);
+      if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+      const blob = await resumeService.getFileBlob(resumeId);
+      setPreviewUrl(URL.createObjectURL(blob));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load preview');
     }
+  };
+
+  const handleClosePreview = () => {
+    if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
   };
 
   const getCommIcon = (type: string) => {
@@ -700,7 +696,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
                       <div className="mt-4 border border-border rounded-lg overflow-hidden">
                         <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border">
                           <span className="text-sm font-medium">Preview</span>
-                          <Button variant="ghost" size="sm" onClick={() => setPreviewUrl(null)}>
+                          <Button variant="ghost" size="sm" onClick={handleClosePreview}>
                             <X className="w-4 h-4" />
                           </Button>
                         </div>

@@ -125,6 +125,26 @@ export const resumeService = {
   },
 
   /**
+   * Get file as blob for download/preview (uses storage.download - more reliable than signed URLs)
+   */
+  getFileBlob: async (resumeId: string): Promise<Blob> => {
+    const { data: resume, error: fetchError } = await supabase
+      .from('candidate_resumes')
+      .select('file_path')
+      .eq('id', resumeId)
+      .single();
+
+    if (fetchError || !resume) throw new Error('Resume not found');
+
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .download(resume.file_path);
+
+    if (error || !data) throw new Error(error?.message ?? 'Failed to load file');
+    return data;
+  },
+
+  /**
    * Set a resume as the primary (display) version
    */
   setPrimary: async (resumeId: string): Promise<void> => {
