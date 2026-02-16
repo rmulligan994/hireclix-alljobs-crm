@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { Download, Loader2, BarChart3, Calendar } from 'lucide-react';
+import { Download, Loader2, BarChart3 } from 'lucide-react';
 import { format } from 'date-fns';
 import { 
   BarChart, 
@@ -131,38 +131,64 @@ const Analytics = () => {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-4 bg-popover" align="start">
                       <div className="space-y-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-foreground">Start date</label>
+                        <div>
+                          <p className="text-sm font-medium text-foreground mb-2">Quick select</p>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { label: 'Last 7 days', days: 7 },
+                              { label: 'Last 30 days', days: 30 },
+                              { label: 'Last 90 days', days: 90 },
+                              { label: 'This month', isMonth: true },
+                            ].map((preset) => (
+                              <Button
+                                key={preset.label}
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => {
+                                  const end = new Date();
+                                  const start = new Date();
+                                  if ('days' in preset) {
+                                    start.setDate(start.getDate() - preset.days);
+                                  } else {
+                                    start.setDate(1);
+                                  }
+                                  setCustomRange(normalizeDateRange({ start, end }));
+                                }}
+                              >
+                                {preset.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground mb-2">Or pick a range</p>
                           <CalendarComponent
-                            mode="single"
-                            selected={customRange.start}
-                            onSelect={(d) =>
-                              d && setCustomRange((prev) => normalizeDateRange({ start: d, end: prev.end }))
-                            }
-                            disabled={(d) => d > customRange.end}
+                            mode="range"
+                            numberOfMonths={2}
+                            selected={{ from: customRange.start, to: customRange.end }}
+                            onSelect={(range) => {
+                              if (range?.from) {
+                                const end = range.to || range.from;
+                                setCustomRange(normalizeDateRange({ start: range.from, end }));
+                              }
+                            }}
                           />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-foreground">End date</label>
-                          <CalendarComponent
-                            mode="single"
-                            selected={customRange.end}
-                            onSelect={(d) =>
-                              d && setCustomRange((prev) => normalizeDateRange({ start: prev.start, end: d }))
-                            }
-                            disabled={(d) => d < customRange.start}
-                          />
+                        <div className="flex justify-between items-center pt-2 border-t border-border">
+                          <span className="text-sm text-muted-foreground">
+                            {format(customRange.start, 'MMM d')} – {format(customRange.end, 'MMM d')}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setDatePreset('custom');
+                              setCustomPopoverOpen(false);
+                            }}
+                          >
+                            Apply
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          className="w-full"
-                          onClick={() => {
-                            setDatePreset('custom');
-                            setCustomPopoverOpen(false);
-                          }}
-                        >
-                          Apply
-                        </Button>
                       </div>
                     </PopoverContent>
                   </Popover>
