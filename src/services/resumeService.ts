@@ -36,7 +36,13 @@ export const resumeService = {
    * Upload a new resume version
    */
   upload: async (candidateId: string, file: File): Promise<CandidateResume> => {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error('You must be signed in to upload resumes. Please refresh the page and try again.');
+    }
+    const user = session.user;
+    // Refresh session if close to expiry so storage RLS has valid JWT
+    await supabase.auth.refreshSession();
     const ext = file.name.split('.').pop() || 'pdf';
     const filePath = `${candidateId}/${crypto.randomUUID()}.${ext}`;
 
@@ -48,9 +54,15 @@ export const resumeService = {
       });
 
     if (uploadError) {
-      if (uploadError.message?.toLowerCase().includes('bucket') || uploadError.message?.toLowerCase().includes('not found')) {
+      const msg = uploadError.message?.toLowerCase() ?? '';
+      if (msg.includes('bucket') || msg.includes('not found')) {
         throw new Error(
           'Resumes bucket not found. Run the database migration (supabase db push) to create it, or create a "resumes" bucket in Supabase Dashboard → Storage.'
+        );
+      }
+      if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy')) {
+        throw new Error(
+          'Upload denied by storage permissions. Ensure you are signed in and the database migration has been applied (supabase db push).'
         );
       }
       throw uploadError;
@@ -65,7 +77,12 @@ export const resumeService = {
       .maybeSingle();
 
     const nextVersion = (existing?.version ?? 0) + 1;
-    const isFirst = nextVersion === 1;
+
+    // Newly uploaded resumes are always primary; clear primary from others first
+    await supabase
+      .from('candidate_resumes')
+      .update({ is_primary: false })
+      .eq('candidate_id', candidateId);
 
     const { data: row, error: insertError } = await supabase
       .from('candidate_resumes')
@@ -76,8 +93,8 @@ export const resumeService = {
         file_size: file.size,
         mime_type: file.type || 'application/pdf',
         version: nextVersion,
-        is_primary: isFirst,
-        uploaded_by: user?.user?.id,
+        is_primary: true,
+        uploaded_by: user?.id,
       })
       .select()
       .single();

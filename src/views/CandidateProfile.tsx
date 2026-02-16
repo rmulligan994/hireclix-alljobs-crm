@@ -51,6 +51,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { UploadResumeDialog } from '@/components/candidates/UploadResumeDialog';
 import { useCandidateWithAssociations } from '@/hooks/useCandidates';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
@@ -58,6 +68,7 @@ import { useNotes, useCreateNote, useCommunications } from '@/hooks/useCommunica
 import { useResumes, useUploadResume, useSetPrimaryResume, useDeleteResume } from '@/hooks/useResumes';
 import { resumeService } from '@/services';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const CandidateProfile = ({ id }: { id: string }) => {
   const router = useRouter();
@@ -70,6 +81,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
   const [logCommOpen, setLogCommOpen] = useState(false);
   const [uploadResumeOpen, setUploadResumeOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [resumeToDelete, setResumeToDelete] = useState<{ id: string; fileName: string } | null>(null);
 
   // Fetch real candidate data
   const { data: candidate, isLoading, error } = useCandidateWithAssociations(id || '');
@@ -107,20 +119,34 @@ const CandidateProfile = ({ id }: { id: string }) => {
     try {
       const url = await resumeService.getSignedUrl(resumeId);
       window.open(url, '_blank');
-    } catch {
-      // toast handled by caller if needed
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to open resume');
     }
   };
 
   const handleDownloadResume = async (resumeId: string, fileName: string) => {
     try {
       const url = await resumeService.getSignedUrl(resumeId);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
-    } catch {
-      // toast handled by caller if needed
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to fetch file');
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // Fallback: open in new tab if fetch fails (e.g. CORS)
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.target = '_blank';
+        a.click();
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to download resume');
     }
   };
 
@@ -128,8 +154,8 @@ const CandidateProfile = ({ id }: { id: string }) => {
     try {
       const url = await resumeService.getSignedUrl(resumeId);
       setPreviewUrl(url);
-    } catch {
-      // toast handled by caller if needed
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load preview');
     }
   };
 
@@ -637,7 +663,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
                               )}
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
-                                onClick={() => deleteResume.mutate(resume.id)}
+                                onClick={() => setResumeToDelete({ id: resume.id, fileName: resume.fileName })}
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
                                 Delete
@@ -859,6 +885,35 @@ const CandidateProfile = ({ id }: { id: string }) => {
         }}
         isUploading={uploadResume.isPending}
       />
+
+      <AlertDialog open={!!resumeToDelete} onOpenChange={(open) => !open && setResumeToDelete(null)}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">Delete resume?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              {resumeToDelete && (
+                <>This will permanently delete &quot;{resumeToDelete.fileName}&quot;. This action cannot be undone.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border text-muted-foreground hover:text-foreground">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (resumeToDelete) {
+                  deleteResume.mutate(resumeToDelete.id);
+                  setResumeToDelete(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
