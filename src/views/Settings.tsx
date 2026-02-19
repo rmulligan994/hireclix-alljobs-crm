@@ -32,6 +32,7 @@ const Settings = () => {
   const [webflowCollectionId, setWebflowCollectionId] = useState('');
   const [webflowApiToken, setWebflowApiToken] = useState(''); // Leave blank to keep current
   const [webflowFieldMapping, setWebflowFieldMapping] = useState('');
+  const [careerSiteBaseUrl, setCareerSiteBaseUrl] = useState('');
 
   const { data: currentUser, isLoading: currentUserLoading } = useCurrentUser();
   const userId = currentUser?.id;
@@ -67,6 +68,7 @@ const Settings = () => {
           ? JSON.stringify(orgSettings.webflow_job_field_mapping, null, 2)
           : ''
       );
+      setCareerSiteBaseUrl(orgSettings.career_site_base_url || '');
       // Don't load token into state (security); user enters new one to update
     }
   }, [orgSettings]);
@@ -121,6 +123,7 @@ const Settings = () => {
         webflow_collection_id: webflowCollectionId || null,
         webflow_api_token: webflowApiToken && webflowApiToken.trim() ? webflowApiToken.trim() : undefined,
         webflow_job_field_mapping: mapping,
+        career_site_base_url: careerSiteBaseUrl.trim() || null,
       });
       toast({ title: 'Career site settings saved' });
     } catch {
@@ -369,6 +372,18 @@ const Settings = () => {
                     </p>
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="careerSiteBaseUrl">Career site base URL (for View link)</Label>
+                    <Input
+                      id="careerSiteBaseUrl"
+                      value={careerSiteBaseUrl}
+                      onChange={(e) => setCareerSiteBaseUrl(e.target.value)}
+                      placeholder="https://careers.example.com"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Base URL for job pages. View button links to: base URL + / + slug (e.g. https://careers.example.com/dishwasher-aubrey-texas).
+                    </p>
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="webflowFieldMapping">Field mapping (optional)</Label>
                     <Textarea
                       id="webflowFieldMapping"
@@ -378,7 +393,7 @@ const Settings = () => {
                       className="font-mono text-sm min-h-[100px]"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Map career site field slugs to standard names. Leave empty to use defaults (name→title, department, location, job-type, description, url, posted-date).
+                      Map career site field slugs to standard names. Use arrays for composite fields: {`{"location": ["city", "state", "country"]}`}. Leave empty to use defaults.
                     </p>
                   </div>
                   <Button

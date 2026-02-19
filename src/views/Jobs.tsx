@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
@@ -13,15 +13,53 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Briefcase, ExternalLink, MapPin, Building2, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Briefcase, ExternalLink, MapPin, Building2, RefreshCw, Search } from 'lucide-react';
 import { useJobs } from '@/hooks/useJobs';
 import type { StandardJob } from '@/config/webflowJobMapping';
+
+function formatLastUpdated(dateStr: string | null): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
 
 const Jobs = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: jobs, isLoading, error } = useJobs();
+  const { data: jobs, isLoading, error, refetch, isFetching } = useJobs();
+
+  const filteredJobs = useMemo(() => {
+    if (!jobs) return [];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return jobs;
+    return jobs.filter((job) => {
+      const titleMatch = job.title?.toLowerCase().includes(q);
+      const reqIdMatch = job.reqId?.toLowerCase().includes(q);
+      return titleMatch || reqIdMatch;
+    });
+  }, [jobs, searchQuery]);
+
+  const latestUpdated = useMemo(() => {
+    if (!jobs?.length) return null;
+    const dates = jobs
+      .map((j) => j.lastUpdated)
+      .filter((d): d is string => !!d)
+      .map((d) => new Date(d).getTime());
+    if (dates.length === 0) return null;
+    return new Date(Math.max(...dates)).toISOString();
+  }, [jobs]);
 
   return (
     <div className="flex h-screen bg-background font-body">
@@ -37,14 +75,21 @@ const Jobs = () => {
         />
 
         <main className="flex-1 p-6 overflow-y-auto">
-          <div className="mb-8">
-            <h1 className="font-heading text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
-              <Briefcase className="w-8 h-8 text-sky-blue" />
-              Jobs
-            </h1>
-            <p className="font-body text-muted-foreground">
-              Open positions from your HireClix career site (read-only)
-            </p>
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="font-heading text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
+                <Briefcase className="w-8 h-8 text-sky-blue" />
+                Jobs
+              </h1>
+              <p className="font-body text-muted-foreground">
+                Open positions from your HireClix career site (read-only)
+              </p>
+            </div>
+            {latestUpdated && (
+              <p className="text-sm text-muted-foreground">
+                Last updated: {formatLastUpdated(latestUpdated)}
+              </p>
+            )}
           </div>
 
           <div className="bg-card rounded-lg border border-border">
@@ -70,22 +115,57 @@ const Jobs = () => {
                 </p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-deep-sea hover:bg-deep-sea">
-                    <TableHead>Title</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Link</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jobs.map((job) => (
-                    <JobRow key={job.id} job={job} />
-                  ))}
-                </TableBody>
-              </Table>
+              <>
+                <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by job title or req ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetch()}
+                    disabled={isFetching}
+                  >
+                    <RefreshCw
+                      className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
+                    />
+                    {isFetching ? 'Refreshing...' : 'Refresh'}
+                  </Button>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-deep-sea hover:bg-deep-sea">
+                      <TableHead>Title</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right">Link</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredJobs.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-center text-muted-foreground py-8"
+                        >
+                          No jobs match your search.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredJobs.map((job) => (
+                        <JobRow key={job.id} job={job} />
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </>
             )}
           </div>
         </main>
@@ -97,10 +177,15 @@ const Jobs = () => {
 };
 
 function JobRow({ job }: { job: StandardJob }) {
+  const viewHref = job.viewUrl || job.url;
+
   return (
     <TableRow className="cursor-default">
       <TableCell>
         <div className="font-medium text-foreground">{job.title}</div>
+        {job.reqId && (
+          <div className="text-xs text-muted-foreground mt-0.5">Req #{job.reqId}</div>
+        )}
         {job.description && (
           <div className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
             {job.description}
@@ -128,14 +213,12 @@ function JobRow({ job }: { job: StandardJob }) {
         )}
       </TableCell>
       <TableCell>
-        <span className="text-muted-foreground">
-          {job.type ?? '—'}
-        </span>
+        <span className="text-muted-foreground">{job.type ?? '—'}</span>
       </TableCell>
       <TableCell className="text-right">
-        {job.url ? (
+        {viewHref ? (
           <a
-            href={job.url}
+            href={viewHref}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-sky-blue hover:underline"

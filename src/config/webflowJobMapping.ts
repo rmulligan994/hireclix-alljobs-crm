@@ -1,6 +1,6 @@
 /**
  * Standard job field names used across the Jobs tab.
- * Webflow CMS collections use custom field names per client - this mapping
+ * CMS collections use custom field names per client - this mapping
  * normalizes them to a consistent schema for display.
  */
 
@@ -12,6 +12,8 @@ export const STANDARD_JOB_FIELDS = [
   'description',
   'url',
   'postedDate',
+  'reqId',
+  'slug',
 ] as const;
 
 export type StandardJobField = (typeof STANDARD_JOB_FIELDS)[number];
@@ -25,11 +27,16 @@ export interface StandardJob {
   description: string | null;
   url: string | null;
   postedDate: string | null;
+  reqId: string | null;
+  slug: string | null;
+  lastUpdated: string | null;
+  /** Career site page URL (base + slug) when career_site_base_url is configured */
+  viewUrl?: string | null;
   /** Raw fieldData for any unmapped fields (read-only display) */
   _raw?: Record<string, unknown>;
 }
 
-/** Default mapping: common Webflow field slugs → standard names */
+/** Default mapping: common CMS field slugs → standard names */
 export const DEFAULT_FIELD_MAPPING: Record<StandardJobField, string> = {
   title: 'name',
   department: 'department',
@@ -38,14 +45,45 @@ export const DEFAULT_FIELD_MAPPING: Record<StandardJobField, string> = {
   description: 'description',
   url: 'url',
   postedDate: 'posted-date',
+  reqId: 'name',
+  slug: 'slug',
 };
 
-export type WebflowFieldMapping = Partial<Record<StandardJobField, string>>;
+/** Mapping supports string (single field) or string[] (composite - joined with ", ") */
+export type WebflowFieldMapping = Partial<
+  Record<StandardJobField, string | string[]>
+>;
+
+function getFieldValue(
+  fieldData: Record<string, unknown>,
+  webflowField: string | string[] | undefined
+): string | null {
+  if (!webflowField) return null;
+  if (Array.isArray(webflowField)) {
+    const parts = webflowField
+      .map((f) => {
+        const val = fieldData[f];
+        if (val == null) return null;
+        if (typeof val === 'object' && val !== null && 'url' in val) {
+          return (val as { url?: string }).url ?? null;
+        }
+        return String(val).trim();
+      })
+      .filter((v): v is string => v != null && v !== '');
+    return parts.length ? parts.join(', ') : null;
+  }
+  const val = fieldData[webflowField];
+  if (val == null) return null;
+  if (typeof val === 'object' && val !== null && 'url' in val) {
+    return (val as { url?: string }).url ?? null;
+  }
+  return String(val);
+}
 
 /**
- * Maps a raw Webflow CMS item to our standard job format.
- * @param item - Raw item from Webflow API (id, fieldData, etc.)
- * @param customMapping - Optional override mapping (Webflow field name → standard field)
+ * Maps a raw CMS item to our standard job format.
+ * @param item - Raw item from API (id, fieldData, etc.)
+ * @param customMapping - Optional override. Supports composite fields: "location": ["city", "state", "country"]
  */
 export function mapWebflowItemToStandardJob(
   item: {
@@ -59,16 +97,8 @@ export function mapWebflowItemToStandardJob(
   const fieldData = item.fieldData ?? {};
   const mapping = { ...DEFAULT_FIELD_MAPPING, ...customMapping };
 
-  const getValue = (standardField: StandardJobField): string | null => {
-    const webflowField = mapping[standardField];
-    if (!webflowField) return null;
-    const val = fieldData[webflowField];
-    if (val == null) return null;
-    if (typeof val === 'object' && val !== null && 'url' in val) {
-      return (val as { url?: string }).url ?? null;
-    }
-    return String(val);
-  };
+  const getValue = (standardField: StandardJobField): string | null =>
+    getFieldValue(fieldData, mapping[standardField]);
 
   return {
     id: item.id,
@@ -79,6 +109,9 @@ export function mapWebflowItemToStandardJob(
     description: getValue('description'),
     url: getValue('url'),
     postedDate: getValue('postedDate'),
+    reqId: getValue('reqId'),
+    slug: getValue('slug') ?? (fieldData.slug as string) ?? null,
+    lastUpdated: item.lastUpdated ?? null,
     _raw: fieldData,
   };
 }

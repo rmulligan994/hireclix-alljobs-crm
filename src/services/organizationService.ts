@@ -10,6 +10,7 @@ export interface OrganizationSettings {
   webflow_collection_id: string | null;
   webflow_api_token: string | null;
   webflow_job_field_mapping: WebflowFieldMapping | null;
+  career_site_base_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +23,7 @@ export interface UpdateOrganizationSettingsInput {
   webflow_collection_id?: string | null;
   webflow_api_token?: string | null;
   webflow_job_field_mapping?: WebflowFieldMapping | null;
+  career_site_base_url?: string | null;
 }
 
 export const organizationService = {
@@ -56,6 +58,7 @@ export const organizationService = {
     if (input.webflow_collection_id !== undefined) updateData.webflow_collection_id = input.webflow_collection_id;
     if (input.webflow_api_token !== undefined) updateData.webflow_api_token = input.webflow_api_token;
     if (input.webflow_job_field_mapping !== undefined) updateData.webflow_job_field_mapping = input.webflow_job_field_mapping;
+    if (input.career_site_base_url !== undefined) updateData.career_site_base_url = input.career_site_base_url;
 
     if (existing) {
       const { data, error } = await supabase

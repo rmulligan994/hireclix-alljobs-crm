@@ -48,7 +48,7 @@ export async function GET(request: Request) {
 
   const { data: orgSettings, error: settingsError } = await supabase
     .from('organization_settings')
-    .select('webflow_collection_id, webflow_api_token, webflow_job_field_mapping')
+    .select('webflow_collection_id, webflow_api_token, webflow_job_field_mapping, career_site_base_url')
     .limit(1)
     .single();
 
@@ -83,9 +83,15 @@ export async function GET(request: Request) {
       | null
       | undefined;
 
-    const jobs = items.map((item) =>
-      mapWebflowItemToStandardJob(item, mapping)
-    );
+    const baseUrl = (orgSettings.career_site_base_url ?? '').trim().replace(/\/+$/, '');
+
+    const jobs = items.map((item) => {
+      const job = mapWebflowItemToStandardJob(item, mapping);
+      if (baseUrl && job.slug) {
+        job.viewUrl = `${baseUrl}/${job.slug}`;
+      }
+      return job;
+    });
 
     return NextResponse.json({ jobs });
   } catch (err) {
