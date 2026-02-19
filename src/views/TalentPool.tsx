@@ -588,7 +588,9 @@ const TalentPool = () => {
               
               <SavedSearchesDropdown
                 savedSearches={savedSearches}
+                recentSearches={recentSearches}
                 onSelect={applySavedSearch}
+                onApplyRecentSearch={(query) => setSearchQuery(query)}
                 onSave={saveSearch}
                 onDelete={deleteSavedSearch}
                 onRename={renameSavedSearch}

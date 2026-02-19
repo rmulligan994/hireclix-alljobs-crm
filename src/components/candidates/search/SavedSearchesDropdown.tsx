@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bookmark, ChevronDown, Pencil, Trash2, Save } from 'lucide-react';
+import { Bookmark, ChevronDown, Pencil, Trash2, Save, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -34,7 +34,9 @@ export interface SavedSearch {
 
 interface SavedSearchesDropdownProps {
   savedSearches: SavedSearch[];
+  recentSearches: string[];
   onSelect: (search: SavedSearch) => void;
+  onApplyRecentSearch: (query: string) => void;
   onSave: (name: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
@@ -43,7 +45,9 @@ interface SavedSearchesDropdownProps {
 
 export const SavedSearchesDropdown = ({
   savedSearches,
+  recentSearches,
   onSelect,
+  onApplyRecentSearch,
   onSave,
   onDelete,
   onRename,
@@ -79,66 +83,78 @@ export const SavedSearchesDropdown = ({
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        {hasActiveFilters && (
-          <Button
-            variant="outline"
-            className="border-sky-blue text-sky-blue hover:bg-sky-blue/10"
-            onClick={() => setSaveDialogOpen(true)}
-          >
-            <Save className="w-4 h-4 mr-2" />
-            Save Search
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" className="border-border text-foreground">
+            <Bookmark className="w-4 h-4 mr-2" />
+            Saved Searches
+            <ChevronDown className="w-4 h-4 ml-2" />
           </Button>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="border-border text-foreground">
-              <Bookmark className="w-4 h-4 mr-2" />
-              Saved Searches
-              <ChevronDown className="w-4 h-4 ml-2" />
-            </Button>
-          </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64 bg-popover border-border">
-          {savedSearches.length === 0 ? (
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64 bg-popover border-border max-h-[320px] overflow-y-auto">
+          {recentSearches.length > 0 && (
+            <>
+              <div className="px-2 py-1.5 text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Clock className="w-3 h-3" />
+                Recent Searches
+              </div>
+              {recentSearches.slice(0, 5).map((query, idx) => (
+                <DropdownMenuItem
+                  key={idx}
+                  className="cursor-pointer truncate"
+                  onClick={() => onApplyRecentSearch(query)}
+                >
+                  <span className="truncate" title={query}>{query}</span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+            </>
+          )}
+          {savedSearches.length > 0 && (
+            <>
+              <div className="px-2 py-1.5 text-xs text-muted-foreground uppercase tracking-wide">
+                Saved
+              </div>
+              {savedSearches.map(search => (
+                <DropdownMenuItem
+                  key={search.id}
+                  className="flex items-center justify-between group cursor-pointer"
+                  onClick={() => onSelect(search)}
+                >
+                  <span className="truncate">{search.name}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={e => {
+                        e.stopPropagation();
+                        openRenameDialog(search);
+                      }}
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-destructive hover:text-destructive"
+                      onClick={e => {
+                        e.stopPropagation();
+                        onDelete(search.id);
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
+          {savedSearches.length === 0 && recentSearches.length === 0 && (
             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
               No saved searches yet
             </div>
-          ) : (
-            savedSearches.map(search => (
-              <DropdownMenuItem
-                key={search.id}
-                className="flex items-center justify-between group cursor-pointer"
-                onClick={() => onSelect(search)}
-              >
-                <span className="truncate">{search.name}</span>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={e => {
-                      e.stopPropagation();
-                      openRenameDialog(search);
-                    }}
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-destructive hover:text-destructive"
-                    onClick={e => {
-                      e.stopPropagation();
-                      onDelete(search.id);
-                    }}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              </DropdownMenuItem>
-            ))
           )}
-          
           {hasActiveFilters && (
             <>
               <DropdownMenuSeparator />
@@ -153,7 +169,6 @@ export const SavedSearchesDropdown = ({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      </div>
 
       {/* Save Dialog */}
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>

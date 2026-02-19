@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileSpreadsheet, FileText, Loader2, Upload, ChevronDown, ChevronUp } from "lucide-react";
+import { FileSpreadsheet, FileText, Loader2, Upload, ChevronDown, ChevronUp, Brain } from "lucide-react";
 import { candidateService, resumeService } from "@/services";
 import { getApiBase } from "@/lib/api";
 import type { CreateCandidateData } from "@/types/Candidate";
@@ -93,6 +93,7 @@ export function ImportCandidatesDialog({
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
   const [previewOpen, setPreviewOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,11 +146,13 @@ export function ImportCandidatesDialog({
     if (parsedRows.length === 0) return;
     setImporting(true);
     setImportResult(null);
+    setImportProgress({ current: 0, total: parsedRows.length });
     let created = 0;
     let skipped = 0;
     const errors: string[] = [];
 
     for (let i = 0; i < parsedRows.length; i++) {
+      setImportProgress({ current: i + 1, total: parsedRows.length });
       const row = parsedRows[i];
       const data: CreateCandidateData = {};
       CANDIDATE_FIELDS.forEach(({ key }) => {
@@ -179,6 +182,7 @@ export function ImportCandidatesDialog({
     }
 
     setImportResult({ created, skipped, errors: errors.slice(0, 10) });
+    setImportProgress(null);
     setImporting(false);
     if (created > 0) onImportComplete?.();
   };
@@ -310,27 +314,27 @@ export function ImportCandidatesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card border-border max-w-2xl h-[85vh] max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="font-heading text-xl text-foreground">Import Candidates</DialogTitle>
           <DialogDescription>
             Import from CSV with field mapping, or upload a resume PDF to extract candidate data.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "csv" | "resume"); resetCsv(); resetResume(); }}>
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "csv" | "resume"); resetCsv(); resetResume(); }} className="flex flex-col min-h-0 flex-1">
+          <TabsList className="grid w-full grid-cols-2 shrink-0">
             <TabsTrigger value="csv" className="flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4" />
               CSV Import
             </TabsTrigger>
             <TabsTrigger value="resume" className="flex items-center gap-2">
-              <FileText className="w-4 h-4" />
+              <Brain className="w-4 h-4 text-sky-blue" />
               Resume reader
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="csv" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
+          <TabsContent value="csv" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden min-h-0 data-[state=inactive]:hidden">
             {!csvFile ? (
               <div
                 onClick={() => csvInputRef.current?.click()}
@@ -441,13 +445,13 @@ export function ImportCandidatesDialog({
                   className="w-full bg-sky-blue hover:bg-sky-blue/90"
                 >
                   {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Import {parsedRows.length} candidates
+                  {importing ? `Importing ${importProgress?.current ?? 0} / ${importProgress?.total ?? parsedRows.length}` : `Import ${parsedRows.length} candidates`}
                 </Button>
               </div>
             )}
           </TabsContent>
 
-          <TabsContent value="resume" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
+          <TabsContent value="resume" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden min-h-0 data-[state=inactive]:hidden">
             {!resumeProfile ? (
               <div
                 onClick={() => !resumeLoading && resumeInputRef.current?.click()}
