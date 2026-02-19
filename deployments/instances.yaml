@@ -12,8 +12,8 @@
 
 instances:
   # Example: Client "Acme Corp"
-  - name: acme-corp
-    project_ref: "your-project-id-here"  # From Supabase Dashboard → Settings → General
+  - name: "hireclix-crm-alljobs"
+    project_ref: "xvkeruwiravjnzikrtkp"  # From Supabase Dashboard → Settings → General
 
   # Uncomment and add more clients:
   # - name: beta-inc

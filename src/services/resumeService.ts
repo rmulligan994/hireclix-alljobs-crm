@@ -4,6 +4,13 @@ import type { CandidateResume } from '@/types/Resume';
 const BUCKET = 'resumes';
 const SIGNED_URL_EXPIRY = 3600; // 1 hour
 
+/** Base URL for API routes (origin + basePath). Works with Webflow basePath. */
+function getApiBase(): string {
+  if (typeof window === 'undefined') return '';
+  const base = process.env.NEXT_PUBLIC_BASE_URL || '';
+  return `${window.location.origin}${base.startsWith('/') ? base : base ? `/${base}` : ''}`;
+}
+
 const mapRowToResume = (row: any): CandidateResume => ({
   id: row.id,
   candidateId: row.candidate_id,
@@ -104,7 +111,8 @@ export const resumeService = {
   },
 
   /**
-   * Get a signed URL for viewing/downloading (Supabase storage - may return 404)
+   * Get a signed URL for viewing/downloading (Supabase storage).
+   * Used as fallback when API route is unavailable (e.g. server-side).
    */
   getSignedUrl: async (resumeId: string, expiresIn = SIGNED_URL_EXPIRY): Promise<string> => {
     const { data: resume, error: fetchError } = await supabase
@@ -125,17 +133,35 @@ export const resumeService = {
   },
 
   /**
-   * Get URL for viewing/downloading. Uses Supabase signed URL (works from any domain, e.g. Webflow).
+   * Get URL for viewing/downloading. Uses the app's API route (avoids CORS issues
+   * when hosted on Webflow) with the session token for auth.
    */
   getResumeUrl: async (resumeId: string): Promise<string> => {
-    return resumeService.getSignedUrl(resumeId);
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.access_token) {
+      throw new Error('You must be signed in to view resumes. Please refresh the page and try again.');
+    }
+    const base = getApiBase();
+    if (!base) {
+      // Fallback to signed URL when base not available (e.g. SSR)
+      return resumeService.getSignedUrl(resumeId);
+    }
+    const token = encodeURIComponent(session.access_token);
+    return `${base}/api/resumes/${resumeId}?token=${token}`;
   },
 
   /**
    * Get file as blob for download.
    */
   getFileBlob: async (resumeId: string): Promise<Blob> => {
-    const url = await resumeService.getResumeUrl(resumeId);
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.access_token) {
+      throw new Error('You must be signed in to download resumes. Please refresh the page and try again.');
+    }
+    const base = getApiBase();
+    const url = base
+      ? `${base}/api/resumes/${resumeId}?token=${encodeURIComponent(session.access_token)}`
+      : await resumeService.getSignedUrl(resumeId);
     const res = await fetch(url);
     if (!res.ok) {
       const text = await res.text();
