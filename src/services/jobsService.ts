@@ -3,6 +3,7 @@ import type { StandardJob } from '@/config/webflowJobMapping';
 
 export interface JobsResponse {
   jobs: StandardJob[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
 }
 
 /** App route segments - when first path segment is one of these, we're at origin (no base path). */
@@ -25,7 +26,7 @@ function getApiBase(): string {
   return `${window.location.origin}${base.startsWith('/') ? base : base ? `/${base}` : ''}`;
 }
 
-export async function fetchJobs(): Promise<StandardJob[]> {
+export async function fetchJobs(page = 1): Promise<JobsResponse> {
   const {
     data: { session },
     error: sessionError,
@@ -35,7 +36,7 @@ export async function fetchJobs(): Promise<StandardJob[]> {
   }
 
   const baseUrl = getApiBase() || window.location.origin;
-  const url = `${baseUrl}/api/jobs`;
+  const url = `${baseUrl}/api/jobs?page=${page}&limit=500`;
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${session.access_token}`,
@@ -51,6 +52,5 @@ export async function fetchJobs(): Promise<StandardJob[]> {
     throw new Error(msg || `Failed to fetch jobs (${res.status})`);
   }
 
-  const data = (await res.json()) as JobsResponse;
-  return data.jobs;
+  return (await res.json()) as JobsResponse;
 }

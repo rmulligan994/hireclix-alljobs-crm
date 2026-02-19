@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import type { Database } from '@/integrations/supabase/types';
-import { fetchWebflowLiveItems } from '@/lib/webflow';
+import { fetchWebflowLiveItemsPage } from '@/lib/webflow';
 import {
   mapWebflowItemToStandardJob,
   type WebflowFieldMapping,
@@ -72,8 +72,14 @@ export async function GET(request: Request) {
     );
   }
 
+  const url = new URL(request.url);
+  const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') ?? '500', 10) || 500));
+
   try {
-    const items = await fetchWebflowLiveItems(collectionId, apiToken, {
+    const { items, total } = await fetchWebflowLiveItemsPage(collectionId, apiToken, {
+      page,
+      limit,
       sortBy: 'lastPublished',
       sortOrder: 'desc',
     });
@@ -96,7 +102,10 @@ export async function GET(request: Request) {
       return job;
     });
 
-    return NextResponse.json({ jobs });
+    return NextResponse.json({
+      jobs,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : 'Failed to fetch jobs from career site';

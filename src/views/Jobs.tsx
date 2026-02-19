@@ -15,7 +15,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Briefcase, ExternalLink, MapPin, Building2, RefreshCw, Search } from 'lucide-react';
+import { Briefcase, ExternalLink, MapPin, Building2, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useJobs } from '@/hooks/useJobs';
 import type { StandardJob } from '@/config/webflowJobMapping';
 
@@ -37,11 +37,14 @@ const Jobs = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
 
-  const { data: jobs, isLoading, error, refetch, isFetching } = useJobs();
+  const { data, isLoading, error, refetch, isFetching } = useJobs(page);
+  const jobs = data?.jobs ?? [];
+  const pagination = data?.pagination;
 
   const filteredJobs = useMemo(() => {
-    if (!jobs) return [];
+    if (!jobs.length) return [];
     const q = searchQuery.trim().toLowerCase();
     if (!q) return jobs;
     return jobs.filter((job) => {
@@ -107,7 +110,7 @@ const Jobs = () => {
                   Configure in Settings → Career Site (collection ID and API token)
                 </p>
               </div>
-            ) : !jobs || jobs.length === 0 ? (
+            ) : data && pagination?.total === 0 ? (
               <div className="p-8 text-center">
                 <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
@@ -120,7 +123,7 @@ const Jobs = () => {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search by job title or req ID..."
+                      placeholder="Search by job title or req ID (current page)"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-9"
@@ -165,6 +168,37 @@ const Jobs = () => {
                     )}
                   </TableBody>
                 </Table>
+                {pagination && pagination.totalPages > 1 && (
+                  <div className="p-4 border-t border-border flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Showing {(pagination.page - 1) * pagination.limit + 1}–
+                      {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={pagination.page <= 1 || isFetching}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground px-2">
+                        Page {pagination.page} of {pagination.totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => p + 1)}
+                        disabled={pagination.page >= pagination.totalPages || isFetching}
+                      >
+                        Next
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

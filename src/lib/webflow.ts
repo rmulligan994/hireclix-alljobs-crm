@@ -34,22 +34,30 @@ export interface ListLiveItemsOptions {
   sortOrder?: 'asc' | 'desc';
 }
 
+const WEBFLOW_MAX_LIMIT = 100;
+
 /**
- * Fetches all live (published) items from a Webflow collection.
- * Handles pagination to retrieve all items.
+ * Fetches a single page of live items. Webflow API returns max 100 per request,
+ * so we batch requests to support larger page sizes (e.g. 500).
  */
-export async function fetchWebflowLiveItems(
+export async function fetchWebflowLiveItemsPage(
   collectionId: string,
   apiToken: string,
-  options: ListLiveItemsOptions = {}
-): Promise<WebflowLiveItem[]> {
-  const allItems: WebflowLiveItem[] = [];
-  let offset = options.offset ?? 0;
-  const limit = Math.min(options.limit ?? 100, 100);
+  options: { page?: number; limit?: number } & ListLiveItemsOptions = {}
+): Promise<{ items: WebflowLiveItem[]; total: number }> {
+  const page = Math.max(1, options.page ?? 1);
+  const limit = Math.min(Math.max(1, options.limit ?? 500), 500);
+  const startOffset = (page - 1) * limit;
 
-  while (true) {
+  const allItems: WebflowLiveItem[] = [];
+  let total = 0;
+  let offset = startOffset;
+  let remaining = limit;
+
+  while (remaining > 0) {
+    const batchLimit = Math.min(remaining, WEBFLOW_MAX_LIMIT);
     const params = new URLSearchParams();
-    params.set('limit', String(limit));
+    params.set('limit', String(batchLimit));
     params.set('offset', String(offset));
     if (options.sortBy) params.set('sortBy', options.sortBy);
     if (options.sortOrder) params.set('sortOrder', options.sortOrder);
@@ -70,12 +78,13 @@ export async function fetchWebflowLiveItems(
     }
 
     const data = (await res.json()) as WebflowListItemsResponse;
+    total = data.pagination.total;
     allItems.push(...data.items);
 
-    const { total } = data.pagination;
-    if (offset + data.items.length >= total) break;
-    offset += limit;
+    if (data.items.length < batchLimit || allItems.length >= limit) break;
+    offset += batchLimit;
+    remaining = limit - allItems.length;
   }
 
-  return allItems;
+  return { items: allItems, total };
 }
