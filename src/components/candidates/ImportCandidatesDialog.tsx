@@ -19,9 +19,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileSpreadsheet, FileText, Loader2, Upload } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { FileSpreadsheet, FileText, Loader2, Upload, ChevronDown, ChevronUp } from "lucide-react";
 import { candidateService } from "@/services/candidateService";
+import { getApiBase } from "@/lib/api";
 import type { CreateCandidateData } from "@/types/Candidate";
 
 const CANDIDATE_FIELDS = [
@@ -78,6 +91,7 @@ export function ImportCandidatesDialog({
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -94,8 +108,6 @@ export function ImportCandidatesDialog({
     top_skills: string[];
   } | null>(null);
   const linkedinInputRef = useRef<HTMLInputElement>(null);
-
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
   const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -183,14 +195,36 @@ export function ImportCandidatesDialog({
     formData.append("file", file);
 
     try {
-      const res = await fetch(`${basePath}/api/linkedin/parse`, {
+      const base = getApiBase();
+      const url = `${base}${base.endsWith("/") ? "" : "/"}api/linkedin/parse`;
+      const res = await fetch(url, {
         method: "POST",
         body: formData,
       });
-      const data = (await res.json()) as { detail?: string; profile?: unknown };
+
+      const contentType = res.headers.get("content-type") || "";
+      let data: { detail?: string; profile?: unknown };
+
+      if (contentType.includes("application/json")) {
+        data = (await res.json()) as { detail?: string; profile?: unknown };
+      } else {
+        const text = await res.text();
+        if (text.startsWith("<") || text.startsWith("<!")) {
+          throw new Error(
+            res.status === 404
+              ? "API route not found. Ensure the app is deployed with the LinkedIn parse route."
+              : `Server error (${res.status}). The PDF may be unsupported or the server failed to process it.`
+          );
+        }
+        try {
+          data = JSON.parse(text) as { detail?: string; profile?: unknown };
+        } catch {
+          throw new Error(text.slice(0, 200) || "Invalid server response");
+        }
+      }
 
       if (!res.ok) {
-        throw new Error(data.detail || "Upload failed");
+        throw new Error(data.detail || `Upload failed (${res.status})`);
       }
 
       const profile = data.profile as {
@@ -306,7 +340,7 @@ export function ImportCandidatesDialog({
                 />
               </div>
             ) : (
-              <div className="space-y-4 flex-1 overflow-hidden flex flex-col min-h-0">
+              <div className="space-y-4 flex-1 overflow-y-auto min-h-0">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-foreground">{csvFile.name} — {parsedRows.length} rows</p>
                   <Button variant="ghost" size="sm" onClick={resetCsv}>Change file</Button>
@@ -341,12 +375,46 @@ export function ImportCandidatesDialog({
                   </div>
                 </div>
 
-                <ScrollArea className="flex-1 min-h-0 border rounded-lg p-2">
-                  <p className="text-xs text-muted-foreground mb-2">Preview (first 5 rows)</p>
-                  <pre className="text-xs overflow-x-auto">
-                    {JSON.stringify(parsedRows.slice(0, 5), null, 2)}
-                  </pre>
-                </ScrollArea>
+                <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full justify-between border-border">
+                      <span className="text-sm font-medium">
+                        Preview data ({Math.min(parsedRows.length, 20)} of {parsedRows.length} rows)
+                      </span>
+                      {previewOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-2 border rounded-lg overflow-auto max-h-[280px]">
+                      <Table className="min-w-full">
+                          <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                              <TableHead className="text-xs font-medium w-10">#</TableHead>
+                              {csvHeaders.map((h) => (
+                                <TableHead key={h} className="text-xs font-medium whitespace-nowrap px-3">
+                                  {h}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {parsedRows.slice(0, 20).map((row, i) => (
+                              <TableRow key={i} className="border-border">
+                                <TableCell className="text-xs text-muted-foreground px-3 py-2">
+                                  {i + 1}
+                                </TableCell>
+                                {csvHeaders.map((h) => (
+                                  <TableCell key={h} className="text-xs max-w-[200px] truncate px-3 py-2" title={row[h]}>
+                                    {row[h] || "—"}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                 {importResult && (
                   <div className="p-3 rounded-lg bg-muted/50 text-sm">
