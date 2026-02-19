@@ -85,13 +85,17 @@ openssl rand -hex 32
 
 [cron-job.org](https://cron-job.org) is a free third-party cron service (15+ years, 500k+ users). Supports HTTPS, custom headers, MFA. **No SLA**—use for non-critical jobs. Free tier: 60 runs/hour.
 
+**Recommended:** Call the Edge Function directly (avoids Next.js serverless):
+
 1. Create account at [cron-job.org](https://cron-job.org)
 2. Create a new cron job:
-   - **URL:** `https://YOUR-APP-URL/api/cron/sync-jobs` (see [App URL](#app-url-webflow-cloud) above)
+   - **URL:** `https://YOUR-PROJECT.supabase.co/functions/v1/sync-jobs` (replace YOUR-PROJECT with your Supabase project ref)
    - **Schedule:** Every 15 minutes
    - **Request method:** POST
-   - **Request headers:** Add `Authorization: Bearer YOUR_CRON_SECRET`
+   - **Request headers:** Add `Authorization: Bearer YOUR_CRON_SECRET` (same value as JOBS_CRON_SECRET in Supabase)
 3. Save. Done.
+
+**Alternative:** Call Next.js API: `https://YOUR-APP-URL/api/cron/sync-jobs` — may work but serverless can terminate before the request reaches the Edge Function.
 
 #### Option B: Supabase Cron (native scheduler)
 
@@ -148,6 +152,20 @@ Wherever your Next.js app runs (Webflow Cloud), add `CRON_SECRET` to the environ
 ### 7. Manual sync
 
 Users can trigger sync via "Sync now" on the Jobs tab or Settings → Career Site. Requires authentication.
+
+### Troubleshooting: Edge Function not invoked
+
+If the cron returns 202 but the Edge Function shows no invocations:
+
+1. **Verify deployment:** `supabase functions deploy sync-jobs`
+2. **Verify secret:** `supabase secrets set JOBS_CRON_SECRET=<your-CRON_SECRET>`
+3. **Test Edge Function directly** (bypasses Next.js):
+   ```
+   POST https://YOUR-PROJECT.supabase.co/functions/v1/sync-jobs
+   Authorization: Bearer YOUR_CRON_SECRET
+   ```
+   If this works, the Edge Function is fine; the issue is the Next.js trigger (serverless may terminate before the request is sent).
+4. **Use direct cron:** Configure cron-job.org or pg_cron to call the Edge Function URL directly (see Option B above) instead of the Next.js API.
 
 ## Observability
 

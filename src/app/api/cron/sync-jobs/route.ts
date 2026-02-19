@@ -32,13 +32,26 @@ export async function POST(request: Request) {
     }
 
     const edgeUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/sync-jobs`;
-    fetch(edgeUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json',
-      },
-    }).catch((err) => console.error('Failed to trigger sync-jobs Edge Function:', err));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      await fetch(edgeUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        console.warn('Edge Function trigger timed out (may still be processing)');
+      } else {
+        console.error('Failed to trigger sync-jobs Edge Function:', err);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     return NextResponse.json({ accepted: true, message: 'Sync started' }, { status: 202 });
   } catch (err) {
