@@ -135,6 +135,53 @@ const Jobs = () => {
             </div>
           </div>
 
+          <div className="mb-4 flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by job title or req ID"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  className="pl-9"
+                />
+              </div>
+              {pagination && pagination.total > 0 && (
+                <p className="text-sm text-muted-foreground whitespace-nowrap">
+                  {(pagination.page - 1) * pagination.limit + 1}–
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total.toLocaleString()}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncNow}
+                  disabled={triggerSync.isPending}
+                >
+                <CloudDownload
+                  className={`w-4 h-4 mr-2 ${triggerSync.isPending ? 'animate-spin' : ''}`}
+                />
+                  {triggerSync.isPending ? 'Syncing...' : 'Sync now'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetch()}
+                  disabled={isFetching}
+                >
+                <RefreshCw
+                  className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
+                />
+                  {isFetching ? 'Refreshing...' : 'Refresh'}
+                </Button>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-card rounded-lg border border-border">
             {isLoading ? (
               <div className="p-8 space-y-4">
@@ -153,53 +200,28 @@ const Jobs = () => {
             ) : data && pagination?.total === 0 ? (
               <div className="p-8 text-center">
                 <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground mb-2">
-                  No open jobs found. Jobs sync from your career site every 15 minutes.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Configure in Settings → Career Site, then use &quot;Sync now&quot; or wait for the next sync.
-                </p>
+                {debouncedSearch ? (
+                  <>
+                    <p className="text-muted-foreground mb-2 font-medium">
+                      No jobs match your search.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Try a different search term or clear the search to see all jobs.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-muted-foreground mb-2">
+                      No open jobs found. Jobs sync from your career site every 15 minutes.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Configure in Settings → Career Site, then use &quot;Sync now&quot; or wait for the next sync.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <>
-                <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by job title or req ID"
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setPage(1);
-                      }}
-                      className="pl-9"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSyncNow}
-                      disabled={triggerSync.isPending}
-                    >
-                      <CloudDownload
-                        className={`w-4 h-4 mr-2 ${triggerSync.isPending ? 'animate-spin' : ''}`}
-                      />
-                      {triggerSync.isPending ? 'Syncing...' : 'Sync now'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => refetch()}
-                      disabled={isFetching}
-                    >
-                      <RefreshCw
-                        className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
-                      />
-                      {isFetching ? 'Refreshing...' : 'Refresh'}
-                    </Button>
-                  </div>
-                </div>
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-deep-sea hover:bg-deep-sea">
@@ -217,7 +239,9 @@ const Jobs = () => {
                           colSpan={5}
                           className="text-center text-muted-foreground py-8"
                         >
-                          {debouncedSearch ? 'No jobs match your search.' : 'No jobs on this page.'}
+                          {debouncedSearch
+                            ? 'No jobs match your search. Try a different term.'
+                            : 'No jobs on this page.'}
                         </TableCell>
                       </TableRow>
                     ) : (
