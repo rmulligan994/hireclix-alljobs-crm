@@ -162,6 +162,7 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
           onOpenChange={setMergeDialogOpen}
           existingCandidate={selectedPair.existing}
           duplicateCandidate={selectedPair.duplicate}
+          redirectOnComplete={false}
           newCandidateData={{
             firstName: selectedPair.duplicate.firstName,
             lastName: selectedPair.duplicate.lastName,

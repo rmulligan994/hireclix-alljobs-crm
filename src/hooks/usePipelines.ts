@@ -123,6 +123,23 @@ export const useDeletePipeline = () => {
   });
 };
 
+export const useAddCandidatesToPipeline = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ pipelineId, candidateIds }: { pipelineId: string; candidateIds: string[] }) =>
+      pipelineService.addCandidates(pipelineId, candidateIds),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      toast.success(`${variables.candidateIds.length} candidate${variables.candidateIds.length !== 1 ? 's' : ''} added to pipeline`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to add candidates: ${error.message}`);
+    },
+  });
+};
+
 export const useAddCandidateToPipeline = () => {
   const queryClient = useQueryClient();
 

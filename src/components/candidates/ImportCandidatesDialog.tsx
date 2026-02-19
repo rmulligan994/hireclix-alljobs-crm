@@ -302,7 +302,7 @@ export function ImportCandidatesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="bg-card border-border max-w-2xl h-[85vh] max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl text-foreground">Import Candidates</DialogTitle>
           <DialogDescription>
@@ -322,7 +322,7 @@ export function ImportCandidatesDialog({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="csv" className="mt-4 flex-1 overflow-hidden flex flex-col min-h-0">
+          <TabsContent value="csv" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
             {!csvFile ? (
               <div
                 onClick={() => csvInputRef.current?.click()}
@@ -439,7 +439,7 @@ export function ImportCandidatesDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="linkedin" className="mt-4 flex-1 overflow-hidden flex flex-col min-h-0">
+          <TabsContent value="linkedin" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
             {!linkedinProfile ? (
               <div
                 onClick={() => !linkedinLoading && linkedinInputRef.current?.click()}
@@ -469,18 +469,27 @@ export function ImportCandidatesDialog({
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="p-4 rounded-lg border border-border bg-background/50">
-                  <h3 className="font-semibold text-foreground">{linkedinProfile.name || "Unknown"}</h3>
-                  {linkedinProfile.title && <p className="text-sm text-sky-blue">{linkedinProfile.title}</p>}
-                  {linkedinProfile.location && <p className="text-xs text-muted-foreground">{linkedinProfile.location}</p>}
-                  {linkedinProfile.contact?.email && <p className="text-xs mt-1">{linkedinProfile.contact.email}</p>}
-                  {linkedinProfile.top_skills?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {linkedinProfile.top_skills.slice(0, 5).map((s, i) => (
-                        <span key={i} className="text-xs bg-sky-blue/20 text-sky-blue px-2 py-0.5 rounded">{s}</span>
-                      ))}
-                    </div>
-                  )}
+                <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+                  <div className="px-3 py-2 bg-muted/50 border-b border-border">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Candidate Preview</span>
+                  </div>
+                  <dl className="divide-y divide-border text-sm">
+                    {[
+                      { label: "First Name", value: (linkedinProfile.name || "").trim().split(/\s+/)[0] || "—" },
+                      { label: "Last Name", value: (linkedinProfile.name || "").trim().split(/\s+/).slice(1).join(" ") || "—" },
+                      { label: "Email", value: linkedinProfile.contact?.email || "—" },
+                      { label: "LinkedIn URL", value: linkedinProfile.contact?.linkedin || "—" },
+                      { label: "Job Title", value: linkedinProfile.title || "—" },
+                      { label: "Location", value: linkedinProfile.location || "—" },
+                      { label: "Source", value: "LinkedIn Import" },
+                      { label: "Tags / Skills", value: linkedinProfile.top_skills?.length ? linkedinProfile.top_skills.join(", ") : "—" },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex gap-3 px-3 py-2">
+                        <dt className="text-muted-foreground w-28 shrink-0">{label}</dt>
+                        <dd className="text-foreground flex-1 break-words">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
                 </div>
                 {linkedinError && <p className="text-sm text-destructive">{linkedinError}</p>}
                 <div className="flex gap-2">

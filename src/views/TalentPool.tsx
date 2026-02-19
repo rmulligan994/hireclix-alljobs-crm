@@ -8,6 +8,8 @@ import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { FindDuplicatesDialog } from '@/components/candidates/FindDuplicatesDialog';
 import { ImportCandidatesDialog } from '@/components/candidates/ImportCandidatesDialog';
+import { BulkAddToPipelineDialog } from '@/components/candidates/BulkAddToPipelineDialog';
+import { BulkAddToTalentPoolDialog } from '@/components/candidates/BulkAddToTalentPoolDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -76,6 +78,8 @@ const TalentPool = () => {
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
   const [findDuplicatesOpen, setFindDuplicatesOpen] = useState(false);
   const [importCandidatesOpen, setImportCandidatesOpen] = useState(false);
+  const [bulkAddToPipelineOpen, setBulkAddToPipelineOpen] = useState(false);
+  const [bulkAddToTalentPoolOpen, setBulkAddToTalentPoolOpen] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
   // Use the candidate search hook
@@ -638,10 +642,20 @@ const TalentPool = () => {
                 {selectedCandidates.length} candidate{selectedCandidates.length !== 1 ? 's' : ''} selected
               </span>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="border-sky-blue text-sky-blue">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-sky-blue text-sky-blue"
+                  onClick={() => setBulkAddToPipelineOpen(true)}
+                >
                   Add to Pipeline
                 </Button>
-                <Button size="sm" variant="outline" className="border-sky-blue text-sky-blue">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-sky-blue text-sky-blue"
+                  onClick={() => setBulkAddToTalentPoolOpen(true)}
+                >
                   Add to Talent Pool
                 </Button>
                 <Button
@@ -669,12 +683,12 @@ const TalentPool = () => {
           {/* Candidates Table */}
           <div className="bg-card rounded-lg border border-border overflow-hidden">
             {isLoading || isSearching ? (
-              <div className="flex items-center justify-center py-12">
+              <div className="flex items-center justify-center min-h-[320px] py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-sky-blue" />
                 <span className="ml-2 text-muted-foreground">Searching...</span>
               </div>
             ) : filteredCandidates.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
+              <div className="flex flex-col items-center justify-center min-h-[320px] py-12">
                 <Users className="w-12 h-12 text-muted-foreground/50 mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-1">No candidates found</h3>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -828,6 +842,20 @@ const TalentPool = () => {
         open={importCandidatesOpen}
         onOpenChange={setImportCandidatesOpen}
         onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['candidates'] })}
+      />
+
+      <BulkAddToPipelineDialog
+        open={bulkAddToPipelineOpen}
+        onOpenChange={setBulkAddToPipelineOpen}
+        candidateIds={selectedCandidates}
+        onComplete={() => setSelectedCandidates([])}
+      />
+
+      <BulkAddToTalentPoolDialog
+        open={bulkAddToTalentPoolOpen}
+        onOpenChange={setBulkAddToTalentPoolOpen}
+        candidateIds={selectedCandidates}
+        onComplete={() => setSelectedCandidates([])}
       />
     </div>
   );

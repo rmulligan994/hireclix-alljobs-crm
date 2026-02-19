@@ -23,6 +23,8 @@ interface MergeCandidateDialogProps {
   existingCandidate: Candidate;
   /** When provided, performs full merge (reassign FKs, delete duplicate). When omitted, just updates existing with new data. */
   duplicateCandidate?: Candidate;
+  /** When false, does not redirect to candidate page after merge (e.g. when merging multiple duplicates in succession). */
+  redirectOnComplete?: boolean;
   newCandidateData: {
     firstName?: string;
     lastName?: string;
@@ -56,6 +58,7 @@ export function MergeCandidateDialog({
   onOpenChange,
   existingCandidate,
   duplicateCandidate,
+  redirectOnComplete = true,
   newCandidateData,
   onMergeComplete,
 }: MergeCandidateDialogProps) {
@@ -114,7 +117,9 @@ export function MergeCandidateDialog({
       }
       onOpenChange(false);
       onMergeComplete?.();
-      router.push(`/candidates/${existingCandidate.id}`);
+      if (redirectOnComplete) {
+        router.push(`/candidates/${existingCandidate.id}`);
+      }
     } catch {
       // Error is handled by the mutation (toast)
     }

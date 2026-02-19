@@ -79,14 +79,25 @@ export const SavedSearchesDropdown = ({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="border-border text-foreground">
-            <Bookmark className="w-4 h-4 mr-2" />
-            Saved Searches
-            <ChevronDown className="w-4 h-4 ml-2" />
+      <div className="flex items-center gap-2">
+        {hasActiveFilters && (
+          <Button
+            variant="outline"
+            className="border-sky-blue text-sky-blue hover:bg-sky-blue/10"
+            onClick={() => setSaveDialogOpen(true)}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Save Search
           </Button>
-        </DropdownMenuTrigger>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="border-border text-foreground">
+              <Bookmark className="w-4 h-4 mr-2" />
+              Saved Searches
+              <ChevronDown className="w-4 h-4 ml-2" />
+            </Button>
+          </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64 bg-popover border-border">
           {savedSearches.length === 0 ? (
             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
@@ -142,6 +153,7 @@ export const SavedSearchesDropdown = ({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
 
       {/* Save Dialog */}
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>

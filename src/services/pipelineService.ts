@@ -194,6 +194,26 @@ export const pipelineService = {
   },
 
   /**
+   * Add multiple candidates to a pipeline (bulk)
+   */
+  addCandidates: async (pipelineId: string, candidateIds: string[]): Promise<void> => {
+    if (candidateIds.length === 0) return;
+    const pipeline = await pipelineService.getById(pipelineId);
+    if (!pipeline) throw new Error('Pipeline not found');
+    const firstStage = pipeline.stages?.[0];
+    const stage = firstStage?.id ?? firstStage?.name ?? '1';
+
+    const rows = candidateIds.map((candidateId) => ({
+      pipeline_id: pipelineId,
+      candidate_id: candidateId,
+      stage,
+    }));
+
+    const { error } = await supabase.from('pipeline_candidates').insert(rows);
+    if (error) throw error;
+  },
+
+  /**
    * Add a candidate to a pipeline
    */
   addCandidate: async (pipelineId: string, candidateId: string, stage: string): Promise<PipelineCandidate> => {
