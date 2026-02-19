@@ -33,7 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FileSpreadsheet, FileText, Loader2, Upload, ChevronDown, ChevronUp } from "lucide-react";
-import { candidateService } from "@/services/candidateService";
+import { candidateService, resumeService } from "@/services";
 import { getApiBase } from "@/lib/api";
 import type { CreateCandidateData } from "@/types/Candidate";
 
@@ -86,7 +86,7 @@ export function ImportCandidatesDialog({
   onOpenChange,
   onImportComplete,
 }: ImportCandidatesDialogProps) {
-  const [activeTab, setActiveTab] = useState<"csv" | "linkedin">("csv");
+  const [activeTab, setActiveTab] = useState<"csv" | "resume">("csv");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
@@ -96,18 +96,22 @@ export function ImportCandidatesDialog({
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  // LinkedIn PDF state
-  const [linkedinFile, setLinkedinFile] = useState<File | null>(null);
-  const [linkedinLoading, setLinkedinLoading] = useState(false);
-  const [linkedinError, setLinkedinError] = useState<string | null>(null);
-  const [linkedinProfile, setLinkedinProfile] = useState<{
-    name: string | null;
+  // Resume reader state
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeProfile, setResumeProfile] = useState<{
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    phone: string | null;
+    company: string | null;
     title: string | null;
     location: string | null;
-    contact: { email: string | null; linkedin: string | null };
-    top_skills: string[];
+    linkedinUrl: string | null;
+    tags: string[];
   } | null>(null);
-  const linkedinInputRef = useRef<HTMLInputElement>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
 
   const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -179,24 +183,24 @@ export function ImportCandidatesDialog({
     if (created > 0) onImportComplete?.();
   };
 
-  const handleLinkedinFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleResumeFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.endsWith(".pdf")) {
-      setLinkedinError("Please select a PDF file");
+      setResumeError("Please select a PDF file");
       return;
     }
-    setLinkedinFile(file);
-    setLinkedinError(null);
-    setLinkedinProfile(null);
-    setLinkedinLoading(true);
+    setResumeFile(file);
+    setResumeError(null);
+    setResumeProfile(null);
+    setResumeLoading(true);
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
       const base = getApiBase();
-      const url = `${base}${base.endsWith("/") ? "" : "/"}api/linkedin/parse`;
+      const url = `${base}${base.endsWith("/") ? "" : "/"}api/resume/parse`;
       const res = await fetch(url, {
         method: "POST",
         body: formData,
@@ -212,7 +216,7 @@ export function ImportCandidatesDialog({
         if (text.startsWith("<") || text.startsWith("<!")) {
           throw new Error(
             res.status === 404
-              ? "API route not found. Ensure the app is deployed with the LinkedIn parse route."
+              ? "API route not found. Ensure the app is deployed with the resume parse route."
               : `Server error (${res.status}). The PDF may be unsupported or the server failed to process it.`
           );
         }
@@ -228,57 +232,61 @@ export function ImportCandidatesDialog({
       }
 
       const profile = data.profile as {
-        name: string | null;
-        title: string | null;
-        location: string | null;
-        contact?: { email?: string | null; linkedin?: string | null };
-        top_skills?: string[];
+        firstName?: string | null;
+        lastName?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        company?: string | null;
+        title?: string | null;
+        location?: string | null;
+        linkedinUrl?: string | null;
+        tags?: string[];
       } | null;
-      setLinkedinProfile(profile ? {
-        name: profile.name ?? null,
+      setResumeProfile(profile ? {
+        firstName: profile.firstName ?? null,
+        lastName: profile.lastName ?? null,
+        email: profile.email ?? null,
+        phone: profile.phone ?? null,
+        company: profile.company ?? null,
         title: profile.title ?? null,
         location: profile.location ?? null,
-        contact: {
-          email: profile.contact?.email ?? null,
-          linkedin: profile.contact?.linkedin ?? null,
-        },
-        top_skills: profile.top_skills ?? [],
+        linkedinUrl: profile.linkedinUrl ?? null,
+        tags: profile.tags ?? [],
       } : null);
     } catch (err) {
-      setLinkedinError(err instanceof Error ? err.message : "Something went wrong");
+      setResumeError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
-      setLinkedinLoading(false);
+      setResumeLoading(false);
     }
   };
 
-  const handleLinkedinAddCandidate = async () => {
-    if (!linkedinProfile) return;
+  const handleResumeAddCandidate = async () => {
+    if (!resumeProfile || !resumeFile) return;
     setImporting(true);
-    setLinkedinError(null);
-
-    const nameParts = (linkedinProfile.name || "").trim().split(/\s+/);
-    const firstName = nameParts[0] || "";
-    const lastName = nameParts.slice(1).join(" ") || "";
+    setResumeError(null);
 
     const data: CreateCandidateData = {
-      firstName: firstName || undefined,
-      lastName: lastName || undefined,
-      email: linkedinProfile.contact?.email || undefined,
-      linkedinUrl: linkedinProfile.contact?.linkedin || undefined,
-      title: linkedinProfile.title || undefined,
-      location: linkedinProfile.location || undefined,
-      tags: linkedinProfile.top_skills?.length ? linkedinProfile.top_skills : undefined,
-      source: "LinkedIn Import",
+      firstName: resumeProfile.firstName || undefined,
+      lastName: resumeProfile.lastName || undefined,
+      email: resumeProfile.email || undefined,
+      phone: resumeProfile.phone || undefined,
+      company: resumeProfile.company || undefined,
+      title: resumeProfile.title || undefined,
+      location: resumeProfile.location || undefined,
+      linkedinUrl: resumeProfile.linkedinUrl || undefined,
+      tags: resumeProfile.tags?.length ? resumeProfile.tags : undefined,
+      source: "Resume Import",
     };
 
     try {
-      await candidateService.create(data);
+      const candidate = await candidateService.create(data);
+      await resumeService.upload(candidate.id, resumeFile);
       onImportComplete?.();
-      setLinkedinProfile(null);
-      setLinkedinFile(null);
-      if (linkedinInputRef.current) linkedinInputRef.current.value = "";
+      setResumeProfile(null);
+      setResumeFile(null);
+      if (resumeInputRef.current) resumeInputRef.current.value = "";
     } catch (err) {
-      setLinkedinError(err instanceof Error ? err.message : "Failed to add candidate");
+      setResumeError(err instanceof Error ? err.message : "Failed to add candidate");
     } finally {
       setImporting(false);
     }
@@ -293,11 +301,11 @@ export function ImportCandidatesDialog({
     if (csvInputRef.current) csvInputRef.current.value = "";
   };
 
-  const resetLinkedin = () => {
-    setLinkedinFile(null);
-    setLinkedinProfile(null);
-    setLinkedinError(null);
-    if (linkedinInputRef.current) linkedinInputRef.current.value = "";
+  const resetResume = () => {
+    setResumeFile(null);
+    setResumeProfile(null);
+    setResumeError(null);
+    if (resumeInputRef.current) resumeInputRef.current.value = "";
   };
 
   return (
@@ -306,19 +314,19 @@ export function ImportCandidatesDialog({
         <DialogHeader>
           <DialogTitle className="font-heading text-xl text-foreground">Import Candidates</DialogTitle>
           <DialogDescription>
-            Import from CSV with field mapping, or upload a LinkedIn profile PDF.
+            Import from CSV with field mapping, or upload a resume PDF to extract candidate data.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "csv" | "linkedin"); resetCsv(); resetLinkedin(); }}>
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "csv" | "resume"); resetCsv(); resetResume(); }}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="csv" className="flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4" />
               CSV Import
             </TabsTrigger>
-            <TabsTrigger value="linkedin" className="flex items-center gap-2">
+            <TabsTrigger value="resume" className="flex items-center gap-2">
               <FileText className="w-4 h-4" />
-              LinkedIn PDF
+              Resume reader
             </TabsTrigger>
           </TabsList>
 
@@ -439,29 +447,29 @@ export function ImportCandidatesDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="linkedin" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
-            {!linkedinProfile ? (
+          <TabsContent value="resume" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
+            {!resumeProfile ? (
               <div
-                onClick={() => !linkedinLoading && linkedinInputRef.current?.click()}
+                onClick={() => !resumeLoading && resumeInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${
-                  linkedinLoading ? "opacity-60 cursor-wait" : "hover:border-sky-blue hover:bg-sky-blue/5"
+                  resumeLoading ? "opacity-60 cursor-wait" : "hover:border-sky-blue hover:bg-sky-blue/5"
                 } border-border`}
               >
-                {linkedinLoading ? (
+                {resumeLoading ? (
                   <>
                     <Loader2 className="w-10 h-10 mx-auto text-sky-blue animate-spin mb-2" />
-                    <p className="text-sm text-muted-foreground">Extracting profile data...</p>
+                    <p className="text-sm text-muted-foreground">Extracting candidate data...</p>
                   </>
                 ) : (
                   <>
                     <FileText className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm font-medium text-foreground">Upload LinkedIn PDF</p>
-                    <p className="text-xs text-muted-foreground mt-1">We&apos;ll extract the profile and add as a candidate</p>
+                    <p className="text-sm font-medium text-foreground">Upload resume PDF</p>
+                    <p className="text-xs text-muted-foreground mt-1">Works with any resume or LinkedIn profile export</p>
                     <input
-                      ref={linkedinInputRef}
+                      ref={resumeInputRef}
                       type="file"
                       accept=".pdf"
-                      onChange={handleLinkedinFileChange}
+                      onChange={handleResumeFileChange}
                       className="hidden"
                     />
                   </>
@@ -475,14 +483,16 @@ export function ImportCandidatesDialog({
                   </div>
                   <dl className="divide-y divide-border text-sm">
                     {[
-                      { label: "First Name", value: (linkedinProfile.name || "").trim().split(/\s+/)[0] || "—" },
-                      { label: "Last Name", value: (linkedinProfile.name || "").trim().split(/\s+/).slice(1).join(" ") || "—" },
-                      { label: "Email", value: linkedinProfile.contact?.email || "—" },
-                      { label: "LinkedIn URL", value: linkedinProfile.contact?.linkedin || "—" },
-                      { label: "Job Title", value: linkedinProfile.title || "—" },
-                      { label: "Location", value: linkedinProfile.location || "—" },
-                      { label: "Source", value: "LinkedIn Import" },
-                      { label: "Tags / Skills", value: linkedinProfile.top_skills?.length ? linkedinProfile.top_skills.join(", ") : "—" },
+                      { label: "First Name", value: resumeProfile.firstName || "—" },
+                      { label: "Last Name", value: resumeProfile.lastName || "—" },
+                      { label: "Email", value: resumeProfile.email || "—" },
+                      { label: "Phone", value: resumeProfile.phone || "—" },
+                      { label: "LinkedIn URL", value: resumeProfile.linkedinUrl || "—" },
+                      { label: "Job Title", value: resumeProfile.title || "—" },
+                      { label: "Company", value: resumeProfile.company || "—" },
+                      { label: "Location", value: resumeProfile.location || "—" },
+                      { label: "Source", value: "Resume Import" },
+                      { label: "Tags / Skills", value: resumeProfile.tags?.length ? resumeProfile.tags.join(", ") : "—" },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex gap-3 px-3 py-2">
                         <dt className="text-muted-foreground w-28 shrink-0">{label}</dt>
@@ -491,17 +501,17 @@ export function ImportCandidatesDialog({
                     ))}
                   </dl>
                 </div>
-                {linkedinError && <p className="text-sm text-destructive">{linkedinError}</p>}
+                {resumeError && <p className="text-sm text-destructive">{resumeError}</p>}
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={resetLinkedin}>Parse another</Button>
-                  <Button onClick={handleLinkedinAddCandidate} disabled={importing} className="bg-sky-blue hover:bg-sky-blue/90">
+                  <Button variant="outline" onClick={resetResume}>Parse another</Button>
+                  <Button onClick={handleResumeAddCandidate} disabled={importing} className="bg-sky-blue hover:bg-sky-blue/90">
                     {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                     Add to Candidates
                   </Button>
                 </div>
               </div>
             )}
-            {linkedinError && !linkedinProfile && <p className="text-sm text-destructive mt-2">{linkedinError}</p>}
+            {resumeError && !resumeProfile && <p className="text-sm text-destructive mt-2">{resumeError}</p>}
           </TabsContent>
         </Tabs>
       </DialogContent>
