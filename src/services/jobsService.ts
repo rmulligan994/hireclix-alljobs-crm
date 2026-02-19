@@ -5,6 +5,26 @@ export interface JobsResponse {
   jobs: StandardJob[];
 }
 
+/** App route segments - when first path segment is one of these, we're at origin (no base path). */
+const APP_ROUTE_SEGMENTS = new Set([
+  'talent', 'talent-pools', 'pipelines', 'campaigns', 'analytics', 'integrations', 'settings',
+  'candidates', 'dashboard', 'jobs', 'reports',
+]);
+
+/** Base URL for API routes (origin + basePath). Works with base path deployments (e.g. /crm). */
+function getApiBase(): string {
+  if (typeof window === 'undefined') return '';
+  let base = process.env.NEXT_PUBLIC_BASE_URL || '';
+  if (!base && typeof window !== 'undefined') {
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    const first = segments[0];
+    if (first && !APP_ROUTE_SEGMENTS.has(first) && first !== 'api') {
+      base = `/${first}`;
+    }
+  }
+  return `${window.location.origin}${base.startsWith('/') ? base : base ? `/${base}` : ''}`;
+}
+
 export async function fetchJobs(): Promise<StandardJob[]> {
   const {
     data: { session },
@@ -14,10 +34,7 @@ export async function fetchJobs(): Promise<StandardJob[]> {
     throw new Error('You must be signed in to view jobs.');
   }
 
-  const baseUrl =
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_BASE_URL || '';
+  const baseUrl = getApiBase() || window.location.origin;
   const url = `${baseUrl}/api/jobs`;
   const res = await fetch(url, {
     headers: {
