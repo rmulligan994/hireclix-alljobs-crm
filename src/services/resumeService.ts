@@ -4,10 +4,25 @@ import type { CandidateResume } from '@/types/Resume';
 const BUCKET = 'resumes';
 const SIGNED_URL_EXPIRY = 3600; // 1 hour
 
+/** App route segments - when first path segment is one of these, we're at origin (no base path). */
+const APP_ROUTE_SEGMENTS = new Set([
+  'talent', 'talent-pools', 'pipelines', 'campaigns', 'analytics', 'integrations', 'settings',
+  'candidates', 'dashboard', 'jobs', 'reports',
+]);
+
 /** Base URL for API routes (origin + basePath). Works with Webflow basePath. */
 function getApiBase(): string {
   if (typeof window === 'undefined') return '';
-  const base = process.env.NEXT_PUBLIC_BASE_URL || '';
+  let base = process.env.NEXT_PUBLIC_BASE_URL || '';
+  // Fallback: derive base path from current URL (e.g. /crm from .../crm/candidates/123)
+  if (!base && typeof window !== 'undefined') {
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    const first = segments[0];
+    // If first segment is an app route, we're at origin (no base path like /crm)
+    if (first && !APP_ROUTE_SEGMENTS.has(first) && first !== 'api') {
+      base = `/${first}`;
+    }
+  }
   return `${window.location.origin}${base.startsWith('/') ? base : base ? `/${base}` : ''}`;
 }
 
