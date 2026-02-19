@@ -380,7 +380,7 @@ const Settings = () => {
                       placeholder="https://careers.example.com"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Base URL for job pages. View button links to: base URL + / + slug (e.g. https://careers.example.com/dishwasher-aubrey-texas).
+                      Base URL for job pages (include https://). View links to: base URL + / + slug. Example: https://www.careers.example.com/jobs
                     </p>
                   </div>
                   <div className="space-y-2">

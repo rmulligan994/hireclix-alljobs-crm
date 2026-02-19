@@ -83,7 +83,10 @@ export async function GET(request: Request) {
       | null
       | undefined;
 
-    const baseUrl = (orgSettings.career_site_base_url ?? '').trim().replace(/\/+$/, '');
+    let baseUrl = (orgSettings.career_site_base_url ?? '').trim().replace(/\/+$/, '');
+    if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+      baseUrl = `https://${baseUrl}`;
+    }
 
     const jobs = items.map((item) => {
       const job = mapWebflowItemToStandardJob(item, mapping);
