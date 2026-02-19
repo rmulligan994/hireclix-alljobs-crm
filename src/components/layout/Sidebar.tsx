@@ -9,6 +9,7 @@ import {
   BarChart3, 
   Settings, 
   Zap,
+  Briefcase,
   ChevronLeft,
   ChevronRight,
   LogOut
@@ -29,6 +30,7 @@ const navigationItems = [
   { icon: Users, label: 'Candidates', path: '/talent' },
   { icon: FolderKanban, label: 'Talent Pools', path: '/talent-pools' },
   { icon: GitBranch, label: 'Pipelines', path: '/pipelines' },
+  { icon: Briefcase, label: 'Jobs', path: '/jobs' },
   { icon: Mail, label: 'Campaigns', path: '/campaigns' },
   { icon: BarChart3, label: 'Analytics', path: '/analytics' },
   { icon: Zap, label: 'Integrations', path: '/integrations' },

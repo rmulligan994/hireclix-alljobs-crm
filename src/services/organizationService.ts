@@ -1,10 +1,15 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { WebflowFieldMapping } from '@/config/webflowJobMapping';
 
 export interface OrganizationSettings {
   id: string;
   company_name: string | null;
   brand_name: string | null;
   base_url: string | null;
+  webflow_site_id: string | null;
+  webflow_collection_id: string | null;
+  webflow_api_token: string | null;
+  webflow_job_field_mapping: WebflowFieldMapping | null;
   created_at: string;
   updated_at: string;
 }
@@ -13,6 +18,10 @@ export interface UpdateOrganizationSettingsInput {
   company_name?: string | null;
   brand_name?: string | null;
   base_url?: string | null;
+  webflow_site_id?: string | null;
+  webflow_collection_id?: string | null;
+  webflow_api_token?: string | null;
+  webflow_job_field_mapping?: WebflowFieldMapping | null;
 }
 
 export const organizationService = {
@@ -43,6 +52,10 @@ export const organizationService = {
     if (input.company_name !== undefined) updateData.company_name = input.company_name;
     if (input.brand_name !== undefined) updateData.brand_name = input.brand_name;
     if (input.base_url !== undefined) updateData.base_url = input.base_url;
+    if (input.webflow_site_id !== undefined) updateData.webflow_site_id = input.webflow_site_id;
+    if (input.webflow_collection_id !== undefined) updateData.webflow_collection_id = input.webflow_collection_id;
+    if (input.webflow_api_token !== undefined) updateData.webflow_api_token = input.webflow_api_token;
+    if (input.webflow_job_field_mapping !== undefined) updateData.webflow_job_field_mapping = input.webflow_job_field_mapping;
 
     if (existing) {
       const { data, error } = await supabase

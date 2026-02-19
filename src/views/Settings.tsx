@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Save, Plus, Trash2, Copy, GitBranch, Building2 } from 'lucide-react';
+import { Save, Plus, Trash2, Copy, GitBranch, Building2, Briefcase } from 'lucide-react';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
@@ -27,6 +28,10 @@ const Settings = () => {
   const [orgCompany, setOrgCompany] = useState('');
   const [orgBrand, setOrgBrand] = useState('');
   const [orgBaseUrl, setOrgBaseUrl] = useState('');
+  const [webflowSiteId, setWebflowSiteId] = useState('');
+  const [webflowCollectionId, setWebflowCollectionId] = useState('');
+  const [webflowApiToken, setWebflowApiToken] = useState(''); // Leave blank to keep current
+  const [webflowFieldMapping, setWebflowFieldMapping] = useState('');
 
   const { data: currentUser, isLoading: currentUserLoading } = useCurrentUser();
   const userId = currentUser?.id;
@@ -55,6 +60,14 @@ const Settings = () => {
       setOrgCompany(orgSettings.company_name || '');
       setOrgBrand(orgSettings.brand_name || '');
       setOrgBaseUrl(orgSettings.base_url || '');
+      setWebflowSiteId(orgSettings.webflow_site_id || '');
+      setWebflowCollectionId(orgSettings.webflow_collection_id || '');
+      setWebflowFieldMapping(
+        orgSettings.webflow_job_field_mapping
+          ? JSON.stringify(orgSettings.webflow_job_field_mapping, null, 2)
+          : ''
+      );
+      // Don't load token into state (security); user enters new one to update
     }
   }, [orgSettings]);
 
@@ -87,6 +100,29 @@ const Settings = () => {
         base_url: orgBaseUrl || null,
       });
       toast({ title: 'Organization settings saved' });
+    } catch {
+      toast({ title: 'Failed to save', variant: 'destructive' });
+    }
+  };
+
+  const handleSaveWebflowJobs = async () => {
+    try {
+      let mapping: Record<string, string> | null = null;
+      if (webflowFieldMapping.trim()) {
+        try {
+          mapping = JSON.parse(webflowFieldMapping) as Record<string, string>;
+        } catch {
+          toast({ title: 'Invalid field mapping JSON', variant: 'destructive' });
+          return;
+        }
+      }
+      await updateOrgSettings({
+        webflow_site_id: webflowSiteId || null,
+        webflow_collection_id: webflowCollectionId || null,
+        webflow_api_token: webflowApiToken && webflowApiToken.trim() ? webflowApiToken.trim() : undefined,
+        webflow_job_field_mapping: mapping,
+      });
+      toast({ title: 'Webflow Jobs settings saved' });
     } catch {
       toast({ title: 'Failed to save', variant: 'destructive' });
     }
@@ -140,6 +176,7 @@ const Settings = () => {
             <TabsList className="bg-muted">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="organization">Organization</TabsTrigger>
+              <TabsTrigger value="webflow-jobs">Webflow Jobs</TabsTrigger>
               <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
               <TabsTrigger value="templates">Pipeline Templates</TabsTrigger>
@@ -281,7 +318,81 @@ const Settings = () => {
                 </CardContent>
               </Card>
             </TabsContent>
-            
+
+            <TabsContent value="webflow-jobs" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-sky-blue" />
+                    Webflow Jobs Integration
+                  </CardTitle>
+                  <CardDescription>
+                    Connect your Webflow CMS jobs collection for read-only display on the Jobs tab. Requires a Webflow API token with cms:read scope.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="webflowSiteId">Site ID (optional)</Label>
+                    <Input
+                      id="webflowSiteId"
+                      value={webflowSiteId}
+                      onChange={(e) => setWebflowSiteId(e.target.value)}
+                      placeholder="e.g. 580e63fc8c9a982ac9b8b745"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Your Webflow site ID. Optional; only collection ID is required for listing jobs.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webflowCollectionId">Collection ID (required)</Label>
+                    <Input
+                      id="webflowCollectionId"
+                      value={webflowCollectionId}
+                      onChange={(e) => setWebflowCollectionId(e.target.value)}
+                      placeholder="e.g. 580e63fc8c9a982ac9b8b745"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      The CMS collection ID for your jobs. Find it in Webflow Designer → Collections → your jobs collection → Settings.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webflowApiToken">API Token (required)</Label>
+                    <Input
+                      id="webflowApiToken"
+                      type="password"
+                      value={webflowApiToken}
+                      onChange={(e) => setWebflowApiToken(e.target.value)}
+                      placeholder="Leave blank to keep current token"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Create a token at Webflow Account Settings → Integrations → API Access. Needs cms:read scope.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webflowFieldMapping">Field mapping (optional)</Label>
+                    <Textarea
+                      id="webflowFieldMapping"
+                      value={webflowFieldMapping}
+                      onChange={(e) => setWebflowFieldMapping(e.target.value)}
+                      placeholder='{"title": "job-title", "department": "department", "location": "location"}'
+                      className="font-mono text-sm min-h-[100px]"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Map Webflow field slugs to standard names. Leave empty to use defaults (name→title, department, location, job-type, description, url, posted-date).
+                    </p>
+                  </div>
+                  <Button
+                    className="bg-gradient-primary hover:opacity-90"
+                    onClick={handleSaveWebflowJobs}
+                    disabled={isUpdatingOrg}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Webflow Jobs
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="notifications" className="mt-6">
               <Card>
                 <CardHeader>
