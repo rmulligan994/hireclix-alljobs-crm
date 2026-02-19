@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.unsubscribe]
 verify_jwt = false
+
+[functions.sync-jobs]
+verify_jwt = false

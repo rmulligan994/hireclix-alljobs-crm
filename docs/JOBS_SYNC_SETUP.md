@@ -19,9 +19,11 @@ Example: `https://your-site.webflow.io/app/api/cron/sync-jobs`
 
 ## How it works
 
-1. **Cron** runs every 15 min and POSTs to `/api/cron/sync-jobs`
-2. **Sync** fetches all jobs from Webflow Content Delivery API, maps fields, upserts to `jobs` table
+1. **Cron** runs every 15 min and POSTs to the sync endpoint (Next.js API or Edge Function)
+2. **Sync** runs in a Supabase Edge Function (avoids 504 timeout from Webflow/Cloudflare)
 3. **Jobs tab** reads from Supabase (falls back to live API if Supabase fails)
+
+The Next.js API returns 202 immediately and triggers the Edge Function in the background.
 
 ## Setup
 
@@ -43,7 +45,19 @@ supabase db push
 
 **Verify in Supabase Dashboard:** Table Editor → `jobs` and `jobs_sync_logs` exist.
 
-### 2. Environment variables
+### 2. Deploy the sync Edge Function
+
+```bash
+supabase functions deploy sync-jobs
+```
+
+Set the secret (same value as CRON_SECRET):
+
+```bash
+supabase secrets set JOBS_CRON_SECRET=your-cron-secret
+```
+
+### 3. Environment variables
 
 | Variable | Required | Where |
 |----------|----------|-------|
@@ -54,14 +68,14 @@ supabase db push
 
 Add to `.env.local` (local) and your host’s env (Vercel, etc.).
 
-### 3. Set CRON_SECRET
+### 4. Set CRON_SECRET
 
 ```bash
 openssl rand -hex 32
 # Add to env: CRON_SECRET=<output>
 ```
 
-### 4. Configure cron
+### 5. Configure cron
 
 **Vercel:** `vercel.json` already has `*/15 * * * *` → `/api/cron/sync-jobs`. Set `CRON_SECRET` in Vercel env vars. Vercel sends `Authorization: Bearer <CRON_SECRET>` automatically.
 
@@ -81,7 +95,7 @@ openssl rand -hex 32
 
 #### Option B: Supabase Cron (native scheduler)
 
-Supabase has a built-in scheduler via **pg_cron** + **pg_net**. No external service. Runs inside your Supabase project.
+Supabase has a built-in scheduler via **pg_cron** + **pg_net**. Calls the Edge Function directly (no Next.js in path).
 
 1. **Enable extensions** in Supabase Dashboard → SQL Editor:
    ```sql
@@ -92,9 +106,9 @@ Supabase has a built-in scheduler via **pg_cron** + **pg_net**. No external serv
 2. **Store secrets** in Supabase Vault (Dashboard → SQL Editor):
    ```sql
    select vault.create_secret('YOUR_CRON_SECRET', 'jobs_cron_secret');
-   select vault.create_secret('https://YOUR-APP-URL', 'jobs_sync_app_url');
+   select vault.create_secret('https://YOUR-PROJECT.supabase.co', 'supabase_url');
    ```
-   Replace `YOUR_CRON_SECRET` and `YOUR-APP-URL` (see [App URL](#app-url-webflow-cloud) above—include mount path, e.g. `https://your-site.webflow.io/app`).
+   Replace `YOUR_CRON_SECRET` and `YOUR-PROJECT` (your Supabase project ref, e.g. `xvkeruwiravjnzikrtkp`).
 
 3. **Create the cron job** (SQL Editor):
    ```sql
@@ -102,18 +116,18 @@ Supabase has a built-in scheduler via **pg_cron** + **pg_net**. No external serv
    returns void language plpgsql security definer as $$
    declare
      secret text;
-     app_url text;
+     base_url text;
    begin
      select decrypted_secret into secret from vault.decrypted_secrets where name = 'jobs_cron_secret' limit 1;
-     select decrypted_secret into app_url from vault.decrypted_secrets where name = 'jobs_sync_app_url' limit 1;
+     select decrypted_secret into base_url from vault.decrypted_secrets where name = 'supabase_url' limit 1;
      perform net.http_post(
-       url := rtrim(app_url, '/') || '/api/cron/sync-jobs',
+       url := rtrim(base_url, '/') || '/functions/v1/sync-jobs',
        headers := jsonb_build_object(
          'Content-Type', 'application/json',
          'Authorization', 'Bearer ' || secret
        ),
        body := '{}'::jsonb,
-       timeout_milliseconds := 60000
+       timeout_milliseconds := 5000
      );
    end;
    $$;
@@ -127,11 +141,11 @@ Supabase has a built-in scheduler via **pg_cron** + **pg_net**. No external serv
 
 4. **Verify:** Supabase Dashboard → Integrations → Cron. You should see the job and its runs.
 
-### 5. Set CRON_SECRET on Webflow Cloud
+### 6. Set CRON_SECRET on Webflow Cloud
 
-Wherever your Next.js app runs (Webflow Cloud), add `CRON_SECRET` to the environment variables. The cron caller (cron-job.org or Supabase) sends this in the `Authorization: Bearer` header; your `/api/cron/sync-jobs` route validates it.
+Wherever your Next.js app runs (Webflow Cloud), add `CRON_SECRET` to the environment variables. Used when cron calls the Next.js API (Option A). For Option B, pg_cron calls the Edge Function directly with the same secret.
 
-### 6. Manual sync
+### 7. Manual sync
 
 Users can trigger sync via "Sync now" on the Jobs tab or Settings → Career Site. Requires authentication.
 

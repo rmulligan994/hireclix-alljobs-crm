@@ -465,10 +465,12 @@ Jobs sync from the client's career site (Webflow CMS) to Supabase every 15 minut
 | Step | Action |
 |------|--------|
 | 1 | Run `supabase db push` (migrations include `jobs`, `jobs_sync_logs`) |
-| 2 | Generate `CRON_SECRET`: `openssl rand -hex 32` |
-| 3 | Add env vars to Webflow Cloud: `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY` |
-| 4 | Configure Career Site in app: Settings → Career Site (collection ID, API token, base URL) |
-| 5 | Choose cron trigger (see below) |
+| 2 | Deploy Edge Function: `supabase functions deploy sync-jobs` |
+| 3 | Set secret: `supabase secrets set JOBS_CRON_SECRET=<same as CRON_SECRET>` |
+| 4 | Generate `CRON_SECRET`: `openssl rand -hex 32` |
+| 5 | Add env vars to Webflow Cloud: `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY` |
+| 6 | Configure Career Site in app: Settings → Career Site (collection ID, API token, base URL) |
+| 7 | Choose cron trigger (see below) |
 
 ### Cron Trigger Options (Webflow Cloud)
 
