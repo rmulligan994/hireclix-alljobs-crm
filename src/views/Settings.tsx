@@ -431,7 +431,14 @@ const Settings = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => triggerSync.mutate()}
+                      onClick={() =>
+                        triggerSync.mutate(undefined, {
+                          onSuccess: () =>
+                            toast({ title: 'Sync started', description: 'Jobs are syncing in the background.' }),
+                          onError: (err) =>
+                            toast({ title: 'Sync failed', description: err.message, variant: 'destructive' }),
+                        })
+                      }
                       disabled={triggerSync.isPending}
                     >
                       <CloudDownload className={`w-4 h-4 mr-2 ${triggerSync.isPending ? 'animate-spin' : ''}`} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Briefcase, ExternalLink, MapPin, Building2, RefreshCw, Search, ChevronLeft, ChevronRight, CloudDownload, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { useJobs } from '@/hooks/useJobs';
 import { useJobsSyncLogs, useTriggerJobsSync } from '@/hooks/useJobsSync';
+import { useDebounce } from '@/hooks/useDebounce';
+import { useToast } from '@/hooks/use-toast';
 import type { StandardJob } from '@/config/webflowJobMapping';
 
 function formatLastUpdated(dateStr: string | null): string {
@@ -38,25 +40,37 @@ const Jobs = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [syncJustTriggered, setSyncJustTriggered] = useState(false);
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [page, setPage] = useState(1);
 
-  const { data, isLoading, error, refetch, isFetching } = useJobs(page);
-  const { data: syncLogs } = useJobsSyncLogs();
+  const { data, isLoading, error, refetch, isFetching } = useJobs(page, debouncedSearch || undefined);
+  const { data: syncLogs } = useJobsSyncLogs(syncJustTriggered ? 3000 : undefined);
   const triggerSync = useTriggerJobsSync();
+  const { toast } = useToast();
   const jobs = data?.jobs ?? [];
   const pagination = data?.pagination;
   const lastSync = syncLogs?.[0];
 
-  const filteredJobs = useMemo(() => {
-    if (!jobs.length) return [];
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return jobs;
-    return jobs.filter((job) => {
-      const titleMatch = job.title?.toLowerCase().includes(q);
-      const reqIdMatch = job.reqId?.toLowerCase().includes(q);
-      return titleMatch || reqIdMatch;
+  useEffect(() => {
+    if (!syncJustTriggered) return;
+    const t = setTimeout(() => setSyncJustTriggered(false), 30000);
+    return () => clearTimeout(t);
+  }, [syncJustTriggered]);
+
+  const handleSyncNow = () => {
+    triggerSync.mutate(undefined, {
+      onSuccess: () => {
+        setSyncJustTriggered(true);
+        toast({ title: 'Sync started', description: 'Jobs are syncing in the background. Status will update shortly.' });
+      },
+      onError: (err) => {
+        toast({ title: 'Sync failed', description: err.message, variant: 'destructive' });
+      },
     });
-  }, [jobs, searchQuery]);
+  };
+
+  const displayJobs = jobs;
 
   const latestUpdated = useMemo(() => {
     if (!jobs?.length) return null;
@@ -152,9 +166,12 @@ const Jobs = () => {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search by job title or req ID (current page)"
+                      placeholder="Search by job title or req ID"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setPage(1);
+                      }}
                       className="pl-9"
                     />
                   </div>
@@ -162,7 +179,7 @@ const Jobs = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => triggerSync.mutate()}
+                      onClick={handleSyncNow}
                       disabled={triggerSync.isPending}
                     >
                       <CloudDownload
@@ -194,17 +211,17 @@ const Jobs = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredJobs.length === 0 ? (
+                    {displayJobs.length === 0 ? (
                       <TableRow>
                         <TableCell
                           colSpan={5}
                           className="text-center text-muted-foreground py-8"
                         >
-                          No jobs match your search.
+                          {debouncedSearch ? 'No jobs match your search.' : 'No jobs on this page.'}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredJobs.map((job) => (
+                      displayJobs.map((job) => (
                         <JobRow key={job.id} job={job} />
                       ))
                     )}

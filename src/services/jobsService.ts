@@ -42,11 +42,18 @@ function rowToStandardJob(row: JobRow): StandardJob {
   };
 }
 
+/** Escape LIKE special chars for safe ilike pattern */
+function escapeLike(term: string): string {
+  return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 /**
  * Fetches jobs from Supabase (synced table). Used when sync is enabled.
+ * When search is provided, searches across all jobs (title, req_id) in DB.
  */
 export async function fetchJobsFromSupabase(
-  page = 1
+  page = 1,
+  search?: string
 ): Promise<JobsResponse> {
   const {
     data: { session },
@@ -59,11 +66,18 @@ export async function fetchJobsFromSupabase(
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  const { data: rows, error, count } = await supabase
+  let query = supabase
     .from('jobs')
     .select('*', { count: 'exact' })
-    .order('last_updated', { ascending: false, nullsFirst: false })
-    .range(from, to);
+    .order('last_updated', { ascending: false, nullsFirst: false });
+
+  if (search && search.trim()) {
+    const q = escapeLike(search.trim());
+    const pattern = `%${q}%`;
+    query = query.or(`title.ilike.${pattern},req_id.ilike.${pattern}`);
+  }
+
+  const { data: rows, error, count } = await query.range(from, to);
 
   if (error) throw error;
 
@@ -81,47 +95,9 @@ export async function fetchJobsFromSupabase(
   };
 }
 
-import { getApiBase } from '@/lib/api';
-
 /**
- * Fetches jobs from live API (Webflow). Used when sync is disabled or as fallback.
+ * Fetches jobs from Supabase (synced table). Jobs are synced from the career site every 15 minutes.
  */
-export async function fetchJobsFromApi(page = 1): Promise<JobsResponse> {
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
-  if (sessionError || !session) {
-    throw new Error('You must be signed in to view jobs.');
-  }
-
-  const baseUrl = getApiBase() || (typeof window !== 'undefined' ? window.location.origin : '');
-  const url = `${baseUrl}/api/jobs?page=${page}&limit=${PAGE_SIZE}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const msg = body.detail ?? body.error ?? res.statusText;
-    if (res.status === 400 && body.hint) {
-      throw new Error(`${body.error}: ${body.hint}`);
-    }
-    throw new Error(msg || `Failed to fetch jobs (${res.status})`);
-  }
-
-  return (await res.json()) as JobsResponse;
-}
-
-/**
- * Fetches jobs. Uses Supabase (synced) by default; falls back to API if Supabase fails.
- */
-export async function fetchJobs(page = 1): Promise<JobsResponse> {
-  try {
-    return await fetchJobsFromSupabase(page);
-  } catch {
-    return fetchJobsFromApi(page);
-  }
+export async function fetchJobs(page = 1, search?: string): Promise<JobsResponse> {
+  return fetchJobsFromSupabase(page, search);
 }

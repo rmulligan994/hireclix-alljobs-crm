@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchSyncLogs, triggerSync } from '@/services/jobsSyncService';
 
-export function useJobsSyncLogs() {
+export function useJobsSyncLogs(refetchInterval?: number) {
   return useQuery({
     queryKey: ['jobs-sync-logs'],
     queryFn: () => fetchSyncLogs(5),
     staleTime: 1000 * 30, // 30 seconds
+    refetchInterval: refetchInterval ?? false,
   });
 }
 
