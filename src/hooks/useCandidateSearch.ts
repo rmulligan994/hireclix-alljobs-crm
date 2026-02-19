@@ -64,10 +64,22 @@ export const useCandidateSearch = () => {
       const saved = localStorage.getItem(SAVED_SEARCHES_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        setSavedSearches(parsed.map((s: SavedSearch) => ({
-          ...s,
-          createdAt: new Date(s.createdAt)
-        })));
+        setSavedSearches(parsed.map((s: SavedSearch) => {
+          const adv = s.advancedFields;
+          const parsedAdvanced: AdvancedSearchFields | undefined = adv ? {
+            ...adv,
+            dateAddedFrom: adv.dateAddedFrom ? new Date(adv.dateAddedFrom as string) : undefined,
+            dateAddedTo: adv.dateAddedTo ? new Date(adv.dateAddedTo as string) : undefined,
+            lastContactedFrom: adv.lastContactedFrom ? new Date(adv.lastContactedFrom as string) : undefined,
+            lastContactedTo: adv.lastContactedTo ? new Date(adv.lastContactedTo as string) : undefined,
+          } : undefined;
+          return {
+            ...s,
+            createdAt: new Date(s.createdAt),
+            advancedFields: parsedAdvanced,
+            sortOption: s.sortOption,
+          };
+        }));
       }
       
       const recent = localStorage.getItem(RECENT_SEARCHES_KEY);
@@ -140,10 +152,12 @@ export const useCandidateSearch = () => {
       name,
       filters: { ...filters },
       searchQuery,
+      advancedFields: { ...advancedFields },
+      sortOption,
       createdAt: new Date(),
     };
     setSavedSearches(prev => [newSearch, ...prev]);
-  }, [filters, searchQuery]);
+  }, [filters, searchQuery, advancedFields, sortOption]);
 
   // Delete saved search
   const deleteSavedSearch = useCallback((id: string) => {
@@ -159,6 +173,12 @@ export const useCandidateSearch = () => {
   const applySavedSearch = useCallback((search: SavedSearch) => {
     setFilters(search.filters);
     setSearchQuery(search.searchQuery);
+    if (search.advancedFields) {
+      setAdvancedFields(search.advancedFields);
+    }
+    if (search.sortOption) {
+      setSortOption(search.sortOption);
+    }
   }, []);
 
   // Toggle advanced search

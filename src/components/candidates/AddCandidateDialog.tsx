@@ -259,7 +259,7 @@ export function AddCandidateDialog({ open, onOpenChange }: AddCandidateDialogPro
   const handleViewExistingProfile = () => {
     if (duplicateCandidate) {
       onOpenChange(false);
-      router.push(`/talent/${duplicateCandidate.id}`);
+      router.push(`/candidates/${duplicateCandidate.id}`);
     }
   };
 

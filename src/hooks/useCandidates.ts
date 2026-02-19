@@ -112,3 +112,34 @@ export const useFindDuplicates = (email?: string, phone?: string) => {
     enabled: !!(email || phone),
   });
 };
+
+export const useFindAllDuplicates = (enabled = true) => {
+  return useQuery({
+    queryKey: ['candidates', 'all-duplicates'],
+    queryFn: () => candidateService.findAllDuplicates(),
+    enabled,
+  });
+};
+
+export const useMergeCandidates = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      keepId,
+      removeId,
+      mergedData,
+    }: {
+      keepId: string;
+      removeId: string;
+      mergedData: UpdateCandidateData;
+    }) => candidateService.mergeCandidates(keepId, removeId, mergedData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      toast.success('Candidates merged successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to merge candidates: ${error.message}`);
+    },
+  });
+};

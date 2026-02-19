@@ -184,6 +184,130 @@ export const candidateService = {
   },
 
   /**
+   * Merge duplicate candidate into the kept candidate, then delete the duplicate.
+   * Reassigns all related records (pipelines, pools, notes, communications, etc.) to the kept candidate.
+   */
+  mergeCandidates: async (
+    keepId: string,
+    removeId: string,
+    mergedData: UpdateCandidateData
+  ): Promise<void> => {
+    // 1. Reassign pipeline_candidates (handle unique: pipeline_id + candidate_id)
+    const { data: removePipelineRows } = await supabase
+      .from('pipeline_candidates')
+      .select('id, pipeline_id')
+      .eq('candidate_id', removeId);
+
+    for (const row of removePipelineRows || []) {
+      const { data: existing } = await supabase
+        .from('pipeline_candidates')
+        .select('id')
+        .eq('pipeline_id', row.pipeline_id)
+        .eq('candidate_id', keepId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('pipeline_candidates').delete().eq('id', row.id);
+      } else {
+        await supabase.from('pipeline_candidates').update({ candidate_id: keepId }).eq('id', row.id);
+      }
+    }
+
+    // 2. Reassign talent_pool_candidates (handle unique: talent_pool_id + candidate_id)
+    const { data: removePoolRows } = await supabase
+      .from('talent_pool_candidates')
+      .select('id, talent_pool_id')
+      .eq('candidate_id', removeId);
+
+    for (const row of removePoolRows || []) {
+      const { data: existing } = await supabase
+        .from('talent_pool_candidates')
+        .select('id')
+        .eq('talent_pool_id', row.talent_pool_id)
+        .eq('candidate_id', keepId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('talent_pool_candidates').delete().eq('id', row.id);
+      } else {
+        await supabase.from('talent_pool_candidates').update({ candidate_id: keepId }).eq('id', row.id);
+      }
+    }
+
+    // 3. Reassign campaign_recipients (handle unique: campaign_id + candidate_id)
+    const { data: removeCampaignRows } = await supabase
+      .from('campaign_recipients')
+      .select('id, campaign_id')
+      .eq('candidate_id', removeId);
+
+    for (const row of removeCampaignRows || []) {
+      const { data: existing } = await supabase
+        .from('campaign_recipients')
+        .select('id')
+        .eq('campaign_id', row.campaign_id)
+        .eq('candidate_id', keepId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('campaign_recipients').delete().eq('id', row.id);
+      } else {
+        await supabase.from('campaign_recipients').update({ candidate_id: keepId }).eq('id', row.id);
+      }
+    }
+
+    // 4. Reassign communications and notes (no unique on candidate_id)
+    await supabase.from('communications').update({ candidate_id: keepId }).eq('candidate_id', removeId);
+    await supabase.from('notes').update({ candidate_id: keepId }).eq('candidate_id', removeId);
+
+    // 5. Reassign candidate_resumes (handle primary flag - only one primary per candidate)
+    const { data: removeResumes } = await supabase
+      .from('candidate_resumes')
+      .select('id, is_primary')
+      .eq('candidate_id', removeId);
+
+    const { data: keepPrimary } = await supabase
+      .from('candidate_resumes')
+      .select('id')
+      .eq('candidate_id', keepId)
+      .eq('is_primary', true)
+      .maybeSingle();
+
+    for (const row of removeResumes || []) {
+      if (row.is_primary && keepPrimary) {
+        await supabase.from('candidate_resumes').update({ candidate_id: keepId, is_primary: false }).eq('id', row.id);
+      } else {
+        await supabase.from('candidate_resumes').update({ candidate_id: keepId }).eq('id', row.id);
+      }
+    }
+
+    // 6. Update kept candidate with merged data
+    const updateData: Record<string, unknown> = {};
+    if (mergedData.firstName !== undefined) updateData.first_name = mergedData.firstName;
+    if (mergedData.lastName !== undefined) updateData.last_name = mergedData.lastName;
+    if (mergedData.email !== undefined) updateData.email = mergedData.email;
+    if (mergedData.phone !== undefined) updateData.phone = mergedData.phone;
+    if (mergedData.company !== undefined) updateData.company = mergedData.company;
+    if (mergedData.title !== undefined) updateData.title = mergedData.title;
+    if (mergedData.location !== undefined) updateData.location = mergedData.location;
+    if (mergedData.source !== undefined) updateData.source = mergedData.source;
+    if (mergedData.tags !== undefined) updateData.tags = mergedData.tags;
+    if (mergedData.linkedinUrl !== undefined) updateData.linkedin_url = mergedData.linkedinUrl;
+    if (mergedData.avatarUrl !== undefined) updateData.avatar_url = mergedData.avatarUrl;
+
+    if (Object.keys(updateData).length > 0) {
+      const { error: updateError } = await supabase
+        .from('candidates')
+        .update(updateData)
+        .eq('id', keepId);
+      if (updateError) throw updateError;
+    }
+
+    // 7. Delete the duplicate candidate (CASCADE will clean any remaining refs)
+    const { error: deleteError } = await supabase.from('candidates').delete().eq('id', removeId);
+    if (deleteError) throw deleteError;
+  },
+
+  /**
    * Search candidates by query
    */
   search: async (query: string): Promise<Candidate[]> => {
@@ -197,6 +321,58 @@ export const candidateService = {
 
     if (error) throw error;
     return (data || []).map(mapRowToCandidate);
+  },
+
+  /**
+   * Find all duplicate pairs in the database (by email or phone).
+   * Returns groups where multiple candidates share the same email or phone.
+   */
+  findAllDuplicates: async (): Promise<{ candidate: Candidate; duplicates: Candidate[]; matchType: 'email' | 'phone' }[]> => {
+    const { data: candidates, error } = await supabase
+      .from('candidates')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    const all = (candidates || []).map(mapRowToCandidate);
+
+    const results: { candidate: Candidate; duplicates: Candidate[]; matchType: 'email' | 'phone' }[] = [];
+    const seen = new Set<string>();
+
+    const normalizePhone = (p: string | undefined) => (p || '').replace(/\D/g, '');
+    const normalizeEmail = (e: string | undefined) => (e || '').trim().toLowerCase();
+
+    for (let i = 0; i < all.length; i++) {
+      const c = all[i];
+      if (seen.has(c.id)) continue;
+
+      const email = normalizeEmail(c.email);
+      const phone = normalizePhone(c.phone);
+
+      const dups: Candidate[] = [];
+      let matchType: 'email' | 'phone' | null = null;
+
+      for (let j = i + 1; j < all.length; j++) {
+        const other = all[j];
+        if (seen.has(other.id)) continue;
+
+        const isEmailMatch = email && email === normalizeEmail(other.email);
+        const isPhoneMatch = phone && phone.length > 6 && phone === normalizePhone(other.phone);
+
+        if (isEmailMatch || isPhoneMatch) {
+          dups.push(other);
+          seen.add(other.id);
+          if (!matchType) matchType = isEmailMatch ? 'email' : 'phone';
+        }
+      }
+
+      if (dups.length > 0) {
+        seen.add(c.id);
+        results.push({ candidate: c, duplicates: dups, matchType: matchType! });
+      }
+    }
+
+    return results;
   },
 
   /**

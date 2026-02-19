@@ -56,6 +56,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCreateNote } from '@/hooks/useCommunications';
+import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { useTalentPoolWithCandidates, useRemoveCandidateFromPool, useAddCandidatesToPool } from '@/hooks/useTalentPools';
 import { useCandidates } from '@/hooks/useCandidates';
 
@@ -215,7 +216,47 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   };
 
   const handleExport = () => {
-    toast({ title: 'Export started', description: 'Talent pool data is being exported to CSV' });
+    if (!pool?.candidates || !allCandidates) return;
+    const toExport = pool.candidates
+      .map(pc => allCandidates.find(c => c.id === pc.candidateId))
+      .filter((c): c is NonNullable<typeof c> => !!c)
+      .map(c => ({
+        id: c.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        phone: c.phone,
+        company: c.company,
+        title: c.title,
+        location: c.location,
+        source: c.source,
+        tags: c.tags,
+        linkedinUrl: c.linkedinUrl,
+        createdAt: c.createdAt,
+      }));
+    exportCandidatesToCsv(toExport, undefined, `talent-pool-${pool.name.replace(/\s+/g, '-')}-export.csv`);
+  };
+
+  const handleExportSelected = () => {
+    if (!allCandidates || selectedCandidates.length === 0) return;
+    const toExport = selectedCandidates
+      .map(id => allCandidates.find(c => c.id === id))
+      .filter((c): c is NonNullable<typeof c> => !!c)
+      .map(c => ({
+        id: c.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        phone: c.phone,
+        company: c.company,
+        title: c.title,
+        location: c.location,
+        source: c.source,
+        tags: c.tags,
+        linkedinUrl: c.linkedinUrl,
+        createdAt: c.createdAt,
+      }));
+    exportCandidatesToCsv(toExport, undefined, `talent-pool-selected-export.csv`);
   };
 
   const handleDeletePool = () => {
@@ -315,7 +356,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
                 <Trash2 className="w-4 h-4 mr-2" />
                 Remove from Pool
               </Button>
-              <Button size="sm" variant="outline" onClick={handleExport} className="border-border">
+              <Button size="sm" variant="outline" onClick={handleExportSelected} className="border-border">
                 <Download className="w-4 h-4 mr-2" />
                 Export Selected
               </Button>

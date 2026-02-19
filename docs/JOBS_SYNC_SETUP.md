@@ -107,28 +107,29 @@ Supabase has a built-in scheduler via **pg_cron** + **pg_net**. Calls the Edge F
    create extension if not exists pg_net;
    ```
 
-2. **Store secrets** in Supabase Vault (Dashboard → SQL Editor):
+2. **Store the anon key** in Supabase Vault (Dashboard → SQL Editor). Get it from Supabase Dashboard → Settings → API → anon public:
    ```sql
-   select vault.create_secret('YOUR_CRON_SECRET', 'jobs_cron_secret');
-   select vault.create_secret('https://YOUR-PROJECT.supabase.co', 'supabase_url');
+   select vault.create_secret('YOUR_ANON_KEY', 'supabase_anon_key');
    ```
-   Replace `YOUR_CRON_SECRET` and `YOUR-PROJECT` (your Supabase project ref, e.g. `xvkeruwiravjnzikrtkp`).
 
-3. **Create the cron job** (SQL Editor):
+3. **Create the cron job** (SQL Editor). Replace `YOUR-PROJECT` with your Supabase project ref (e.g. `xvkeruwiravjnzikrtkp`):
    ```sql
    create or replace function public.trigger_jobs_sync()
    returns void language plpgsql security definer as $$
    declare
-     secret text;
-     base_url text;
+     anon_key text;
+     edge_url text;
    begin
-     select decrypted_secret into secret from vault.decrypted_secrets where name = 'jobs_cron_secret' limit 1;
-     select decrypted_secret into base_url from vault.decrypted_secrets where name = 'supabase_url' limit 1;
+     select decrypted_secret into anon_key from vault.decrypted_secrets where name = 'supabase_anon_key' limit 1;
+     if anon_key is null then
+       raise exception 'Vault secret supabase_anon_key not found. Run: select vault.create_secret(''YOUR_ANON_KEY'', ''supabase_anon_key'');';
+     end if;
+     edge_url := 'https://YOUR-PROJECT.supabase.co/functions/v1/sync-jobs';
      perform net.http_post(
-       url := rtrim(base_url, '/') || '/functions/v1/sync-jobs',
+       url := edge_url,
        headers := jsonb_build_object(
          'Content-Type', 'application/json',
-         'Authorization', 'Bearer ' || secret
+         'Authorization', 'Bearer ' || anon_key
        ),
        body := '{}'::jsonb,
        timeout_milliseconds := 5000
@@ -152,6 +153,20 @@ Wherever your Next.js app runs (Webflow Cloud), add `CRON_SECRET` to the environ
 ### 7. Manual sync
 
 Users can trigger sync via "Sync now" on the Jobs tab or Settings → Career Site. Requires authentication.
+
+### Troubleshooting: 401 from pg_cron
+
+If pg_cron invocations show 401, the Edge Function now accepts the **anon key** (recommended for pg_cron). Update your Vault and trigger function:
+
+1. Create the anon key secret in Vault:
+   ```sql
+   select vault.create_secret('YOUR_ANON_KEY', 'supabase_anon_key');
+   ```
+   Get `YOUR_ANON_KEY` from Supabase Dashboard → Settings → API → anon public.
+
+2. Update the trigger function to use `supabase_anon_key` instead of `jobs_cron_secret` (see Option B step 3 above).
+
+3. Redeploy: `supabase functions deploy sync-jobs`
 
 ### Troubleshooting: Edge Function not invoked
 

@@ -7,6 +7,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { FindDuplicatesDialog } from '@/components/candidates/FindDuplicatesDialog';
+import { ImportCandidatesDialog } from '@/components/candidates/ImportCandidatesDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,6 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Filter, Download, Upload, Plus, Mail, Phone, MapPin, Users, CalendarPlus, 
   GitBranch, GitMerge, Loader2 
@@ -35,7 +42,9 @@ import {
 } from '@/components/candidates/search';
 import { useCandidateSearch } from '@/hooks/useCandidateSearch';
 import { useCandidatesWithEnrichment, useCandidateStats } from '@/hooks/useCandidates';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
+import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 
 function formatLastContact(date: Date | null): string {
   if (!date) return 'Never';
@@ -50,164 +59,14 @@ function formatLastContact(date: Date | null): string {
   return `${Math.floor(diffDays / 365)} years ago`;
 }
 
-// Mock data for filter options - in production, these would come from the database
-const mockFilterOptions = {
-  skills: [
-    { value: 'React', label: 'React', count: 234 },
-    { value: 'TypeScript', label: 'TypeScript', count: 198 },
-    { value: 'Python', label: 'Python', count: 156 },
-    { value: 'Node.js', label: 'Node.js', count: 189 },
-    { value: 'JavaScript', label: 'JavaScript', count: 312 },
-    { value: 'SQL', label: 'SQL', count: 145 },
-    { value: 'AWS', label: 'AWS', count: 98 },
-    { value: 'Docker', label: 'Docker', count: 87 },
-    { value: 'Kubernetes', label: 'Kubernetes', count: 56 },
-    { value: 'GraphQL', label: 'GraphQL', count: 78 },
-    { value: 'ML', label: 'Machine Learning', count: 67 },
-    { value: 'Agile', label: 'Agile', count: 234 },
-    { value: 'Product Strategy', label: 'Product Strategy', count: 89 },
-    { value: 'Analytics', label: 'Analytics', count: 123 },
-    { value: 'Statistics', label: 'Statistics', count: 45 },
-  ] as FilterOption[],
-  locations: [
-    { value: 'San Francisco, CA', label: 'San Francisco, CA', count: 89 },
-    { value: 'New York, NY', label: 'New York, NY', count: 67 },
-    { value: 'Austin, TX', label: 'Austin, TX', count: 45 },
-    { value: 'Seattle, WA', label: 'Seattle, WA', count: 56 },
-    { value: 'Los Angeles, CA', label: 'Los Angeles, CA', count: 34 },
-    { value: 'Chicago, IL', label: 'Chicago, IL', count: 28 },
-    { value: 'Denver, CO', label: 'Denver, CO', count: 23 },
-    { value: 'Boston, MA', label: 'Boston, MA', count: 31 },
-    { value: 'Remote', label: 'Remote', count: 156 },
-  ] as FilterOption[],
-  pipelines: [
-    { value: 'Senior Frontend Dev - Q1', label: 'Senior Frontend Dev - Q1', count: 137 },
-    { value: 'Backend Engineer - Remote', label: 'Backend Engineer - Remote', count: 153 },
-    { value: 'Product Manager - NYC', label: 'Product Manager - NYC', count: 89 },
-    { value: 'Data Scientist - ML Team', label: 'Data Scientist - ML Team', count: 67 },
-  ] as FilterOption[],
-  pipelineStages: [
-    { value: 'Sourced', label: 'Sourced' },
-    { value: 'Contacted', label: 'Contacted' },
-    { value: 'Engaged', label: 'Engaged' },
-    { value: 'Qualified', label: 'Qualified' },
-    { value: 'Submitted', label: 'Submitted' },
-    { value: 'Hired', label: 'Hired' },
-  ] as FilterOption[],
-  talentPools: [
-    { value: 'Senior Engineers', label: 'Senior Engineers', count: 234 },
-    { value: 'JavaScript Experts', label: 'JavaScript Experts', count: 189 },
-    { value: 'Product Leaders', label: 'Product Leaders', count: 78 },
-    { value: 'Data Scientists', label: 'Data Scientists', count: 56 },
-  ] as FilterOption[],
-  sources: [
-    { value: 'LinkedIn', label: 'LinkedIn', count: 456 },
-    { value: 'Referral', label: 'Referral', count: 234 },
-    { value: 'Career Site', label: 'Career Site', count: 189 },
-    { value: 'Indeed', label: 'Indeed', count: 123 },
-    { value: 'AngelList', label: 'AngelList', count: 67 },
-    { value: 'Direct', label: 'Direct Outreach', count: 178 },
-  ] as FilterOption[],
-  companies: [
-    { value: 'Tech Corp', label: 'Tech Corp', count: 45 },
-    { value: 'Innovation Labs', label: 'Innovation Labs', count: 32 },
-    { value: 'AI Solutions', label: 'AI Solutions', count: 28 },
-    { value: 'DataTech', label: 'DataTech', count: 23 },
-    { value: 'CloudFirst', label: 'CloudFirst', count: 19 },
-    { value: 'StartupXYZ', label: 'StartupXYZ', count: 15 },
-  ] as FilterOption[],
-};
-
-const availableSkills = mockFilterOptions.skills.map(s => s.value);
-
-// Extended mock candidates data
-const mockCandidates = [
-  {
-    id: '1',
-    firstName: 'Sarah',
-    lastName: 'Johnson',
-    email: 'sarah.johnson@email.com',
-    phone: '+1 (555) 123-4567',
-    title: 'Senior Frontend Developer',
-    company: 'Tech Corp',
-    location: 'San Francisco, CA',
-    skills: ['React', 'TypeScript', 'Node.js'],
-    pipelineAssociations: [
-      { id: '1', name: 'Senior Frontend Dev - Q1', stage: 'Qualified' },
-      { id: '2', name: 'Backend Engineer - Remote', stage: 'Contacted' },
-    ],
-    source: 'LinkedIn',
-    lastContact: '2 days ago',
-    createdAt: new Date('2024-01-15'),
-  },
-  {
-    id: '2',
-    firstName: 'Maria',
-    lastName: 'Garcia',
-    email: 'maria.garcia@email.com',
-    phone: '+1 (555) 234-5678',
-    title: 'Product Manager',
-    company: 'Innovation Labs',
-    location: 'New York, NY',
-    skills: ['Agile', 'Product Strategy', 'Analytics'],
-    pipelineAssociations: [
-      { id: '3', name: 'Product Manager - NYC', stage: 'Engaged' },
-    ],
-    source: 'Referral',
-    lastContact: '1 week ago',
-    createdAt: new Date('2024-01-10'),
-  },
-  {
-    id: '3',
-    firstName: 'David',
-    lastName: 'Chen',
-    email: 'david.chen@email.com',
-    phone: '+1 (555) 345-6789',
-    title: 'Data Scientist',
-    company: 'AI Solutions',
-    location: 'Austin, TX',
-    skills: ['Python', 'ML', 'Statistics'],
-    pipelineAssociations: [
-      { id: '4', name: 'Data Scientist - ML Team', stage: 'Submitted' },
-      { id: '1', name: 'Senior Frontend Dev - Q1', stage: 'Sourced' },
-      { id: '2', name: 'Backend Engineer - Remote', stage: 'Engaged' },
-    ],
-    source: 'Indeed',
-    lastContact: '3 days ago',
-    createdAt: new Date('2024-01-20'),
-  },
-  {
-    id: '4',
-    firstName: 'Emily',
-    lastName: 'Williams',
-    email: 'emily.w@email.com',
-    phone: '+1 (555) 456-7890',
-    title: 'Full Stack Developer',
-    company: 'CloudFirst',
-    location: 'Seattle, WA',
-    skills: ['React', 'Node.js', 'AWS', 'Docker'],
-    pipelineAssociations: [
-      { id: '2', name: 'Backend Engineer - Remote', stage: 'Qualified' },
-    ],
-    source: 'Career Site',
-    lastContact: '5 days ago',
-    createdAt: new Date('2024-01-18'),
-  },
-  {
-    id: '5',
-    firstName: 'James',
-    lastName: 'Brown',
-    email: 'james.brown@email.com',
-    phone: '+1 (555) 567-8901',
-    title: 'DevOps Engineer',
-    company: 'DataTech',
-    location: 'Denver, CO',
-    skills: ['Kubernetes', 'Docker', 'AWS', 'Python'],
-    pipelineAssociations: [],
-    source: 'AngelList',
-    lastContact: 'Never',
-    createdAt: new Date('2024-01-22'),
-  },
+// Standard pipeline stages for filter (matches common pipeline configs)
+const STANDARD_PIPELINE_STAGES: FilterOption[] = [
+  { value: 'Sourced', label: 'Sourced' },
+  { value: 'Contacted', label: 'Contacted' },
+  { value: 'Engaged', label: 'Engaged' },
+  { value: 'Qualified', label: 'Qualified' },
+  { value: 'Submitted', label: 'Submitted' },
+  { value: 'Hired', label: 'Hired' },
 ];
 
 const TalentPool = () => {
@@ -216,6 +75,7 @@ const TalentPool = () => {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
   const [findDuplicatesOpen, setFindDuplicatesOpen] = useState(false);
+  const [importCandidatesOpen, setImportCandidatesOpen] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
   // Use the candidate search hook
@@ -249,6 +109,7 @@ const TalentPool = () => {
 
   // Candidate list context for navigation
   const { setCandidateList } = useCandidateListContext();
+  const queryClient = useQueryClient();
 
   // Fetch real data from database with pipeline associations and last contact
   const { data: dbCandidates, isLoading } = useCandidatesWithEnrichment();
@@ -278,11 +139,83 @@ const TalentPool = () => {
       skills: c.tags || [],
       pipelineAssociations: c.pipelineAssociations || [],
       source: c.source || '',
+      linkedinUrl: c.linkedinUrl || '',
       lastContact: formatLastContact(c.lastContactAt),
+      lastContactAt: c.lastContactAt,
       createdAt: new Date(c.createdAt),
+      updatedAt: new Date(c.updatedAt),
     }));
 
     let results = [...candidates];
+
+    // Apply advanced search fields
+    if (advancedFields.name) {
+      const nameQuery = advancedFields.name.toLowerCase();
+      results = results.filter(c =>
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(nameQuery)
+      );
+    }
+    if (advancedFields.email) {
+      const emailQuery = advancedFields.email.toLowerCase();
+      results = results.filter(c =>
+        (c.email || '').toLowerCase().includes(emailQuery)
+      );
+    }
+    if (advancedFields.phone) {
+      const phoneQuery = advancedFields.phone.replace(/\D/g, '');
+      results = results.filter(c =>
+        (c.phone || '').replace(/\D/g, '').includes(phoneQuery)
+      );
+    }
+    if (advancedFields.company) {
+      const companyQuery = advancedFields.company.toLowerCase();
+      results = results.filter(c =>
+        (c.company || '').toLowerCase().includes(companyQuery)
+      );
+    }
+    if (advancedFields.title) {
+      const titleQuery = advancedFields.title.toLowerCase();
+      results = results.filter(c =>
+        (c.title || '').toLowerCase().includes(titleQuery)
+      );
+    }
+    if (advancedFields.location) {
+      const locationQuery = advancedFields.location.toLowerCase();
+      results = results.filter(c =>
+        (c.location || '').toLowerCase().includes(locationQuery)
+      );
+    }
+    if (advancedFields.skills.length > 0) {
+      results = results.filter(c =>
+        advancedFields.skills.every(skill =>
+          c.skills.some(s => s.toLowerCase() === skill.toLowerCase())
+        )
+      );
+    }
+    if (advancedFields.dateAddedFrom) {
+      const from = new Date(advancedFields.dateAddedFrom);
+      from.setHours(0, 0, 0, 0);
+      results = results.filter(c => c.createdAt >= from);
+    }
+    if (advancedFields.dateAddedTo) {
+      const to = new Date(advancedFields.dateAddedTo);
+      to.setHours(23, 59, 59, 999);
+      results = results.filter(c => c.createdAt <= to);
+    }
+    if (advancedFields.lastContactedFrom) {
+      const from = new Date(advancedFields.lastContactedFrom);
+      from.setHours(0, 0, 0, 0);
+      results = results.filter(c =>
+        c.lastContactAt ? new Date(c.lastContactAt) >= from : false
+      );
+    }
+    if (advancedFields.lastContactedTo) {
+      const to = new Date(advancedFields.lastContactedTo);
+      to.setHours(23, 59, 59, 999);
+      results = results.filter(c =>
+        c.lastContactAt ? new Date(c.lastContactAt) <= to : false
+      );
+    }
 
     // Apply text search
     if (debouncedSearchQuery) {
@@ -358,12 +291,29 @@ const TalentPool = () => {
       case 'oldest_first':
         results.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         break;
+      case 'last_contacted_recent':
+        results.sort((a, b) => {
+          const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
+          const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
+          return bTime - aTime;
+        });
+        break;
+      case 'last_contacted_oldest':
+        results.sort((a, b) => {
+          const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
+          const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
+          return aTime - bTime;
+        });
+        break;
+      case 'last_updated':
+        results.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        break;
       default:
         break;
     }
 
     return results;
-  }, [dbCandidates, debouncedSearchQuery, filters, sortOption]);
+  }, [dbCandidates, debouncedSearchQuery, filters, sortOption, advancedFields]);
 
   // Update candidate list context when filtered candidates change
   useEffect(() => {
@@ -404,6 +354,48 @@ const TalentPool = () => {
 
     return suggestions;
   }, [searchQuery, dbCandidates]);
+
+  // Dynamic filter options derived from real candidate data
+  const filterOptions = useMemo(() => {
+    const c = dbCandidates || [];
+    const skillCounts = new Map<string, number>();
+    const locationCounts = new Map<string, number>();
+    const pipelineCounts = new Map<string, number>();
+    const sourceCounts = new Map<string, number>();
+    const companyCounts = new Map<string, number>();
+
+    c.forEach((cand) => {
+      (cand.tags || []).forEach((s) => skillCounts.set(s, (skillCounts.get(s) || 0) + 1));
+      if (cand.location) locationCounts.set(cand.location, (locationCounts.get(cand.location) || 0) + 1);
+      (cand.pipelineAssociations || []).forEach((p) =>
+        pipelineCounts.set(p.name, (pipelineCounts.get(p.name) || 0) + 1)
+      );
+      if (cand.source) sourceCounts.set(cand.source, (sourceCounts.get(cand.source) || 0) + 1);
+      if (cand.company) companyCounts.set(cand.company, (companyCounts.get(cand.company) || 0) + 1);
+    });
+
+    return {
+      skills: Array.from(skillCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: skillCounts.get(value) })),
+      locations: Array.from(locationCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: locationCounts.get(value) })),
+      pipelines: Array.from(pipelineCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: pipelineCounts.get(value) })),
+      pipelineStages: STANDARD_PIPELINE_STAGES,
+      talentPools: [] as FilterOption[],
+      sources: Array.from(sourceCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: sourceCounts.get(value) })),
+      companies: Array.from(companyCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: companyCounts.get(value) })),
+    };
+  }, [dbCandidates]);
+
+  const availableSkills = useMemo(() => filterOptions.skills.map((s) => s.value), [filterOptions.skills]);
 
   const totalCandidates = dbCandidates?.length || 0;
   const snapshotMetrics = [
@@ -490,11 +482,48 @@ const TalentPool = () => {
                   <GitMerge className="w-4 h-4 mr-2" />
                   Find Duplicates
                 </Button>
-                <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export
-                </Button>
-                <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-popover border-border">
+                    <DropdownMenuItem
+                      onClick={() => exportCandidatesToCsv(filteredCandidates)}
+                      className="cursor-pointer"
+                    >
+                      Export visible ({filteredCandidates.length})
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => exportCandidatesToCsv(
+                        (dbCandidates || []).map(c => ({
+                          id: c.id,
+                          firstName: c.firstName,
+                          lastName: c.lastName,
+                          email: c.email,
+                          phone: c.phone,
+                          company: c.company,
+                          title: c.title,
+                          location: c.location,
+                          source: c.source,
+                          tags: c.tags,
+                          linkedinUrl: c.linkedinUrl,
+                          createdAt: c.createdAt,
+                        }))
+                      )}
+                      className="cursor-pointer"
+                    >
+                      Export all ({dbCandidates?.length ?? 0})
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  variant="outline"
+                  className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                  onClick={() => setImportCandidatesOpen(true)}
+                >
                   <Upload className="w-4 h-4 mr-2" />
                   Import
                 </Button>
@@ -573,7 +602,7 @@ const TalentPool = () => {
               isOpen={isAdvancedOpen}
               fields={advancedFields}
               onChange={setAdvancedFields}
-              onSearch={() => {}}
+              onSearch={toggleAdvancedSearch}
               onClear={() => setAdvancedFields({
                 name: '',
                 email: '',
@@ -615,7 +644,14 @@ const TalentPool = () => {
                 <Button size="sm" variant="outline" className="border-sky-blue text-sky-blue">
                   Add to Talent Pool
                 </Button>
-                <Button size="sm" variant="outline" className="border-sky-blue text-sky-blue">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-sky-blue text-sky-blue"
+                  onClick={() => exportCandidatesToCsv(
+                    filteredCandidates.filter(c => selectedCandidates.includes(c.id))
+                  )}
+                >
                   Export Selected
                 </Button>
                 <Button 
@@ -770,7 +806,7 @@ const TalentPool = () => {
         onClose={() => setIsFiltersOpen(false)}
         filters={filters}
         onChange={setFilters}
-        options={mockFilterOptions}
+        options={filterOptions}
       />
 
       <AICopilot 
@@ -786,6 +822,12 @@ const TalentPool = () => {
       <FindDuplicatesDialog
         open={findDuplicatesOpen}
         onOpenChange={setFindDuplicatesOpen}
+      />
+
+      <ImportCandidatesDialog
+        open={importCandidatesOpen}
+        onOpenChange={setImportCandidatesOpen}
+        onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['candidates'] })}
       />
     </div>
   );

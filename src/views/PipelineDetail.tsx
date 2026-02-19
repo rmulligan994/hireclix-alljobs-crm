@@ -50,6 +50,7 @@ import {
 import { usePipelineWithCandidates, useAddCandidateToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
 import { useCandidates } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
+import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { useCreateNote } from '@/hooks/useCommunications';
 import { PipelineStage } from '@/types/Pipeline';
 
@@ -292,7 +293,25 @@ const PipelineDetail = ({ id }: { id: string }) => {
   };
 
   const handleExport = () => {
-    toast({ title: 'Export started', description: 'Pipeline data is being exported to CSV' });
+    if (!pipeline?.candidates || !allCandidates) return;
+    const toExport = pipeline.candidates
+      .map(pc => allCandidates.find(c => c.id === pc.candidateId))
+      .filter((c): c is NonNullable<typeof c> => !!c)
+      .map(c => ({
+        id: c.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        phone: c.phone,
+        company: c.company,
+        title: c.title,
+        location: c.location,
+        source: c.source,
+        tags: c.tags,
+        linkedinUrl: c.linkedinUrl,
+        createdAt: c.createdAt,
+      }));
+    exportCandidatesToCsv(toExport, undefined, `pipeline-${pipeline.name.replace(/\s+/g, '-')}-export.csv`);
   };
 
   const handleArchivePipeline = () => {

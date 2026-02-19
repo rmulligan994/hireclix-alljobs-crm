@@ -118,13 +118,15 @@ async function fetchWebflowAll(
 }
 
 Deno.serve(async (req) => {
-  // Verify caller (cron or Next.js API)
-  const auth = req.headers.get("Authorization")?.replace("Bearer ", "");
+  // Verify caller: pg_cron (anon key), cron-job.org (JOBS_CRON_SECRET), or Next.js API (service role)
+  const auth = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const cronSecret = Deno.env.get("JOBS_CRON_SECRET");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const isValid = cronSecret && auth === cronSecret;
+  const isAnon = anonKey && auth === anonKey;
+  const isCronSecret = cronSecret && auth === cronSecret;
   const isServiceRole = serviceKey && auth === serviceKey;
-  if (!isValid && !isServiceRole) {
+  if (!isAnon && !isCronSecret && !isServiceRole) {
     return new Response(
       JSON.stringify({ error: "Unauthorized" }),
       { status: 401, headers: { "Content-Type": "application/json" } }

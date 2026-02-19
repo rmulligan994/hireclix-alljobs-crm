@@ -19,12 +19,16 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { CandidateFilters } from './CandidateFiltersPanel';
+import type { AdvancedSearchFields } from './AdvancedSearchPanel';
+import type { SortOption } from './SortDropdown';
 
 export interface SavedSearch {
   id: string;
   name: string;
   filters: CandidateFilters;
   searchQuery: string;
+  advancedFields?: AdvancedSearchFields;
+  sortOption?: SortOption;
   createdAt: Date;
 }
 
@@ -171,7 +175,13 @@ export const SavedSearchesDropdown = ({
       </Dialog>
 
       {/* Rename Dialog */}
-      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+      <Dialog
+        open={renameDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setEditingSearch(null);
+          setRenameDialogOpen(open);
+        }}
+      >
         <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle>Rename Search</DialogTitle>

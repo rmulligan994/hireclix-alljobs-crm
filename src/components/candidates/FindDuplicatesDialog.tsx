@@ -11,19 +11,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { GitMerge, Eye, Mail, Phone, AlertTriangle, CheckCircle } from 'lucide-react';
-import { findAllDuplicates, MockCandidate } from '@/data/mockCandidates';
+import { GitMerge, Eye, Mail, Phone, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { MergeCandidateDialog } from './MergeCandidateDialog';
+import { useFindAllDuplicates } from '@/hooks/useCandidates';
 import type { Candidate } from '@/types';
-
-// Helper to convert MockCandidate to Candidate type for MergeCandidateDialog
-const toCandidate = (mock: MockCandidate): Candidate => ({
-  ...mock,
-  title: mock.jobTitle,
-  tags: mock.tags || [],
-  createdAt: new Date(),
-  updatedAt: new Date(),
-});
 
 interface FindDuplicatesDialogProps {
   open: boolean;
@@ -34,18 +25,18 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
   const router = useRouter();
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [selectedPair, setSelectedPair] = useState<{
-    existing: MockCandidate;
-    duplicate: MockCandidate;
+    existing: Candidate;
+    duplicate: Candidate;
   } | null>(null);
 
-  const duplicates = findAllDuplicates();
+  const { data: duplicates = [], isLoading } = useFindAllDuplicates(open);
 
-  const handleReview = (candidate: MockCandidate) => {
+  const handleReview = (candidate: Candidate) => {
     onOpenChange(false);
-    router.push(`/talent/${candidate.id}`);
+    router.push(`/candidates/${candidate.id}`);
   };
 
-  const handleMerge = (existing: MockCandidate, duplicate: MockCandidate) => {
+  const handleMerge = (existing: Candidate, duplicate: Candidate) => {
     setSelectedPair({ existing, duplicate });
     setMergeDialogOpen(true);
   };
@@ -65,7 +56,12 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
           </DialogHeader>
 
           <div className="space-y-4 mt-4">
-            {duplicates.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-sky-blue" />
+                <span className="ml-2 text-muted-foreground">Checking for duplicates...</span>
+              </div>
+            ) : duplicates.length === 0 ? (
               <div className="text-center py-8">
                 <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
                   <CheckCircle className="w-8 h-8 text-green-500" />
@@ -100,7 +96,7 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
                           <p className="font-medium text-foreground">
                             {candidate.firstName} {candidate.lastName}
                           </p>
-                          <p className="text-sm text-muted-foreground">{candidate.jobTitle}</p>
+                          <p className="text-sm text-muted-foreground">{candidate.title}</p>
                           <p className="text-sm text-muted-foreground">{candidate.company}</p>
                           <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                             <Mail className="w-3 h-3" />
@@ -118,7 +114,7 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
                             <p className="font-medium text-foreground">
                               {dup.firstName} {dup.lastName}
                             </p>
-                            <p className="text-sm text-muted-foreground">{dup.jobTitle}</p>
+                            <p className="text-sm text-muted-foreground">{dup.title}</p>
                             <p className="text-sm text-muted-foreground">{dup.company}</p>
                             <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                               <Mail className="w-3 h-3" />
@@ -164,18 +160,18 @@ export function FindDuplicatesDialog({ open, onOpenChange }: FindDuplicatesDialo
         <MergeCandidateDialog
           open={mergeDialogOpen}
           onOpenChange={setMergeDialogOpen}
-          existingCandidate={toCandidate(selectedPair.existing)}
+          existingCandidate={selectedPair.existing}
+          duplicateCandidate={selectedPair.duplicate}
           newCandidateData={{
             firstName: selectedPair.duplicate.firstName,
             lastName: selectedPair.duplicate.lastName,
             email: selectedPair.duplicate.email,
             phone: selectedPair.duplicate.phone,
             company: selectedPair.duplicate.company,
-            title: selectedPair.duplicate.jobTitle,
+            title: selectedPair.duplicate.title,
             location: selectedPair.duplicate.location,
             source: selectedPair.duplicate.source,
             tags: selectedPair.duplicate.tags,
-            notes: selectedPair.duplicate.notes,
           }}
           onMergeComplete={() => {
             setSelectedPair(null);
