@@ -65,8 +65,8 @@ export async function GET(request: Request) {
   if (!collectionId || !apiToken) {
     return NextResponse.json(
       {
-        error: 'Webflow Jobs not configured',
-        hint: 'Add Webflow collection ID and API token in Settings → Webflow Jobs',
+        error: 'Career site not configured',
+        hint: 'Add collection ID and API token in Settings → Career Site',
       },
       { status: 400 }
     );
@@ -90,9 +90,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ jobs });
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : 'Failed to fetch jobs from Webflow';
+      err instanceof Error ? err.message : 'Failed to fetch jobs from career site';
     return NextResponse.json(
-      { error: 'Webflow API error', detail: message },
+      { error: 'Career site API error', detail: message },
       { status: 502 }
     );
   }

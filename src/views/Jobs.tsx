@@ -43,7 +43,7 @@ const Jobs = () => {
               Jobs
             </h1>
             <p className="font-body text-muted-foreground">
-              Open positions from your Webflow careers site (read-only)
+              Open positions from your HireClix career site (read-only)
             </p>
           </div>
 
@@ -59,14 +59,14 @@ const Jobs = () => {
                   {error instanceof Error ? error.message : 'Failed to load jobs'}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Configure Webflow in Settings → Webflow Jobs (collection ID and API token)
+                  Configure in Settings → Career Site (collection ID and API token)
                 </p>
               </div>
             ) : !jobs || jobs.length === 0 ? (
               <div className="p-8 text-center">
                 <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
-                  No open jobs found. Add jobs to your Webflow CMS collection and publish them.
+                  No open jobs found. Add jobs to your career site CMS collection and publish them.
                 </p>
               </div>
             ) : (

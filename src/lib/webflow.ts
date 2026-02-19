@@ -65,7 +65,7 @@ export async function fetchWebflowLiveItems(
     if (!res.ok) {
       const errBody = await res.text();
       throw new Error(
-        `Webflow API error ${res.status}: ${errBody || res.statusText}`
+        `Career site API error ${res.status}: ${errBody || res.statusText}`
       );
     }
 

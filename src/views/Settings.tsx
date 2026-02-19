@@ -122,7 +122,7 @@ const Settings = () => {
         webflow_api_token: webflowApiToken && webflowApiToken.trim() ? webflowApiToken.trim() : undefined,
         webflow_job_field_mapping: mapping,
       });
-      toast({ title: 'Webflow Jobs settings saved' });
+      toast({ title: 'Career site settings saved' });
     } catch {
       toast({ title: 'Failed to save', variant: 'destructive' });
     }
@@ -176,7 +176,7 @@ const Settings = () => {
             <TabsList className="bg-muted">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="organization">Organization</TabsTrigger>
-              <TabsTrigger value="webflow-jobs">Webflow Jobs</TabsTrigger>
+              <TabsTrigger value="webflow-jobs">Career Site</TabsTrigger>
               <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
               <TabsTrigger value="templates">Pipeline Templates</TabsTrigger>
@@ -301,7 +301,7 @@ const Settings = () => {
                       id="orgBaseUrl"
                       value={orgBaseUrl}
                       onChange={(e) => setOrgBaseUrl(e.target.value)}
-                      placeholder="https://hireclix-all-jobs.webflow.io/crm"
+                      placeholder="https://your-career-site.com/crm"
                     />
                     <p className="text-sm text-muted-foreground">
                       Full URL where your app lives (e.g. https://yoursite.com/crm). Required for unsubscribe links in emails.
@@ -324,15 +324,15 @@ const Settings = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Briefcase className="w-5 h-5 text-sky-blue" />
-                    Webflow Jobs Integration
+                    HireClix Career Site Integration
                   </CardTitle>
                   <CardDescription>
-                    Connect your Webflow CMS jobs collection for read-only display on the Jobs tab. Requires a Webflow API token with cms:read scope.
+                    Connect your career site CMS jobs collection for read-only display on the Jobs tab. Requires an API token with cms:read scope.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="webflowSiteId">Site ID (optional)</Label>
+                    <Label htmlFor="webflowSiteId">Career Site ID (optional)</Label>
                     <Input
                       id="webflowSiteId"
                       value={webflowSiteId}
@@ -340,7 +340,7 @@ const Settings = () => {
                       placeholder="e.g. 580e63fc8c9a982ac9b8b745"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Your Webflow site ID. Optional; only collection ID is required for listing jobs.
+                      Your career site ID. Optional; only collection ID is required for listing jobs.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -352,7 +352,7 @@ const Settings = () => {
                       placeholder="e.g. 580e63fc8c9a982ac9b8b745"
                     />
                     <p className="text-sm text-muted-foreground">
-                      The CMS collection ID for your jobs. Find it in Webflow Designer → Collections → your jobs collection → Settings.
+                      The CMS collection ID for your jobs. Find it in your site designer → Collections → your jobs collection → Settings.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -365,7 +365,7 @@ const Settings = () => {
                       placeholder="Leave blank to keep current token"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Create a token at Webflow Account Settings → Integrations → API Access. Needs cms:read scope.
+                      Create a token in your career site account settings → Integrations → API Access. Needs cms:read scope.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -378,7 +378,7 @@ const Settings = () => {
                       className="font-mono text-sm min-h-[100px]"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Map Webflow field slugs to standard names. Leave empty to use defaults (name→title, department, location, job-type, description, url, posted-date).
+                      Map career site field slugs to standard names. Leave empty to use defaults (name→title, department, location, job-type, description, url, posted-date).
                     </p>
                   </div>
                   <Button
@@ -387,7 +387,7 @@ const Settings = () => {
                     disabled={isUpdatingOrg}
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    Save Webflow Jobs
+                    Save Career Site
                   </Button>
                 </CardContent>
               </Card>
