@@ -97,7 +97,7 @@ export const CandidateSearchBar = ({
             setShowSuggestions(true);
           }}
           onBlur={() => setIsFocused(false)}
-          placeholder="Search by name, email, phone, company, title, skills, location, notes..."
+          placeholder='Search candidates... Use "phrases", AND, OR, NOT, (grouping)'
           className="pl-10 pr-24 border-border focus:border-sky-blue bg-background h-11"
         />
         <div className="absolute right-2 flex items-center gap-1">

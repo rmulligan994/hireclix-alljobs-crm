@@ -47,6 +47,7 @@ import { useCandidatesWithEnrichment, useCandidateStats } from '@/hooks/useCandi
 import { useQueryClient } from '@tanstack/react-query';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
+import { parseBooleanSearch } from '@/utils/booleanSearchParser';
 
 function formatLastContact(date: Date | null): string {
   if (!date) return 'Never';
@@ -221,18 +222,24 @@ const TalentPool = () => {
       );
     }
 
-    // Apply text search
+    // Apply text search (supports boolean: "Senior Engineer" AND (Boston OR Gloucester) NOT Manchester)
     if (debouncedSearchQuery) {
-      const query = debouncedSearchQuery.toLowerCase();
-      results = results.filter(c => 
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(query) ||
-        c.email?.toLowerCase().includes(query) ||
-        c.phone?.includes(query) ||
-        c.company?.toLowerCase().includes(query) ||
-        c.title?.toLowerCase().includes(query) ||
-        c.location?.toLowerCase().includes(query) ||
-        c.skills.some(s => s.toLowerCase().includes(query))
-      );
+      const matcher = parseBooleanSearch(debouncedSearchQuery);
+      if (matcher) {
+        results = results.filter((c) => matcher(c));
+      } else {
+        // Fallback: simple substring match when parse fails
+        const query = debouncedSearchQuery.toLowerCase();
+        results = results.filter(c =>
+          `${c.firstName} ${c.lastName}`.toLowerCase().includes(query) ||
+          c.email?.toLowerCase().includes(query) ||
+          c.phone?.includes(query) ||
+          c.company?.toLowerCase().includes(query) ||
+          c.title?.toLowerCase().includes(query) ||
+          c.location?.toLowerCase().includes(query) ||
+          c.skills.some(s => s.toLowerCase().includes(query))
+        );
+      }
     }
 
     // Apply skill filters
