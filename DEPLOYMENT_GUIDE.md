@@ -13,6 +13,7 @@
 5. [Infrastructure Setup](#infrastructure-setup)
 6. [Deployment Steps](#deployment-steps)
 7. [Post-Deployment](#post-deployment)
+8. [Jobs Sync (Career Site)](#jobs-sync-career-site)
 
 ---
 
@@ -326,7 +327,7 @@ This project is now a **Next.js 15** app ( migrated from Vite ) for Webflow Clou
 2. **Webflow Cloud setup**
    - Connect your GitHub repo in Webflow Cloud
    - Create an environment with mount path (e.g. `/app`)
-   - Set env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - Set env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` (for jobs sync)
    - For base path: `BASE_URL` and `ASSETS_PREFIX` (set by Webflow)
    - Webflow uses OpenNext + Cloudflare Workers; see `webflow.json` and `open-next.config.ts`
 
@@ -452,6 +453,35 @@ supabase functions deploy # Deploy Edge Functions
 supabase db reset        # Reset local database
 supabase gen types typescript --local > src/integrations/supabase/types.ts
 ```
+
+---
+
+## Jobs Sync (Career Site)
+
+Jobs sync from the client's career site (Webflow CMS) to Supabase every 15 minutes. Full details: [docs/JOBS_SYNC_SETUP.md](docs/JOBS_SYNC_SETUP.md).
+
+### Per-Client Checklist
+
+| Step | Action |
+|------|--------|
+| 1 | Run `supabase db push` (migrations include `jobs`, `jobs_sync_logs`) |
+| 2 | Generate `CRON_SECRET`: `openssl rand -hex 32` |
+| 3 | Add env vars to Webflow Cloud: `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY` |
+| 4 | Configure Career Site in app: Settings → Career Site (collection ID, API token, base URL) |
+| 5 | Choose cron trigger (see below) |
+
+### Cron Trigger Options (Webflow Cloud)
+
+**Webflow Cloud does not run Vercel cron.** Use one of:
+
+| Option | Description |
+|--------|-------------|
+| **Supabase Cron** (recommended) | Native pg_cron + pg_net. Runs in Supabase, POSTs to your app. No external service. |
+| **cron-job.org** | Free third-party. 15+ years, 500k+ users. No SLA. Good for non-critical jobs. |
+
+**App URL:** Full base URL including mount path, e.g. `https://client-site.webflow.io/app` (if mount path is `/app`). Cron endpoint: `{APP_URL}/api/cron/sync-jobs`.
+
+**Supabase Cron setup:** See [docs/JOBS_SYNC_SETUP.md](docs/JOBS_SYNC_SETUP.md) for SQL (enable pg_cron/pg_net, store secrets in Vault, create cron job).
 
 ---
 

@@ -13,7 +13,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Save, Plus, Trash2, Copy, GitBranch, Building2, Briefcase } from 'lucide-react';
+import { Save, Plus, Trash2, Copy, GitBranch, Building2, Briefcase, CheckCircle, XCircle, Loader2, CloudDownload } from 'lucide-react';
+import { useJobsSyncLogs, useTriggerJobsSync } from '@/hooks/useJobsSync';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
@@ -33,6 +34,8 @@ const Settings = () => {
   const [webflowApiToken, setWebflowApiToken] = useState(''); // Leave blank to keep current
   const [webflowFieldMapping, setWebflowFieldMapping] = useState('');
   const [careerSiteBaseUrl, setCareerSiteBaseUrl] = useState('');
+  const { data: syncLogs } = useJobsSyncLogs();
+  const triggerSync = useTriggerJobsSync();
 
   const { data: currentUser, isLoading: currentUserLoading } = useCurrentUser();
   const userId = currentUser?.id;
@@ -395,6 +398,45 @@ const Settings = () => {
                     <p className="text-sm text-muted-foreground">
                       Map career site field slugs to standard names. Use arrays for composite fields: {`{"location": ["city", "state", "country"]}`}. Leave empty to use defaults.
                     </p>
+                  </div>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label>Jobs sync</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Jobs sync from your career site every 15 minutes. Use &quot;Sync now&quot; to run immediately.
+                    </p>
+                    {syncLogs && syncLogs.length > 0 && (
+                      <div className="space-y-2 mt-2">
+                        {syncLogs.slice(0, 3).map((log) => (
+                          <div
+                            key={log.id}
+                            className="flex items-center justify-between text-sm p-2 rounded bg-muted/50"
+                          >
+                            <span className="flex items-center gap-2">
+                              {log.status === 'running' && <Loader2 className="w-4 h-4 animate-spin" />}
+                              {log.status === 'success' && <CheckCircle className="w-4 h-4 text-green-600" />}
+                              {log.status === 'failed' && <XCircle className="w-4 h-4 text-destructive" />}
+                              {new Date(log.started_at).toLocaleString()} — {log.status}
+                              {log.status === 'success' && ` (${log.jobs_upserted} jobs)`}
+                              {log.status === 'failed' && log.error_message && (
+                                <span className="text-destructive" title={log.error_message}>
+                                  : {log.error_message.slice(0, 50)}…
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => triggerSync.mutate()}
+                      disabled={triggerSync.isPending}
+                    >
+                      <CloudDownload className={`w-4 h-4 mr-2 ${triggerSync.isPending ? 'animate-spin' : ''}`} />
+                      {triggerSync.isPending ? 'Syncing...' : 'Sync now'}
+                    </Button>
                   </div>
                   <Button
                     className="bg-gradient-primary hover:opacity-90"

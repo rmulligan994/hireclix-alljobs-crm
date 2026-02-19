@@ -15,8 +15,9 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Briefcase, ExternalLink, MapPin, Building2, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Briefcase, ExternalLink, MapPin, Building2, RefreshCw, Search, ChevronLeft, ChevronRight, CloudDownload, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { useJobs } from '@/hooks/useJobs';
+import { useJobsSyncLogs, useTriggerJobsSync } from '@/hooks/useJobsSync';
 import type { StandardJob } from '@/config/webflowJobMapping';
 
 function formatLastUpdated(dateStr: string | null): string {
@@ -40,8 +41,11 @@ const Jobs = () => {
   const [page, setPage] = useState(1);
 
   const { data, isLoading, error, refetch, isFetching } = useJobs(page);
+  const { data: syncLogs } = useJobsSyncLogs();
+  const triggerSync = useTriggerJobsSync();
   const jobs = data?.jobs ?? [];
   const pagination = data?.pagination;
+  const lastSync = syncLogs?.[0];
 
   const filteredJobs = useMemo(() => {
     if (!jobs.length) return [];
@@ -88,11 +92,33 @@ const Jobs = () => {
                 Open positions from your HireClix career site (read-only)
               </p>
             </div>
-            {latestUpdated && (
-              <p className="text-sm text-muted-foreground">
-                Last updated: {formatLastUpdated(latestUpdated)}
-              </p>
-            )}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              {latestUpdated && (
+                <p className="text-sm text-muted-foreground">
+                  Last updated: {formatLastUpdated(latestUpdated)}
+                </p>
+              )}
+              {lastSync && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  {lastSync.status === 'running' && (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  )}
+                  {lastSync.status === 'success' && (
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                  )}
+                  {lastSync.status === 'failed' && (
+                    <XCircle className="w-4 h-4 text-destructive" />
+                  )}
+                  Last sync: {formatLastUpdated(lastSync.completed_at ?? lastSync.started_at)}
+                  {lastSync.status === 'success' && ` (${lastSync.jobs_upserted} jobs)`}
+                  {lastSync.status === 'failed' && lastSync.error_message && (
+                    <span className="text-destructive" title={lastSync.error_message}>
+                      — Failed
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="bg-card rounded-lg border border-border">
@@ -113,8 +139,11 @@ const Jobs = () => {
             ) : data && pagination?.total === 0 ? (
               <div className="p-8 text-center">
                 <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">
-                  No open jobs found. Add jobs to your career site CMS collection and publish them.
+                <p className="text-muted-foreground mb-2">
+                  No open jobs found. Jobs sync from your career site every 15 minutes.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Configure in Settings → Career Site, then use &quot;Sync now&quot; or wait for the next sync.
                 </p>
               </div>
             ) : (
@@ -129,17 +158,30 @@ const Jobs = () => {
                       className="pl-9"
                     />
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => refetch()}
-                    disabled={isFetching}
-                  >
-                    <RefreshCw
-                      className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
-                    />
-                    {isFetching ? 'Refreshing...' : 'Refresh'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => triggerSync.mutate()}
+                      disabled={triggerSync.isPending}
+                    >
+                      <CloudDownload
+                        className={`w-4 h-4 mr-2 ${triggerSync.isPending ? 'animate-spin' : ''}`}
+                      />
+                      {triggerSync.isPending ? 'Syncing...' : 'Sync now'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refetch()}
+                      disabled={isFetching}
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
+                      />
+                      {isFetching ? 'Refreshing...' : 'Refresh'}
+                    </Button>
+                  </div>
                 </div>
                 <Table>
                   <TableHeader>

@@ -88,3 +88,29 @@ export async function fetchWebflowLiveItemsPage(
 
   return { items: allItems, total };
 }
+
+/**
+ * Fetches ALL live items from a collection. Used for sync to Supabase.
+ * Paginates through Webflow API (100 per request).
+ */
+export async function fetchWebflowLiveItemsAll(
+  collectionId: string,
+  apiToken: string,
+  options: Omit<ListLiveItemsOptions, 'limit'> = {}
+): Promise<WebflowLiveItem[]> {
+  const allItems: WebflowLiveItem[] = [];
+  let page = 1;
+
+  while (true) {
+    const { items, total } = await fetchWebflowLiveItemsPage(
+      collectionId,
+      apiToken,
+      { page, limit: WEBFLOW_MAX_LIMIT, ...options }
+    );
+    allItems.push(...items);
+    if (allItems.length >= total || items.length < WEBFLOW_MAX_LIMIT) break;
+    page++;
+  }
+
+  return allItems;
+}

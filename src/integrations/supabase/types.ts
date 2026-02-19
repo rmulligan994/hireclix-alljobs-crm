@@ -510,6 +510,89 @@ export type Database = {
         }
         Relationships: []
       }
+      jobs: {
+        Row: {
+          id: string
+          webflow_item_id: string
+          title: string
+          department: string | null
+          location: string | null
+          type: string | null
+          description: string | null
+          url: string | null
+          slug: string | null
+          req_id: string | null
+          view_url: string | null
+          posted_date: string | null
+          last_updated: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          webflow_item_id: string
+          title: string
+          department?: string | null
+          location?: string | null
+          type?: string | null
+          description?: string | null
+          url?: string | null
+          slug?: string | null
+          req_id?: string | null
+          view_url?: string | null
+          posted_date?: string | null
+          last_updated?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          webflow_item_id?: string
+          title?: string
+          department?: string | null
+          location?: string | null
+          type?: string | null
+          description?: string | null
+          url?: string | null
+          slug?: string | null
+          req_id?: string | null
+          view_url?: string | null
+          posted_date?: string | null
+          last_updated?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      jobs_sync_logs: {
+        Row: {
+          id: string
+          status: string
+          started_at: string
+          completed_at: string | null
+          jobs_fetched: number
+          jobs_upserted: number
+          error_message: string | null
+          error_detail: string | null
+        }
+        Insert: {
+          id?: string
+          status: string
+          started_at?: string
+          completed_at?: string | null
+          jobs_fetched?: number
+          jobs_upserted?: number
+          error_message?: string | null
+          error_detail?: string | null
+        }
+        Update: {
+          status?: string
+          completed_at?: string | null
+          jobs_fetched?: number
+          jobs_upserted?: number
+          error_message?: string | null
+          error_detail?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
