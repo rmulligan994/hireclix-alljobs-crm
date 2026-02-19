@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileSpreadsheet, FileText, Loader2, Upload, ChevronDown, ChevronUp, Brain } from "lucide-react";
+import { FileSpreadsheet, FileText, Loader2, Upload, ChevronDown, ChevronUp, Brain, CheckCircle } from "lucide-react";
 import { candidateService, resumeService } from "@/services";
 import { getApiBase } from "@/lib/api";
 import type { CreateCandidateData } from "@/types/Candidate";
@@ -112,6 +112,7 @@ export function ImportCandidatesDialog({
     linkedinUrl: string | null;
     tags: string[];
   } | null>(null);
+  const [resumeComplete, setResumeComplete] = useState(false);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
   const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,6 +287,7 @@ export function ImportCandidatesDialog({
       const candidate = await candidateService.create(data);
       await resumeService.upload(candidate.id, resumeFile);
       onImportComplete?.();
+      setResumeComplete(true);
       setResumeProfile(null);
       setResumeFile(null);
       if (resumeInputRef.current) resumeInputRef.current.value = "";
@@ -302,12 +304,14 @@ export function ImportCandidatesDialog({
     setCsvHeaders([]);
     setFieldMapping({});
     setImportResult(null);
+    setImportProgress(null);
     if (csvInputRef.current) csvInputRef.current.value = "";
   };
 
   const resetResume = () => {
     setResumeFile(null);
     setResumeProfile(null);
+    setResumeComplete(false);
     setResumeError(null);
     if (resumeInputRef.current) resumeInputRef.current.value = "";
   };
@@ -439,20 +443,44 @@ export function ImportCandidatesDialog({
                   </div>
                 )}
 
-                <Button
-                  onClick={handleCsvImport}
-                  disabled={importing || parsedRows.length === 0}
-                  className="w-full bg-sky-blue hover:bg-sky-blue/90"
-                >
-                  {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  {importing ? `Importing ${importProgress?.current ?? 0} / ${importProgress?.total ?? parsedRows.length}` : `Import ${parsedRows.length} candidates`}
-                </Button>
+                {importResult ? (
+                  <div className="rounded-lg border border-border bg-green-500/10 border-green-500/30 p-4 flex flex-col items-center gap-3">
+                    <CheckCircle className="w-10 h-10 text-green-500" />
+                    <p className="text-sm font-medium text-foreground">Import complete</p>
+                    <p className="text-xs text-muted-foreground text-center">
+                      {importResult.created} candidate{importResult.created !== 1 ? "s" : ""} added. To import more, choose a different file.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={resetCsv} className="border-border">
+                      Import another file
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleCsvImport}
+                    disabled={importing || parsedRows.length === 0}
+                    className="w-full bg-sky-blue hover:bg-sky-blue/90"
+                  >
+                    {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    {importing ? `Importing ${importProgress?.current ?? 0} / ${importProgress?.total ?? parsedRows.length}` : `Import ${parsedRows.length} candidates`}
+                  </Button>
+                )}
               </div>
             )}
           </TabsContent>
 
           <TabsContent value="resume" className="mt-4 flex-1 overflow-y-auto overflow-x-hidden min-h-0 data-[state=inactive]:hidden">
-            {!resumeProfile ? (
+            {resumeComplete ? (
+              <div className="rounded-lg border border-border bg-green-500/10 border-green-500/30 p-4 flex flex-col items-center gap-3">
+                <CheckCircle className="w-10 h-10 text-green-500" />
+                <p className="text-sm font-medium text-foreground">Candidate added</p>
+                <p className="text-xs text-muted-foreground text-center">
+                  The resume has been attached to the candidate. To add another, upload a different file.
+                </p>
+                <Button variant="outline" size="sm" onClick={resetResume} className="border-border">
+                  Add another resume
+                </Button>
+              </div>
+            ) : !resumeProfile ? (
               <div
                 onClick={() => !resumeLoading && resumeInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${
@@ -515,7 +543,7 @@ export function ImportCandidatesDialog({
                 </div>
               </div>
             )}
-            {resumeError && !resumeProfile && <p className="text-sm text-destructive mt-2">{resumeError}</p>}
+            {resumeError && !resumeProfile && !resumeComplete && <p className="text-sm text-destructive mt-2">{resumeError}</p>}
           </TabsContent>
         </Tabs>
       </DialogContent>
