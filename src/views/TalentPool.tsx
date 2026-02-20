@@ -62,15 +62,59 @@ function formatLastContact(date: Date | null): string {
   return `${Math.floor(diffDays / 365)} years ago`;
 }
 
-// Standard pipeline stages for filter (matches common pipeline configs)
-const STANDARD_PIPELINE_STAGES: FilterOption[] = [
-  { value: 'Sourced', label: 'Sourced' },
-  { value: 'Contacted', label: 'Contacted' },
-  { value: 'Engaged', label: 'Engaged' },
-  { value: 'Qualified', label: 'Qualified' },
-  { value: 'Submitted', label: 'Submitted' },
-  { value: 'Hired', label: 'Hired' },
-];
+// Infer experience level from job title (AI-deduced, not 100% accurate)
+function inferExperienceLevels(title: string): string[] {
+  if (!title || !title.trim()) return [];
+  const t = title.toLowerCase();
+  const levels: string[] = [];
+  if (/\b(executive|ceo|cto|cfo|coo|vp|vice president|director|head of)\b/.test(t)) levels.push('executive');
+  if (/\b(lead|principal|architect)\b/.test(t)) levels.push('lead');
+  if (/\b(senior|sr\.?|staff)\b/.test(t)) levels.push('senior');
+  if (/\b(mid|middle|engineer|developer|analyst)\b/.test(t) && !/\b(senior|lead|principal)\b/.test(t)) levels.push('mid');
+  if (/\b(junior|jr\.?|entry|intern|graduate)\b/.test(t)) levels.push('entry');
+  return levels;
+}
+
+function getDateAddedBoundary(preset: string): Date | null {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  if (preset === 'today') return start;
+  if (preset === 'this_week') {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    start.setDate(diff);
+    return start;
+  }
+  if (preset === 'this_month') {
+    start.setDate(1);
+    return start;
+  }
+  if (preset === 'last_3_months') {
+    start.setMonth(now.getMonth() - 3);
+    return start;
+  }
+  return null;
+}
+
+function getLastContactBoundary(preset: string): { from?: Date; never?: boolean } | null {
+  if (preset === 'never') return { never: true };
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  if (preset === 'today') return { from: start };
+  if (preset === 'this_week') {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    start.setDate(diff);
+    return { from: start };
+  }
+  if (preset === 'this_month') {
+    start.setDate(1);
+    return { from: start };
+  }
+  return null;
+}
 
 const TalentPool = () => {
   const router = useRouter();
@@ -288,6 +332,34 @@ const TalentPool = () => {
       );
     }
 
+    // Apply experience level filter (inferred from title)
+    if (filters.experienceLevels.length > 0) {
+      results = results.filter(c => {
+        const levels = inferExperienceLevels(c.title);
+        return filters.experienceLevels.some(l => levels.includes(l));
+      });
+    }
+
+    // Apply date added filter
+    if (filters.dateAdded && filters.dateAdded !== 'custom') {
+      const from = getDateAddedBoundary(filters.dateAdded);
+      if (from) {
+        results = results.filter(c => c.createdAt >= from);
+      }
+    }
+
+    // Apply last contact filter
+    if (filters.lastContact && filters.lastContact !== 'custom') {
+      const boundary = getLastContactBoundary(filters.lastContact);
+      if (boundary?.never) {
+        results = results.filter(c => !c.lastContactAt);
+      } else if (boundary?.from) {
+        results = results.filter(c =>
+          c.lastContactAt ? new Date(c.lastContactAt) >= boundary.from! : false
+        );
+      }
+    }
+
     // Apply sorting
     switch (sortOption) {
       case 'name_asc':
@@ -366,23 +438,33 @@ const TalentPool = () => {
     return suggestions;
   }, [searchQuery, dbCandidates]);
 
-  // Dynamic filter options derived from real candidate data
+  // Dynamic filter options derived from current filtered result set (updates as you filter)
   const filterOptions = useMemo(() => {
-    const c = dbCandidates || [];
+    const c = filteredCandidates;
     const skillCounts = new Map<string, number>();
     const locationCounts = new Map<string, number>();
     const pipelineCounts = new Map<string, number>();
+    const stageCounts = new Map<string, number>();
     const sourceCounts = new Map<string, number>();
     const companyCounts = new Map<string, number>();
 
     c.forEach((cand) => {
-      (cand.tags || []).forEach((s) => skillCounts.set(s, (skillCounts.get(s) || 0) + 1));
-      if (cand.location) locationCounts.set(cand.location, (locationCounts.get(cand.location) || 0) + 1);
-      (cand.pipelineAssociations || []).forEach((p) =>
-        pipelineCounts.set(p.name, (pipelineCounts.get(p.name) || 0) + 1)
-      );
-      if (cand.source) sourceCounts.set(cand.source, (sourceCounts.get(cand.source) || 0) + 1);
-      if (cand.company) companyCounts.set(cand.company, (companyCounts.get(cand.company) || 0) + 1);
+      (cand.skills || []).forEach((s) => {
+        if (s?.trim()) skillCounts.set(s, (skillCounts.get(s) || 0) + 1);
+      });
+      if (cand.location?.trim()) {
+        locationCounts.set(cand.location, (locationCounts.get(cand.location) || 0) + 1);
+      }
+      (cand.pipelineAssociations || []).forEach((p) => {
+        if (p?.name) pipelineCounts.set(p.name, (pipelineCounts.get(p.name) || 0) + 1);
+        if (p?.stage) stageCounts.set(p.stage, (stageCounts.get(p.stage) || 0) + 1);
+      });
+      if (cand.source?.trim()) {
+        sourceCounts.set(cand.source, (sourceCounts.get(cand.source) || 0) + 1);
+      }
+      if (cand.company?.trim()) {
+        companyCounts.set(cand.company, (companyCounts.get(cand.company) || 0) + 1);
+      }
     });
 
     return {
@@ -395,7 +477,9 @@ const TalentPool = () => {
       pipelines: Array.from(pipelineCounts.entries())
         .sort((a, b) => b[1] - a[1])
         .map(([value]) => ({ value, label: value, count: pipelineCounts.get(value) })),
-      pipelineStages: STANDARD_PIPELINE_STAGES,
+      pipelineStages: Array.from(stageCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: stageCounts.get(value) })),
       talentPools: [] as FilterOption[],
       sources: Array.from(sourceCounts.entries())
         .sort((a, b) => b[1] - a[1])
@@ -404,7 +488,7 @@ const TalentPool = () => {
         .sort((a, b) => b[1] - a[1])
         .map(([value]) => ({ value, label: value, count: companyCounts.get(value) })),
     };
-  }, [dbCandidates]);
+  }, [filteredCandidates]);
 
   const availableSkills = useMemo(() => filterOptions.skills.map((s) => s.value), [filterOptions.skills]);
 

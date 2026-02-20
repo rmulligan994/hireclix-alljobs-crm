@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, ChevronDown, Search } from 'lucide-react';
+import { X, ChevronDown, Search, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -69,7 +69,7 @@ const lastContactPresets = [
 ];
 
 interface FilterSectionProps {
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
 }
@@ -198,44 +198,50 @@ export const CandidateFiltersPanel = ({
         </div>
       </div>
 
-      {/* Filter Sections */}
+      {/* Filter Sections - hide when no options unless filter is selected */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
           {/* Skills */}
-          <FilterSection title="Skills">
-            <MultiSelectFilter
-              options={options.skills}
-              selected={filters.skills}
-              onChange={v => updateFilter('skills', v)}
-              placeholder="Search skills..."
-            />
-          </FilterSection>
+          {(options.skills.length > 0 || filters.skills.length > 0) && (
+            <FilterSection title="Skills">
+              <MultiSelectFilter
+                options={options.skills}
+                selected={filters.skills}
+                onChange={v => updateFilter('skills', v)}
+                placeholder="Search skills..."
+              />
+            </FilterSection>
+          )}
 
           {/* Location */}
-          <FilterSection title="Location">
-            <MultiSelectFilter
-              options={options.locations}
-              selected={filters.locations}
-              onChange={v => updateFilter('locations', v)}
-              placeholder="Search locations..."
-            />
-          </FilterSection>
+          {(options.locations.length > 0 || filters.locations.length > 0) && (
+            <FilterSection title="Location">
+              <MultiSelectFilter
+                options={options.locations}
+                selected={filters.locations}
+                onChange={v => updateFilter('locations', v)}
+                placeholder="Search locations..."
+              />
+            </FilterSection>
+          )}
 
           {/* Pipeline */}
-          <FilterSection title="Pipeline">
-            <MultiSelectFilter
-              options={[
-                { value: 'none', label: 'Not in any pipeline' },
-                ...options.pipelines
-              ]}
-              selected={filters.pipelines}
-              onChange={v => updateFilter('pipelines', v)}
-              placeholder="Search pipelines..."
-            />
-          </FilterSection>
+          {(options.pipelines.length > 0 || filters.pipelines.length > 0) && (
+            <FilterSection title="Pipeline">
+              <MultiSelectFilter
+                options={[
+                  { value: 'none', label: 'Not in any pipeline' },
+                  ...options.pipelines
+                ]}
+                selected={filters.pipelines}
+                onChange={v => updateFilter('pipelines', v)}
+                placeholder="Search pipelines..."
+              />
+            </FilterSection>
+          )}
 
-          {/* Pipeline Stage - only shows when pipeline selected */}
-          {filters.pipelines.length > 0 && filters.pipelines[0] !== 'none' && (
+          {/* Pipeline Stage - shows when stages exist in current result set */}
+          {(options.pipelineStages.length > 0 || filters.pipelineStages.length > 0) && (
             <FilterSection title="Pipeline Stage">
               <MultiSelectFilter
                 options={options.pipelineStages}
@@ -246,41 +252,57 @@ export const CandidateFiltersPanel = ({
             </FilterSection>
           )}
 
-          {/* Talent Pool */}
-          <FilterSection title="Talent Pool">
-            <MultiSelectFilter
-              options={[
-                { value: 'none', label: 'Not in any pool' },
-                ...options.talentPools
-              ]}
-              selected={filters.talentPools}
-              onChange={v => updateFilter('talentPools', v)}
-              placeholder="Search pools..."
-            />
-          </FilterSection>
+          {/* Talent Pool - only show when we have pool data */}
+          {(options.talentPools.length > 0 || filters.talentPools.length > 0) && (
+            <FilterSection title="Talent Pool">
+              <MultiSelectFilter
+                options={[
+                  { value: 'none', label: 'Not in any pool' },
+                  ...options.talentPools
+                ]}
+                selected={filters.talentPools}
+                onChange={v => updateFilter('talentPools', v)}
+                placeholder="Search pools..."
+              />
+            </FilterSection>
+          )}
 
           {/* Source */}
-          <FilterSection title="Source">
-            <MultiSelectFilter
-              options={options.sources}
-              selected={filters.sources}
-              onChange={v => updateFilter('sources', v)}
-              searchable={false}
-            />
-          </FilterSection>
+          {(options.sources.length > 0 || filters.sources.length > 0) && (
+            <FilterSection title="Source">
+              <MultiSelectFilter
+                options={options.sources}
+                selected={filters.sources}
+                onChange={v => updateFilter('sources', v)}
+                searchable={false}
+              />
+            </FilterSection>
+          )}
 
           {/* Company */}
-          <FilterSection title="Company">
-            <MultiSelectFilter
-              options={options.companies}
-              selected={filters.companies}
-              onChange={v => updateFilter('companies', v)}
-              placeholder="Search companies..."
-            />
-          </FilterSection>
+          {(options.companies.length > 0 || filters.companies.length > 0) && (
+            <FilterSection title="Company">
+              <MultiSelectFilter
+                options={options.companies}
+                selected={filters.companies}
+                onChange={v => updateFilter('companies', v)}
+                placeholder="Search companies..."
+              />
+            </FilterSection>
+          )}
 
-          {/* Experience Level */}
-          <FilterSection title="Experience Level">
+          {/* Experience Level - AI-deduced from job titles */}
+          <FilterSection
+            title={
+              <span className="flex items-center gap-1.5">
+                Experience Level
+                <Brain
+                  className="w-3.5 h-3.5 text-sky-blue"
+                  title="Inferred from job titles — may not be 100% accurate"
+                />
+              </span>
+            }
+          >
             <div className="space-y-1">
               {experienceLevels.map(level => (
                 <label

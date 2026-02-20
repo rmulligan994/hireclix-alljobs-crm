@@ -34,16 +34,11 @@ const mapRowToCandidate = (row: any): Candidate => ({
 
 export const candidateService = {
   /**
-   * Get all candidates
+   * Get all candidates. Paginates past Supabase's 1000-row default limit.
    */
   getAll: async (): Promise<Candidate[]> => {
-    const { data, error } = await supabase
-      .from('candidates')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return (data || []).map(mapRowToCandidate);
+    const rows = await candidateService._fetchAllPaginated<any>('candidates', '*');
+    return rows.map(mapRowToCandidate);
   },
 
   /**
@@ -391,13 +386,8 @@ export const candidateService = {
    * Returns groups where multiple candidates share the same email or phone.
    */
   findAllDuplicates: async (): Promise<{ candidate: Candidate; duplicates: Candidate[]; matchType: 'email' | 'phone' }[]> => {
-    const { data: candidates, error } = await supabase
-      .from('candidates')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    const all = (candidates || []).map(mapRowToCandidate);
+    const rows = await candidateService._fetchAllPaginated<any>('candidates', '*');
+    const all = rows.map(mapRowToCandidate);
 
     const results: { candidate: Candidate; duplicates: Candidate[]; matchType: 'email' | 'phone' }[] = [];
     const seen = new Set<string>();
@@ -488,25 +478,61 @@ export const candidateService = {
   },
 
   /**
+   * Fetch all rows from a query, paginating past Supabase's 1000-row default limit.
+   */
+  async _fetchAllPaginated<T>(
+    table: 'candidates' | 'pipeline_candidates' | 'communications' | 'campaign_recipients',
+    select: string,
+    orderBy = 'created_at',
+    ascending = false,
+    extraFilter?: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>
+  ): Promise<T[]> {
+    const PAGE_SIZE = 1000;
+    const all: T[] = [];
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      let query = supabase.from(table).select(select).order(orderBy, { ascending });
+      if (extraFilter) query = extraFilter(query);
+      const { data, error } = await query.range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw error;
+      const rows = (data || []) as T[];
+      all.push(...rows);
+      hasMore = rows.length === PAGE_SIZE;
+      offset += PAGE_SIZE;
+    }
+    return all;
+  },
+
+  /**
    * Get all candidates with pipeline associations (stage names) and last contact date.
    * Last contact = most recent of: communications.occurred_at, campaign_recipients.sent_at
+   * Paginates past Supabase's 1000-row default limit.
    */
   getListWithEnrichment: async (): Promise<CandidateListEnriched[]> => {
-    const [candidatesRes, pipelineRes, pipelinesRes, commsRes, campaignRes] = await Promise.all([
-      supabase.from('candidates').select('*').order('created_at', { ascending: false }),
-      supabase.from('pipeline_candidates').select('candidate_id, pipeline_id, stage, pipelines(id, name)'),
+    const svc = candidateService;
+    const [candidatesData, pipelineData, pipelinesRes, commsData, campaignData] = await Promise.all([
+      svc._fetchAllPaginated<any>('candidates', '*'),
+      svc._fetchAllPaginated<any>(
+        'pipeline_candidates',
+        'candidate_id, pipeline_id, stage, pipelines(id, name)',
+        'candidate_id'
+      ),
       supabase.from('pipelines').select('id, stages'),
-      supabase.from('communications').select('candidate_id, occurred_at'),
-      supabase.from('campaign_recipients').select('candidate_id, sent_at').not('sent_at', 'is', null),
+      svc._fetchAllPaginated<any>('communications', 'candidate_id, occurred_at', 'occurred_at', false),
+      svc._fetchAllPaginated<any>(
+        'campaign_recipients',
+        'candidate_id, sent_at',
+        'sent_at',
+        false,
+        (q) => q.not('sent_at', 'is', null)
+      ),
     ]);
 
-    if (candidatesRes.error) throw candidatesRes.error;
-    if (pipelineRes.error) throw pipelineRes.error;
     if (pipelinesRes.error) throw pipelinesRes.error;
-    if (commsRes.error) throw commsRes.error;
-    if (campaignRes.error) throw campaignRes.error;
 
-    const candidates = (candidatesRes.data || []).map(mapRowToCandidate);
+    const candidates = candidatesData.map(mapRowToCandidate);
 
     const stageNameMap = new Map<string, string>();
     for (const p of pipelinesRes.data || []) {
@@ -517,7 +543,7 @@ export const candidateService = {
     }
 
     const pipelineByCandidate = new Map<string, { id: string; name: string; stage: string }[]>();
-    for (const pc of pipelineRes.data || []) {
+    for (const pc of pipelineData || []) {
       const stageName = stageNameMap.get(pc.stage) || pc.stage;
       const pipelineName = (pc.pipelines as { id: string; name: string } | null)?.name || pc.pipeline_id;
       const list = pipelineByCandidate.get(pc.candidate_id) || [];
@@ -530,12 +556,12 @@ export const candidateService = {
     }
 
     const lastContactByCandidate = new Map<string, Date>();
-    for (const c of commsRes.data || []) {
+    for (const c of commsData || []) {
       const at = new Date(c.occurred_at);
       const existing = lastContactByCandidate.get(c.candidate_id);
       if (!existing || at > existing) lastContactByCandidate.set(c.candidate_id, at);
     }
-    for (const r of campaignRes.data || []) {
+    for (const r of campaignData || []) {
       const at = new Date(r.sent_at!);
       const existing = lastContactByCandidate.get(r.candidate_id);
       if (!existing || at > existing) lastContactByCandidate.set(r.candidate_id, at);
