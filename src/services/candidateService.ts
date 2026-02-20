@@ -144,6 +144,69 @@ export const candidateService = {
   },
 
   /**
+   * Create multiple candidates in batches. Much faster than sequential create() for CSV imports.
+   * On batch failure, falls back to row-by-row for that batch to preserve per-row error reporting.
+   */
+  createMany: async (
+    items: CreateCandidateData[],
+    options?: { batchSize?: number; onProgress?: (created: number, total: number) => void }
+  ): Promise<{ created: number; failed: number; errors: string[] }> => {
+    const batchSize = options?.batchSize ?? 50;
+    const onProgress = options?.onProgress;
+    const errors: string[] = [];
+    let created = 0;
+    let failed = 0;
+
+    const { data: user } = await supabase.auth.getUser();
+    const createdBy = user?.user?.id;
+
+    const toRow = (data: CreateCandidateData) => ({
+      first_name: data.firstName,
+      last_name: data.lastName,
+      email: data.email,
+      phone: data.phone,
+      company: data.company,
+      title: data.title,
+      location: data.location,
+      source: data.source,
+      tags: data.tags || [],
+      linkedin_url: data.linkedinUrl,
+      avatar_url: data.avatarUrl,
+      created_by: createdBy,
+    });
+
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const rows = batch.map(toRow);
+
+      const { data, error } = await supabase
+        .from('candidates')
+        .insert(rows)
+        .select('id');
+
+      if (error) {
+        // Batch failed - fall back to row-by-row for this batch to preserve error reporting
+        for (let j = 0; j < batch.length; j++) {
+          const rowIndex = i + j + 2; // +2 for 1-based + header row
+          const { error: rowError } = await supabase.from('candidates').insert(toRow(batch[j]));
+          if (rowError) {
+            failed++;
+            errors.push(`Row ${rowIndex}: ${rowError.message}`);
+          } else {
+            created++;
+          }
+        }
+      } else {
+        created += data?.length ?? batch.length;
+      }
+
+      onProgress?.(Math.min(i + batch.length, items.length), items.length);
+    }
+
+    return { created, failed, errors };
+  },
+
+  /**
    * Update a candidate
    */
   update: async (id: string, data: UpdateCandidateData): Promise<Candidate> => {

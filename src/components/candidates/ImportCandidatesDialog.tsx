@@ -187,12 +187,11 @@ export function ImportCandidatesDialog({
     setImporting(true);
     setImportResult(null);
     setImportProgress({ current: 0, total: parsedRows.length });
-    let created = 0;
-    let skipped = 0;
+
+    const toCreate: CreateCandidateData[] = [];
     const errors: string[] = [];
 
     for (let i = 0; i < parsedRows.length; i++) {
-      setImportProgress({ current: i + 1, total: parsedRows.length });
       const row = parsedRows[i];
       const data: CreateCandidateData = {};
       CANDIDATE_FIELDS.forEach(({ key }) => {
@@ -207,24 +206,28 @@ export function ImportCandidatesDialog({
       });
 
       if (!data.email && !data.phone) {
-        skipped++;
         errors.push(`Row ${i + 2}: Skipped (no email or phone)`);
         continue;
       }
-
-      try {
-        await candidateService.create(data);
-        created++;
-      } catch (err) {
-        skipped++;
-        errors.push(`Row ${i + 2}: ${err instanceof Error ? err.message : "Failed"}`);
-      }
+      toCreate.push(data);
     }
 
-    setImportResult({ created, skipped, errors: errors.slice(0, 10) });
+    const skippedFromValidation = parsedRows.length - toCreate.length;
+
+    const result = await candidateService.createMany(toCreate, {
+      batchSize: 50,
+      onProgress: (current) => setImportProgress({ current, total: parsedRows.length }),
+    });
+
+    const totalSkipped = skippedFromValidation + result.failed;
+    setImportResult({
+      created: result.created,
+      skipped: totalSkipped,
+      errors: [...errors, ...result.errors].slice(0, 10),
+    });
     setImportProgress(null);
     setImporting(false);
-    if (created > 0) onImportComplete?.();
+    if (result.created > 0) onImportComplete?.();
   };
 
   const handleResumeFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
