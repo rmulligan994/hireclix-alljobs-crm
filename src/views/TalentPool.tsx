@@ -767,7 +767,7 @@ const TalentPool = () => {
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex flex-wrap gap-1">
-                          {candidate.skills.map((skill) => (
+                          {candidate.skills.slice(0, 4).map((skill) => (
                             <Badge 
                               key={skill} 
                               variant="secondary" 
@@ -777,6 +777,9 @@ const TalentPool = () => {
                               {skill}
                             </Badge>
                           ))}
+                          {candidate.skills.length > 4 && (
+                            <Badge variant="secondary" className="text-xs">+{candidate.skills.length - 4}</Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>

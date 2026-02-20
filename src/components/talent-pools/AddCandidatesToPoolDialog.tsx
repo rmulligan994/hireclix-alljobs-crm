@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -12,8 +12,15 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
+import { Search, UserPlus, User, Building, MapPin, Filter } from 'lucide-react';
 import { useCandidates } from '@/hooks/useCandidates';
+import { useDebounce } from '@/hooks/useDebounce';
+import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
+import {
+  CandidateFiltersPanel,
+  type CandidateFilters,
+  type FilterOption,
+} from '@/components/candidates/search';
 
 interface AddCandidatesToPoolDialogProps {
   open: boolean;
@@ -31,20 +38,112 @@ export const AddCandidatesToPoolDialog = ({
   onAddCandidates,
 }: AddCandidatesToPoolDialogProps) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useState<CandidateFilters>({
+    skills: [],
+    locations: [],
+    pipelines: [],
+    pipelineStages: [],
+    talentPools: [],
+    sources: [],
+    companies: [],
+    experienceLevels: [],
+    dateAdded: null,
+    lastContact: null,
+  });
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
-  
+
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const { data: candidates, isLoading } = useCandidates();
 
   const availableCandidates = (candidates || []).filter(
-    c => !existingCandidateIds.includes(c.id)
+    (c) => !existingCandidateIds.includes(c.id)
   );
 
-  const filteredCandidates = availableCandidates.filter(c => {
-    const name = `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase();
-    return name.includes(searchQuery.toLowerCase()) ||
-      (c.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.company || '').toLowerCase().includes(searchQuery.toLowerCase());
+  const toSearchable = (c: (typeof availableCandidates)[0]): SearchableCandidate => ({
+    firstName: c.firstName || '',
+    lastName: c.lastName || '',
+    email: c.email || '',
+    phone: c.phone || '',
+    company: c.company || '',
+    title: c.title || '',
+    location: c.location || '',
+    skills: c.tags || [],
   });
+
+  const filterOptions = useMemo(() => {
+    const skillCounts = new Map<string, number>();
+    const locationCounts = new Map<string, number>();
+    const companyCounts = new Map<string, number>();
+    const sourceCounts = new Map<string, number>();
+    availableCandidates.forEach((c) => {
+      (c.tags || []).forEach((s) => skillCounts.set(s, (skillCounts.get(s) || 0) + 1));
+      if (c.location) locationCounts.set(c.location, (locationCounts.get(c.location) || 0) + 1);
+      if (c.company) companyCounts.set(c.company, (companyCounts.get(c.company) || 0) + 1);
+      if (c.source) sourceCounts.set(c.source, (sourceCounts.get(c.source) || 0) + 1);
+    });
+    return {
+      skills: Array.from(skillCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: skillCounts.get(value) } as FilterOption)),
+      locations: Array.from(locationCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: locationCounts.get(value) } as FilterOption)),
+      pipelines: [] as FilterOption[],
+      pipelineStages: [] as FilterOption[],
+      talentPools: [] as FilterOption[],
+      sources: Array.from(sourceCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: sourceCounts.get(value) } as FilterOption)),
+      companies: Array.from(companyCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: companyCounts.get(value) } as FilterOption)),
+    };
+  }, [availableCandidates]);
+
+  const filteredCandidates = useMemo(() => {
+    let results = [...availableCandidates];
+
+    if (debouncedSearchQuery.trim()) {
+      const matcher = parseBooleanSearch(debouncedSearchQuery.trim());
+      if (matcher) {
+        results = results.filter((c) => matcher(toSearchable(c)));
+      } else {
+        const q = debouncedSearchQuery.toLowerCase();
+        results = results.filter(
+          (c) =>
+            `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase().includes(q) ||
+            (c.title || '').toLowerCase().includes(q) ||
+            (c.company || '').toLowerCase().includes(q) ||
+            (c.location || '').toLowerCase().includes(q) ||
+            (c.tags || []).some((s) => s.toLowerCase().includes(q))
+        );
+      }
+    }
+
+    if (filters.skills.length > 0) {
+      results = results.filter((c) =>
+        filters.skills.some((skill) => (c.tags || []).includes(skill))
+      );
+    }
+    if (filters.locations.length > 0) {
+      results = results.filter((c) =>
+        filters.locations.includes(c.location || '')
+      );
+    }
+    if (filters.companies.length > 0) {
+      results = results.filter((c) =>
+        filters.companies.includes(c.company || '')
+      );
+    }
+    if (filters.sources.length > 0) {
+      results = results.filter((c) =>
+        filters.sources.includes(c.source || '')
+      );
+    }
+
+    return results;
+  }, [availableCandidates, debouncedSearchQuery, filters]);
 
   const handleToggleCandidate = (candidateId: string) => {
     setSelectedCandidates(prev =>
@@ -58,14 +157,44 @@ export const AddCandidatesToPoolDialog = ({
     onAddCandidates(selectedCandidates);
     setSelectedCandidates([]);
     setSearchQuery('');
+    setFilters({
+      skills: [],
+      locations: [],
+      pipelines: [],
+      pipelineStages: [],
+      talentPools: [],
+      sources: [],
+      companies: [],
+      experienceLevels: [],
+      dateAdded: null,
+      lastContact: null,
+    });
     onOpenChange(false);
   };
 
   const handleClose = () => {
     setSelectedCandidates([]);
     setSearchQuery('');
+    setFilters({
+      skills: [],
+      locations: [],
+      pipelines: [],
+      pipelineStages: [],
+      talentPools: [],
+      sources: [],
+      companies: [],
+      experienceLevels: [],
+      dateAdded: null,
+      lastContact: null,
+    });
     onOpenChange(false);
   };
+
+  const activeFilterCount =
+    filters.skills.length +
+    filters.locations.length +
+    filters.companies.length +
+    filters.sources.length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -80,15 +209,40 @@ export const AddCandidatesToPoolDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search candidates by name, title, or company..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 border-border focus:border-sky-blue"
-          />
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder='Search... Use "phrases", AND, OR, NOT, (grouping)'
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 border-border focus:border-sky-blue"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className={`shrink-0 ${activeFilterCount > 0 ? 'border-sky-blue text-sky-blue' : 'border-border text-muted-foreground'}`}
+            onClick={() => setIsFiltersOpen(true)}
+            title="Filters"
+          >
+            <Filter className="w-4 h-4 mr-1.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-1.5 text-xs bg-sky-blue/20 text-sky-blue px-1.5 py-0.5 rounded">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
         </div>
+
+        <CandidateFiltersPanel
+          isOpen={isFiltersOpen}
+          onClose={() => setIsFiltersOpen(false)}
+          filters={filters}
+          onChange={setFilters}
+          options={filterOptions}
+        />
 
         {selectedCandidates.length > 0 && (
           <div className="flex items-center gap-2 mb-3 p-2 bg-sky-blue/10 rounded-lg">

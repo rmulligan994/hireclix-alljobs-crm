@@ -34,7 +34,7 @@ const CANDIDATE_SCHEMA = `{
   "title": "string or null (current/most recent job title)",
   "location": "string or null",
   "linkedinUrl": "string or null (full URL if present)",
-  "tags": "array of strings (skills, technologies, keywords)"
+  "tags": "array of up to 4 strings - the most important/relevant skills, technologies, or keywords only"
 }`;
 
 Deno.serve(async (req) => {
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const prompt = `Extract candidate information from this resume/CV text. Return a JSON object matching this schema exactly. Use null for missing fields. For tags, extract skills, technologies, and relevant keywords. For name, split into firstName and lastName. For linkedinUrl, use the full URL if a LinkedIn profile link appears.
+    const prompt = `Extract candidate information from this resume/CV text. Return a JSON object matching this schema exactly. Use null for missing fields. For tags, return only the 4 most important/relevant skills or technologies (prioritize core competencies and job-relevant keywords). For name, split into firstName and lastName. For linkedinUrl, use the full URL if a LinkedIn profile link appears.
 
 Schema: ${CANDIDATE_SCHEMA}
 
@@ -133,7 +133,9 @@ ${text.slice(0, 12000)}
       title: parsed.title ?? null,
       location: parsed.location ?? null,
       linkedinUrl: parsed.linkedinUrl ?? null,
-      tags: Array.isArray(parsed.tags) ? parsed.tags.filter((t): t is string => typeof t === "string") : [],
+      tags: Array.isArray(parsed.tags)
+        ? parsed.tags.filter((t): t is string => typeof t === "string").slice(0, 4)
+        : [],
     };
 
     return new Response(JSON.stringify({ profile }), {
