@@ -164,12 +164,21 @@ const TalentPool = () => {
   const { data: dbCandidates, isLoading } = useCandidatesWithEnrichment();
   const { data: stats } = useCandidateStats();
 
-  // Simulate search loading
+  // Search loading state + measure time from "Searching..." to results displayed
+  const searchStartRef = useRef<number | null>(null);
+  const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
   useEffect(() => {
     if (debouncedSearchQuery !== searchQuery) {
+      searchStartRef.current = performance.now();
       setIsSearching(true);
     } else {
-      const timer = setTimeout(() => setIsSearching(false), 100);
+      const timer = setTimeout(() => {
+        if (searchStartRef.current != null) {
+          setLastRenderMs(Math.round(performance.now() - searchStartRef.current));
+          searchStartRef.current = null;
+        }
+        setIsSearching(false);
+      }, 0);
       return () => clearTimeout(timer);
     }
   }, [debouncedSearchQuery, searchQuery, setIsSearching]);
@@ -403,30 +412,6 @@ const TalentPool = () => {
     setCandidateList(filteredCandidates.map(c => c.id));
   }, [filteredCandidates, setCandidateList]);
 
-  // Track render time for testing (ms from filter/search change to result rendered)
-  const renderStartRef = useRef<number>(performance.now());
-  const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
-  const prevInputsRef = useRef<string>('');
-
-  useEffect(() => {
-    const inputsKey = JSON.stringify({
-      debouncedSearchQuery,
-      filters,
-      advancedFields: Object.entries(advancedFields)
-        .filter(([, v]) => Array.isArray(v) ? v.length > 0 : v !== undefined && v !== '')
-        .map(([k]) => k),
-      sortOption,
-      dbLen: dbCandidates?.length ?? 0,
-    });
-    if (prevInputsRef.current !== inputsKey) {
-      renderStartRef.current = performance.now();
-      prevInputsRef.current = inputsKey;
-    }
-  }, [debouncedSearchQuery, filters, advancedFields, sortOption, dbCandidates?.length]);
-
-  useEffect(() => {
-    setLastRenderMs(Math.round(performance.now() - renderStartRef.current));
-  }, [filteredCandidates]);
 
   // Generate search suggestions from real candidates
   const searchSuggestions = useMemo(() => {

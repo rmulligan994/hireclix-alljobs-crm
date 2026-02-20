@@ -219,10 +219,6 @@ export const ActiveFiltersBar = ({
 
   return (
     <div className="flex flex-wrap items-center gap-2 py-3">
-      <span className="text-sm text-muted-foreground">
-        Showing {totalResults.toLocaleString()} of {totalCandidates.toLocaleString()} candidates
-      </span>
-      <div className="h-4 w-px bg-border mx-1" />
       {renderFilterBadges()}
       <Button
         variant="ghost"
