@@ -46,8 +46,47 @@ const CANDIDATE_FIELDS = [
   { key: "title", label: "Job Title" },
   { key: "location", label: "Location" },
   { key: "source", label: "Source" },
-  { key: "tags", label: "Tags (comma-separated)" },
+  { key: "tags", label: "Tags (comma, semicolon, pipe, or JSON array)" },
 ] as const;
+
+/**
+ * Parse tags from CSV cell - handles JSON arrays, comma/semicolon/pipe/newline-separated,
+ * and ChatGPT-style ["GCP" "Kafka" "Java"] (quoted strings with spaces).
+ */
+function parseTagsFromCsvCell(value: string): string[] {
+  if (!value || typeof value !== "string") return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  // Try JSON array first (e.g. ["GCP","Kafka","Java"])
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((t) => String(t).trim()).filter(Boolean);
+      }
+    } catch {
+      // Fall through - may be ["GCP" "Kafka" "Java"] (invalid JSON, no commas)
+    }
+  }
+
+  // Handle ["GCP" "Kafka" "Java"] - quoted strings separated by space/newline
+  if (trimmed.includes('"') && trimmed.match(/"[^"]*"/g)) {
+    const quoted = trimmed.match(/"[^"]*"/g);
+    if (quoted && quoted.length > 1) {
+      return quoted.map((q) => q.slice(1, -1).trim()).filter(Boolean);
+    }
+  }
+
+  // Split on comma, semicolon, pipe, or newline; strip brackets/quotes from each part
+  const parts = trimmed.split(/[,;|\n]+/);
+  const clean = (s: string) =>
+    s
+      .replace(/^["'\s]+|["'\s]+$/g, "")
+      .replace(/^\[|\]$/g, "")
+      .trim();
+  return parts.map(clean).filter(Boolean);
+}
 
 const HEADER_ALIASES: Record<string, string> = {
   "first name": "firstName",
@@ -160,7 +199,7 @@ export function ImportCandidatesDialog({
         const csvCol = Object.entries(fieldMapping).find(([, v]) => v === key)?.[0];
         if (csvCol && row[csvCol] !== undefined && row[csvCol] !== "") {
           if (key === "tags") {
-            data.tags = row[csvCol].split(/[,;|]/).map((s) => s.trim()).filter(Boolean);
+            data.tags = parseTagsFromCsvCell(row[csvCol]);
           } else {
             (data as Record<string, unknown>)[key] = row[csvCol].trim();
           }
