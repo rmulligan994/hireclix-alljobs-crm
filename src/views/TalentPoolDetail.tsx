@@ -7,6 +7,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidatesToPoolDialog } from '@/components/talent-pools/AddCandidatesToPoolDialog';
 import { EditTalentPoolDialog } from '@/components/talent-pools/EditTalentPoolDialog';
+import { BulkAddToPipelineDialog } from '@/components/candidates/BulkAddToPipelineDialog';
 import { QuickNoteDialog } from '@/components/pipelines/QuickNoteDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,7 +59,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useCreateNote } from '@/hooks/useCommunications';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
-import { useTalentPoolWithCandidates, useRemoveCandidateFromPool, useAddCandidatesToPool } from '@/hooks/useTalentPools';
+import { useTalentPoolWithCandidates, useRemoveCandidateFromPool, useRemoveCandidatesFromPool, useAddCandidatesToPool, useDeleteTalentPool } from '@/hooks/useTalentPools';
 import { useCandidates } from '@/hooks/useCandidates';
 import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
 import {
@@ -102,6 +103,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
   const [addCandidatesOpen, setAddCandidatesOpen] = useState(false);
+  const [bulkAddToPipelineOpen, setBulkAddToPipelineOpen] = useState(false);
   const [editPoolOpen, setEditPoolOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -111,7 +113,9 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   const { data: pool, isLoading } = useTalentPoolWithCandidates(id || '');
   const { data: allCandidates } = useCandidates();
   const removeCandidateFromPool = useRemoveCandidateFromPool();
+  const removeCandidatesFromPool = useRemoveCandidatesFromPool();
   const addCandidatesToPool = useAddCandidatesToPool();
+  const deleteTalentPool = useDeleteTalentPool();
 
   // Build candidates with full info when pool and candidates are loaded
   useEffect(() => {
@@ -312,15 +316,14 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   };
 
   const handleBulkRemove = async () => {
-    for (const candidateId of selectedCandidates) {
-      await removeCandidateFromPool.mutateAsync({ poolId: id || '', candidateId });
+    if (!id || selectedCandidates.length === 0) return;
+    try {
+      await removeCandidatesFromPool.mutateAsync({ poolId: id, candidateIds: selectedCandidates });
+      setPoolCandidates(prev => prev.filter(c => !selectedCandidates.includes(c.id)));
+      setSelectedCandidates([]);
+    } catch {
+      // Error toast handled by mutation
     }
-    setPoolCandidates(prev => prev.filter(c => !selectedCandidates.includes(c.id)));
-    toast({
-      title: 'Candidates removed',
-      description: `Removed ${selectedCandidates.length} candidate${selectedCandidates.length !== 1 ? 's' : ''} from pool`,
-    });
-    setSelectedCandidates([]);
   };
 
   const handleExport = () => {
@@ -348,7 +351,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   const handleExportSelected = () => {
     if (!allCandidates || selectedCandidates.length === 0) return;
     const toExport = selectedCandidates
-      .map(id => allCandidates.find(c => c.id === id))
+      .map(cid => allCandidates.find(c => c.id === cid))
       .filter((c): c is NonNullable<typeof c> => !!c)
       .map(c => ({
         id: c.id,
@@ -360,16 +363,26 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
         title: c.title,
         location: c.location,
         source: c.source,
-        tags: c.tags,
+        tags: c.tags ?? [],
         linkedinUrl: c.linkedinUrl,
         createdAt: c.createdAt,
       }));
+    if (toExport.length === 0) {
+      toast({ title: 'No candidates to export', variant: 'destructive' });
+      return;
+    }
     exportCandidatesToCsv(toExport, undefined, `talent-pool-selected-export.csv`);
   };
 
-  const handleDeletePool = () => {
-    toast({ title: 'Pool deleted', description: `${pool.name} has been deleted` });
-    router.push('/talent-pools');
+  const handleDeletePool = async () => {
+    if (!id) return;
+    try {
+      await deleteTalentPool.mutateAsync(id);
+      setDeleteDialogOpen(false);
+      router.push('/talent-pools');
+    } catch {
+      toast({ title: 'Failed to delete pool', variant: 'destructive' });
+    }
   };
 
   const handleOpenNoteDialog = (candidate: { id: string; name: string }) => {
@@ -455,7 +468,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
           {selectedCandidates.length > 0 && (
             <div className="flex items-center gap-4 p-3 mb-4 bg-sky-blue/10 border border-sky-blue/30 rounded-lg animate-fade-in">
               <span className="text-sm text-foreground">{selectedCandidates.length} selected</span>
-              <Button size="sm" className="bg-sky-blue hover:bg-sky-blue/90 text-white">
+              <Button size="sm" className="bg-sky-blue hover:bg-sky-blue/90 text-white" onClick={() => setBulkAddToPipelineOpen(true)}>
                 <GitBranch className="w-4 h-4 mr-2" />
                 Add to Pipeline
               </Button>
@@ -644,6 +657,12 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
         pool={pool}
       />
 
+      <BulkAddToPipelineDialog
+        open={bulkAddToPipelineOpen}
+        onOpenChange={setBulkAddToPipelineOpen}
+        candidateIds={selectedCandidates}
+      />
+
       {noteCandidate && (
         <QuickNoteDialog
           open={noteDialogOpen}
@@ -666,7 +685,13 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="border-border text-muted-foreground hover:text-foreground">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeletePool} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={async (e) => {
+                e.preventDefault();
+                await handleDeletePool();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Delete Pool
             </AlertDialogAction>
           </AlertDialogFooter>
