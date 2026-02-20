@@ -43,6 +43,7 @@ import {
   type FilterOption,
 } from '@/components/candidates/search';
 import { useCandidateSearch } from '@/hooks/useCandidateSearch';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useCandidatesWithEnrichment, useCandidateStats } from '@/hooks/useCandidates';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
@@ -152,8 +153,6 @@ const TalentPool = () => {
     clearAllFilters,
     clearSearch,
     removeFilter,
-    isSearching,
-    setIsSearching,
   } = useCandidateSearch();
 
   // Candidate list context for navigation
@@ -164,24 +163,16 @@ const TalentPool = () => {
   const { data: dbCandidates, isLoading } = useCandidatesWithEnrichment();
   const { data: stats } = useCandidateStats();
 
-  // Search loading state + measure time from "Searching..." to results displayed
+  // Measure time from debounce firing to results rendered (no "Searching..." for client-side filter - keeps results visible while typing)
   const searchStartRef = useRef<number | null>(null);
   const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
+  const prevDebouncedRef = useRef(debouncedSearchQuery);
   useEffect(() => {
-    if (debouncedSearchQuery !== searchQuery) {
+    if (debouncedSearchQuery !== prevDebouncedRef.current) {
+      prevDebouncedRef.current = debouncedSearchQuery;
       searchStartRef.current = performance.now();
-      setIsSearching(true);
-    } else {
-      const timer = setTimeout(() => {
-        if (searchStartRef.current != null) {
-          setLastRenderMs(Math.round(performance.now() - searchStartRef.current));
-          searchStartRef.current = null;
-        }
-        setIsSearching(false);
-      }, 0);
-      return () => clearTimeout(timer);
     }
-  }, [debouncedSearchQuery, searchQuery, setIsSearching]);
+  }, [debouncedSearchQuery]);
 
   // Filter and sort candidates - use real database candidates with enrichment
   const filteredCandidates = useMemo(() => {
@@ -412,12 +403,21 @@ const TalentPool = () => {
     setCandidateList(filteredCandidates.map(c => c.id));
   }, [filteredCandidates, setCandidateList]);
 
+  // Capture render time when filtered results update
+  useEffect(() => {
+    if (searchStartRef.current != null) {
+      setLastRenderMs(Math.round(performance.now() - searchStartRef.current));
+      searchStartRef.current = null;
+    }
+  }, [filteredCandidates]);
 
-  // Generate search suggestions from real candidates
+
+  // Debounce suggestions to avoid blocking main thread on every keystroke
+  const debouncedSuggestionsQuery = useDebounce(searchQuery, 100);
   const searchSuggestions = useMemo(() => {
-    if (!searchQuery || searchQuery.length < 2) return [];
+    if (!debouncedSuggestionsQuery || debouncedSuggestionsQuery.length < 2) return [];
     
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSuggestionsQuery.toLowerCase();
     const suggestions: Array<{ type: 'candidate' | 'company' | 'skill'; value: string; subtext?: string }> = [];
     const candidates = dbCandidates || [];
 
@@ -446,7 +446,7 @@ const TalentPool = () => {
       .forEach(s => suggestions.push({ type: 'skill', value: s }));
 
     return suggestions;
-  }, [searchQuery, dbCandidates]);
+  }, [debouncedSuggestionsQuery, dbCandidates]);
 
   // Dynamic filter options derived from current filtered result set (updates as you filter)
   const filterOptions = useMemo(() => {
@@ -675,7 +675,7 @@ const TalentPool = () => {
                 isAdvancedOpen={isAdvancedOpen}
                 suggestions={searchSuggestions}
                 recentSearches={recentSearches}
-                isLoading={isSearching}
+                isLoading={false}
               />
               
               <SortDropdown value={sortOption} onChange={setSortOption} />
@@ -728,7 +728,7 @@ const TalentPool = () => {
           </div>
 
           {/* Results count + render time (testing) */}
-          {!isLoading && !isSearching && (
+          {!isLoading && (
             <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
               <span>
                 {hasActiveFilters
@@ -802,7 +802,7 @@ const TalentPool = () => {
 
           {/* Candidates Table */}
           <div className="bg-card rounded-lg border border-border overflow-hidden">
-            {isLoading || isSearching ? (
+            {isLoading ? (
               <div className="flex items-center justify-center min-h-[320px] py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-sky-blue" />
                 <span className="ml-2 text-muted-foreground">Searching...</span>

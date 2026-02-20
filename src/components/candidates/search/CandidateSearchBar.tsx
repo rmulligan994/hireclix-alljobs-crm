@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import { Search, X, Clock, Users, Building2, Tag, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,10 +32,26 @@ export const CandidateSearchBar = ({
   isLoading = false,
   onSuggestionSelect,
 }: CandidateSearchBarProps) => {
+  const [inputValue, setInputValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync from parent when parent sets value (saved search, clear, etc.) - not when we're typing
+  useEffect(() => {
+    if (value !== inputValue && (value === '' || !inputValue.startsWith(value) || value.length > inputValue.length)) {
+      setInputValue(value);
+    }
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps -- inputValue intentionally excluded to avoid overwriting while typing
+
+  // Debounce parent updates so parent doesn't re-render on every keystroke (fixes input lag)
+  const debouncedInputValue = useDebounce(inputValue, 300);
+  useEffect(() => {
+    if (debouncedInputValue !== value) {
+      onChange(debouncedInputValue);
+    }
+  }, [debouncedInputValue]); // eslint-disable-line react-hooks/exhaustive-deps -- onChange stable, value intentionally excluded
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -48,16 +65,18 @@ export const CandidateSearchBar = ({
   }, []);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value);
+    setInputValue(e.target.value);
     setShowSuggestions(true);
-  }, [onChange]);
+  }, []);
 
   const handleClear = () => {
+    setInputValue('');
     onChange('');
     inputRef.current?.focus();
   };
 
   const handleSuggestionClick = (suggestion: SearchSuggestion) => {
+    setInputValue(suggestion.value);
     onChange(suggestion.value);
     setShowSuggestions(false);
     onSuggestionSelect?.(suggestion);
@@ -79,7 +98,7 @@ export const CandidateSearchBar = ({
     }
   };
 
-  const showDropdown = showSuggestions && (value.length > 0 || recentSearches.length > 0);
+  const showDropdown = showSuggestions && (inputValue.length > 0 || recentSearches.length > 0);
 
   return (
     <div ref={containerRef} className="relative flex-1">
@@ -90,7 +109,7 @@ export const CandidateSearchBar = ({
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
         <Input
           ref={inputRef}
-          value={value}
+          value={inputValue}
           onChange={handleInputChange}
           onFocus={() => {
             setIsFocused(true);
@@ -101,7 +120,7 @@ export const CandidateSearchBar = ({
           className="pl-10 pr-24 border-border focus:border-sky-blue bg-background h-11"
         />
         <div className="absolute right-2 flex items-center gap-1">
-          {value && (
+          {inputValue && (
             <Button
               variant="ghost"
               size="sm"
@@ -139,7 +158,7 @@ export const CandidateSearchBar = ({
       {showDropdown && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
           {/* Recent Searches */}
-          {value.length === 0 && recentSearches.length > 0 && (
+          {inputValue.length === 0 && recentSearches.length > 0 && (
             <div className="p-2">
               <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground uppercase tracking-wide">
                 <Clock className="w-3 h-3" />
@@ -148,7 +167,10 @@ export const CandidateSearchBar = ({
               {recentSearches.slice(0, 5).map((search, idx) => (
                 <button
                   key={idx}
-                  onClick={() => onChange(search)}
+                  onClick={() => {
+                    setInputValue(search);
+                    onChange(search);
+                  }}
                   className="w-full text-left px-3 py-2 hover:bg-muted/50 rounded-md text-sm text-foreground flex items-center gap-2"
                 >
                   <Clock className="w-3 h-3 text-muted-foreground" />
@@ -159,7 +181,7 @@ export const CandidateSearchBar = ({
           )}
 
           {/* Search Suggestions */}
-          {value.length > 0 && (
+          {inputValue.length > 0 && (
             <>
               {groupedSuggestions.candidates.length > 0 && (
                 <div className="p-2 border-b border-border">

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useDebounce } from './useDebounce';
 import type { CandidateFilters } from '@/components/candidates/search/CandidateFiltersPanel';
 import type { SavedSearch } from '@/components/candidates/search/SavedSearchesDropdown';
 import type { SortOption } from '@/components/candidates/search/SortDropdown';
@@ -55,8 +54,8 @@ export const useCandidateSearch = () => {
   // Loading state
   const [isSearching, setIsSearching] = useState(false);
 
-  // Debounce search query
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  // Search bar debounces internally; searchQuery is already debounced when it updates
+  const debouncedSearchQuery = searchQuery;
 
   // Load saved searches from localStorage
   useEffect(() => {
