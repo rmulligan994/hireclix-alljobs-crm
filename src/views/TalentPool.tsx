@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
@@ -403,6 +403,31 @@ const TalentPool = () => {
     setCandidateList(filteredCandidates.map(c => c.id));
   }, [filteredCandidates, setCandidateList]);
 
+  // Track render time for testing (ms from filter/search change to result rendered)
+  const renderStartRef = useRef<number>(performance.now());
+  const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
+  const prevInputsRef = useRef<string>('');
+
+  useEffect(() => {
+    const inputsKey = JSON.stringify({
+      debouncedSearchQuery,
+      filters,
+      advancedFields: Object.entries(advancedFields)
+        .filter(([, v]) => Array.isArray(v) ? v.length > 0 : v !== undefined && v !== '')
+        .map(([k]) => k),
+      sortOption,
+      dbLen: dbCandidates?.length ?? 0,
+    });
+    if (prevInputsRef.current !== inputsKey) {
+      renderStartRef.current = performance.now();
+      prevInputsRef.current = inputsKey;
+    }
+  }, [debouncedSearchQuery, filters, advancedFields, sortOption, dbCandidates?.length]);
+
+  useEffect(() => {
+    setLastRenderMs(Math.round(performance.now() - renderStartRef.current));
+  }, [filteredCandidates]);
+
   // Generate search suggestions from real candidates
   const searchSuggestions = useMemo(() => {
     if (!searchQuery || searchQuery.length < 2) return [];
@@ -716,6 +741,23 @@ const TalentPool = () => {
               availableSkills={availableSkills}
             />
           </div>
+
+          {/* Results count + render time (testing) */}
+          {!isLoading && !isSearching && (
+            <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+              <span>
+                {hasActiveFilters
+                  ? `Showing ${filteredCandidates.length.toLocaleString()} of ${totalCandidates.toLocaleString()} candidates`
+                  : `${filteredCandidates.length.toLocaleString()} candidates`}
+              </span>
+              {lastRenderMs != null && (
+                <>
+                  <span className="text-border">•</span>
+                  <span>Rendered in {lastRenderMs}ms</span>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Active Filters Bar */}
           <ActiveFiltersBar
