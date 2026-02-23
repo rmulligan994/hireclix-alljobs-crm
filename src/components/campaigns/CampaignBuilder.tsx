@@ -484,7 +484,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
               {campaignType === 'job_alert' && (
                 <div className="space-y-2">
-                  <Label>Select Job</Label>
+                  <Label>Select Job (optional)</Label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -518,9 +518,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                       <p className="text-sm text-muted-foreground">No jobs found. Sync jobs from your career site.</p>
                     )}
                   </ScrollArea>
-                  {selectedJobId && (
-                    <p className="text-xs text-muted-foreground">Job selected for merge tags ({{jobTitle}}, etc.)</p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {selectedJobId
+                      ? 'Job selected for merge tags ({{jobTitle}}, etc.)'
+                      : 'Optional: Select a job to add job-specific merge tags in your email'}
+                  </p>
                 </div>
               )}
 
