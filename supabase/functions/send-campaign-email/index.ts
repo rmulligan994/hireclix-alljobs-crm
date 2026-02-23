@@ -123,10 +123,10 @@ Deno.serve(async (req) => {
     // Fetch sender (campaign owner profile) and org settings for merge tags
     const { data: sender } = await supabase
       .from("profiles")
-      .select("first_name, last_name, email, company, title")
+      .select("first_name, last_name, email, company, title, linkedin_url")
       .eq("user_id", campaign.user_id)
       .single();
-    const senderData = sender || { first_name: "", last_name: "", email: "", company: "", title: "" };
+    const senderData = sender || { first_name: "", last_name: "", email: "", company: "", title: "", linkedin_url: "" };
 
     const { data: orgRows } = await supabase
       .from("organization_settings")
@@ -343,9 +343,11 @@ function replaceMergeTags(content: string, ctx: {
     .replace(/\{\{currentDate\}\}/g, new Date().toLocaleDateString())
     .replace(/\{\{currentTime\}\}/g, new Date().toLocaleTimeString())
     .replace(/\{\{senderName\}\}/g, senderName)
+    .replace(/\{\{senderTitle\}\}/g, sender.title || "")
     .replace(/\{\{senderCompany\}\}/g, senderCompany)
     .replace(/\{\{senderBrand\}\}/g, org.brand_name || "")
     .replace(/\{\{senderEmail\}\}/g, sender.email || "")
+    .replace(/\{\{senderLinkedinUrl\}\}/g, sender.linkedin_url || "")
     .replace(/\{\{jobTitle\}\}/g, job?.title || "")
     .replace(/\{\{jobDepartment\}\}/g, job?.department || "")
     .replace(/\{\{jobLocation\}\}/g, job?.location || "")

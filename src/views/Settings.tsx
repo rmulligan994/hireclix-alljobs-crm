@@ -48,6 +48,7 @@ const Settings = () => {
   const [profileEmail, setProfileEmail] = useState('');
   const [profileTitle, setProfileTitle] = useState('');
   const [profileCompany, setProfileCompany] = useState('');
+  const [profileLinkedinUrl, setProfileLinkedinUrl] = useState('');
 
   useEffect(() => {
     if (currentUser) {
@@ -56,6 +57,7 @@ const Settings = () => {
       setProfileEmail(profile?.email ?? currentUser.email ?? '');
       setProfileTitle(profile?.title ?? '');
       setProfileCompany(profile?.company ?? '');
+      setProfileLinkedinUrl(profile?.linkedinUrl ?? '');
     }
   }, [currentUser, profile]);
 
@@ -90,6 +92,7 @@ const Settings = () => {
           email: profileEmail || undefined,
           title: profileTitle || undefined,
           company: profileCompany || undefined,
+          linkedinUrl: profileLinkedinUrl || undefined,
         },
       });
     } catch {
@@ -253,6 +256,17 @@ const Settings = () => {
                           onChange={(e) => setProfileCompany(e.target.value)}
                           placeholder="Your company name"
                         />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="linkedin">LinkedIn URL</Label>
+                        <Input
+                          id="linkedin"
+                          value={profileLinkedinUrl}
+                          onChange={(e) => setProfileLinkedinUrl(e.target.value)}
+                          placeholder="https://linkedin.com/in/yourprofile"
+                        />
+                        <p className="text-xs text-muted-foreground">Used for recruiter LinkedIn link in campaign emails</p>
                       </div>
 
                       <Separator />

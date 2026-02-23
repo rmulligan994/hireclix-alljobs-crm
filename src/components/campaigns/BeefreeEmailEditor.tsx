@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import BeefreeSDK from '@beefree.io/sdk';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Loader2, X, Eye, Monitor, Smartphone } from 'lucide-react';
+import { Loader2, X, Eye, Monitor, Smartphone, Tags } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { MergeTagsPanel } from './MergeTagsPanel';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 
 interface BeefreeEmailEditorProps {
   initialTemplate?: Record<string, unknown> | null;
@@ -59,11 +61,13 @@ const getMergeTags = (hasJob: boolean) => {
     { name: 'Location', value: '{{location}}' },
     { name: 'Source', value: '{{source}}' },
     { name: 'LinkedIn URL', value: '{{linkedinUrl}}' },
-    // Sender
+    // Sender (recruiter)
     { name: 'Sender Name', value: '{{senderName}}' },
+    { name: 'Sender Title', value: '{{senderTitle}}' },
     { name: 'Sender Company', value: '{{senderCompany}}' },
     { name: 'Sender Brand', value: '{{senderBrand}}' },
     { name: 'Sender Email', value: '{{senderEmail}}' },
+    { name: 'Sender LinkedIn', value: '{{senderLinkedinUrl}}' },
     // Campaign
     { name: 'Campaign Name', value: '{{campaignName}}' },
     { name: 'Current Date', value: '{{currentDate}}' },
@@ -71,7 +75,7 @@ const getMergeTags = (hasJob: boolean) => {
   ];
   if (hasJob) {
     base.push(
-      { name: 'Job Title', value: '{{jobTitle}}' },
+      { name: 'Position Title', value: '{{jobTitle}}' },
       { name: 'Job Department', value: '{{jobDepartment}}' },
       { name: 'Job Location', value: '{{jobLocation}}' },
       { name: 'Job Type', value: '{{jobType}}' },
@@ -82,11 +86,19 @@ const getMergeTags = (hasJob: boolean) => {
   return base;
 };
 
-// Special links for email actions
-const specialLinks = [
-  { type: 'Unsubscribe', label: 'Unsubscribe', link: '{{unsubscribeLink}}' },
-  { type: 'View in Browser', label: 'View in Browser', link: '{{viewInBrowserLink}}' },
-];
+// Special links for email actions (appear in link picker for buttons/images)
+const getSpecialLinks = (hasJob: boolean) => {
+  const base = [
+    { type: 'Unsubscribe', label: 'Unsubscribe', link: '{{unsubscribeLink}}' },
+    { type: 'View in Browser', label: 'View in Browser', link: '{{viewInBrowserLink}}' },
+    { type: 'Sender Email', label: 'Email Recruiter', link: 'mailto:{{senderEmail}}' },
+    { type: 'Sender LinkedIn', label: 'Recruiter LinkedIn', link: '{{senderLinkedinUrl}}' },
+  ];
+  if (hasJob) {
+    base.push({ type: 'Apply to Job', label: 'Apply to Job', link: '{{jobUrl}}' });
+  }
+  return base;
+};
 
 export const BeefreeEmailEditor = ({ 
   initialTemplate, 
@@ -99,6 +111,7 @@ export const BeefreeEmailEditor = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile' | null>(null);
+  const [mergePanelOpen, setMergePanelOpen] = useState(true);
   const hasJobContext = Boolean(campaignJobId);
 
   // Stable callback for onSave - use imported toast (stable ref) to avoid re-init
@@ -156,7 +169,7 @@ export const BeefreeEmailEditor = ({
           container: 'bee-plugin-container',
           language: 'en-US',
           mergeTags: getMergeTags(hasJobContext),
-          specialLinks,
+          specialLinks: getSpecialLinks(hasJobContext),
           onSave: handleSaveCallback,
           onSaveAsTemplate: (jsonFile: string) => {
             console.log('Save as template:', jsonFile);
@@ -274,7 +287,16 @@ export const BeefreeEmailEditor = ({
         </div>
         
         <div className="flex items-center space-x-2">
-          <span className="text-xs text-muted-foreground hidden sm:inline">Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">@</kbd> in a text block to insert merge tags</span>
+          <Button
+            variant={mergePanelOpen ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => setMergePanelOpen(!mergePanelOpen)}
+            disabled={isLoading}
+            title="Merge Tags"
+          >
+            <Tags className="w-4 h-4 mr-2" />
+            Merge Tags
+          </Button>
           <Button
             variant={previewMode === 'desktop' ? 'secondary' : 'outline'}
             size="sm"
@@ -315,8 +337,16 @@ export const BeefreeEmailEditor = ({
         </Button>
       </div>
 
-      <div className="flex-1 relative min-h-0 flex flex-col">
-        <div className="flex-1 relative min-h-0">
+      <div className="flex-1 flex gap-4 relative min-h-0 overflow-hidden">
+        <Collapsible open={mergePanelOpen} onOpenChange={setMergePanelOpen} className="flex flex-col shrink-0">
+          <CollapsibleContent>
+            <div className="w-56 border rounded-lg p-3 bg-card overflow-y-auto max-h-[calc(100vh-200px)]">
+              <MergeTagsPanel campaignJobId={campaignJobId} />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+        <div className="flex-1 relative min-h-0 flex flex-col min-w-0">
+          <div className="flex-1 relative min-h-0">
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
                 <div className="flex flex-col items-center space-y-4">
@@ -334,5 +364,6 @@ export const BeefreeEmailEditor = ({
           </div>
         </div>
       </div>
+    </div>
   );
 };

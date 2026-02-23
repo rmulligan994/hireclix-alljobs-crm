@@ -144,3 +144,42 @@ export async function fetchJobsForCampaign(search?: string): Promise<CampaignJob
     location: r.location,
   }));
 }
+
+/** Job details for merge panel (actual values to copy) */
+export interface JobForMergePanel {
+  id: string;
+  title: string;
+  department: string | null;
+  location: string | null;
+  type: string | null;
+  description: string | null;
+  url: string | null;
+  view_url: string | null;
+}
+
+export async function fetchJobById(jobId: string): Promise<JobForMergePanel | null> {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+  if (sessionError || !session) return null;
+
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id, title, department, location, type, description, url, view_url')
+    .eq('id', jobId)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    title: data.title ?? '',
+    department: data.department,
+    location: data.location,
+    type: data.type,
+    description: data.description,
+    url: data.url,
+    view_url: data.view_url,
+  };
+}

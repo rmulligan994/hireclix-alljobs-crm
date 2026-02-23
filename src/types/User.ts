@@ -16,6 +16,7 @@ export interface Profile {
   email?: string;
   title?: string;
   company?: string;
+  linkedinUrl?: string;
   avatarUrl?: string;
   createdAt: Date;
   updatedAt: Date;
