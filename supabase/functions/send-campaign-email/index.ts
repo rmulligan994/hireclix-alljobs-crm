@@ -135,11 +135,11 @@ Deno.serve(async (req) => {
     const org = orgRows?.[0] || { company_name: "", brand_name: "", base_url: "" };
 
     // Fetch job for job_alert campaigns (job merge tags)
-    let jobData: { title?: string; department?: string; location?: string; type?: string; description?: string; url?: string } | null = null;
+    let jobData: { title?: string; department?: string; location?: string; type?: string; description?: string; url?: string; view_url?: string } | null = null;
     if (campaign.job_id) {
       const { data: job } = await supabase
         .from("jobs")
-        .select("title, department, location, type, description, url")
+        .select("title, department, location, type, description, url, view_url")
         .eq("id", campaign.job_id)
         .single();
       jobData = job || null;
@@ -315,7 +315,7 @@ function replaceMergeTags(content: string, ctx: {
   campaign: any;
   sender: any;
   org: any;
-  job: { title?: string; department?: string; location?: string; type?: string; description?: string; url?: string } | null;
+  job: { title?: string; department?: string; location?: string; type?: string; description?: string; url?: string; view_url?: string } | null;
   recipientId: string;
   baseUrl: string;
 }): string {
@@ -335,7 +335,6 @@ function replaceMergeTags(content: string, ctx: {
     .replace(/\{\{email\}\}/g, candidate.email || "")
     .replace(/\{\{company\}\}/g, candidate.company || "")
     .replace(/\{\{title\}\}/g, candidate.title || "")
-    .replace(/\{\{jobTitle\}\}/g, candidate.title || "")
     .replace(/\{\{skills\}\}/g, skills)
     .replace(/\{\{location\}\}/g, candidate.location || "")
     .replace(/\{\{source\}\}/g, candidate.source || "")
@@ -352,7 +351,7 @@ function replaceMergeTags(content: string, ctx: {
     .replace(/\{\{jobLocation\}\}/g, job?.location || "")
     .replace(/\{\{jobType\}\}/g, job?.type || "")
     .replace(/\{\{jobDescription\}\}/g, job?.description || "")
-    .replace(/\{\{jobUrl\}\}/g, job?.url || "")
+    .replace(/\{\{jobUrl\}\}/g, job?.url || job?.view_url || "")
     .replace(/\{\{unsubscribeLink\}\}/g, unsubscribeLink)
     .replace(/\{\{viewInBrowserLink\}\}/g, "#");
 }

@@ -2,10 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import BeefreeSDK from '@beefree.io/sdk';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Loader2, X, Eye, Monitor, Smartphone, Tags, Check } from 'lucide-react';
+import { Loader2, X, Eye, Monitor, Smartphone } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { MergeTagsPanel } from './MergeTagsPanel';
-import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 
 interface BeefreeEmailEditorProps {
   initialTemplate?: Record<string, unknown> | null;
@@ -101,24 +99,7 @@ export const BeefreeEmailEditor = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile' | null>(null);
-  const [mergePanelOpen, setMergePanelOpen] = useState(true);
-  const [dropZoneCopied, setDropZoneCopied] = useState(false);
   const hasJobContext = Boolean(campaignJobId);
-
-  // Focus editor iframe after copy so user can paste immediately
-  const focusEditorAfterCopy = useCallback(() => {
-    requestAnimationFrame(() => {
-      const container = document.getElementById('bee-plugin-container');
-      const iframe = container?.querySelector('iframe');
-      if (iframe) {
-        try {
-          (iframe as HTMLIFrameElement).focus();
-        } catch {
-          // Cross-origin may block; ignore
-        }
-      }
-    });
-  }, []);
 
   // Stable callback for onSave - use imported toast (stable ref) to avoid re-init
   const handleSaveCallback = useCallback((jsonFile: string, htmlFile: string) => {
@@ -293,16 +274,7 @@ export const BeefreeEmailEditor = ({
         </div>
         
         <div className="flex items-center space-x-2">
-          <Button
-            variant={mergePanelOpen ? 'secondary' : 'outline'}
-            size="sm"
-            onClick={() => setMergePanelOpen(!mergePanelOpen)}
-            disabled={isLoading}
-            title="Merge Tags"
-          >
-            <Tags className="w-4 h-4 mr-2" />
-            Merge Tags
-          </Button>
+          <span className="text-xs text-muted-foreground hidden sm:inline">Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">@</kbd> in a text block to insert merge tags</span>
           <Button
             variant={previewMode === 'desktop' ? 'secondary' : 'outline'}
             size="sm"
@@ -343,39 +315,8 @@ export const BeefreeEmailEditor = ({
         </Button>
       </div>
 
-      <div className="flex-1 flex gap-4 relative min-h-0 overflow-hidden">
-        <Collapsible open={mergePanelOpen} onOpenChange={setMergePanelOpen} className="flex flex-col shrink-0">
-          <CollapsibleContent>
-            <div className="w-56 border rounded-lg p-3 bg-card overflow-y-auto max-h-[calc(100vh-280px)]">
-              <MergeTagsPanel onCopy={focusEditorAfterCopy} />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-        <div className="flex-1 relative min-w-0 flex flex-col">
-          {/* Drop zone strip - drop merge tags/job content here, then paste in editor */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-            onDrop={(e) => {
-              e.preventDefault();
-              const text = e.dataTransfer.getData('text/plain');
-              if (text) {
-                navigator.clipboard.writeText(text);
-                setDropZoneCopied(true);
-                setTimeout(() => setDropZoneCopied(false), 2500);
-                focusEditorAfterCopy();
-              }
-            }}
-            className="shrink-0 py-1.5 px-3 rounded-b-lg border border-t-0 border-border bg-muted/50 text-center text-xs text-muted-foreground hover:bg-muted/80 transition-colors"
-          >
-            {dropZoneCopied ? (
-              <span className="text-green-600 dark:text-green-400 flex items-center justify-center gap-1 font-medium">
-                <Check className="w-3.5 h-3.5 shrink-0" /> Copied! Click in editor and paste (⌘V)
-              </span>
-            ) : (
-              'Drop tag or job content here to copy · paste in editor with ⌘V'
-            )}
-          </div>
-          <div className="flex-1 relative min-h-0">
+      <div className="flex-1 relative min-h-0 flex flex-col">
+        <div className="flex-1 relative min-h-0">
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
                 <div className="flex flex-col items-center space-y-4">
@@ -387,10 +328,8 @@ export const BeefreeEmailEditor = ({
             <div 
               id="bee-plugin-container"
               ref={containerRef} 
-              className="h-full w-full focus:outline-none"
+              className="h-full w-full"
               style={{ minHeight: '500px' }}
-              tabIndex={-1}
-              title="Click here, then paste (⌘V) to insert merge tags"
             />
           </div>
         </div>
