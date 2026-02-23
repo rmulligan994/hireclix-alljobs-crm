@@ -15,6 +15,7 @@ interface SequenceBuilderProps {
   templateBeeJson?: Record<string, unknown> | null;
   templateHtml?: string | null;
   onContinue?: (steps: Partial<CampaignEmail>[]) => void;
+  campaignJobId?: string | null;
 }
 
 interface EmailStep {
@@ -28,7 +29,7 @@ interface EmailStep {
   expanded: boolean;
 }
 
-export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onContinue }: SequenceBuilderProps) => {
+export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onContinue, campaignJobId }: SequenceBuilderProps) => {
   const [steps, setSteps] = useState<EmailStep[]>([
     {
       id: '1',
@@ -140,6 +141,7 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
             initialTemplate={editingStepData?.beeJson}
             onSave={handleEditorSave}
             onCancel={() => setEditingStep(null)}
+            campaignJobId={campaignJobId}
           />
         </DialogContent>
       </Dialog>

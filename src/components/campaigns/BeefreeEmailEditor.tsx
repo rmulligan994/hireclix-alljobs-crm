@@ -116,11 +116,22 @@ export const BeefreeEmailEditor = ({
   const [helpBannerDismissed, setHelpBannerDismissed] = useState(false);
   const hasJobContext = Boolean(campaignJobId);
 
+  // Fix anchors missing href (Beefree sometimes strips merge-tag URLs)
+  const fixButtonLinks = useCallback((html: string): string => {
+    const defaultHref = hasJobContext ? '{{jobUrl}}' : '#';
+    return html.replace(/<a(\s[^>]*)>/gi, (match, attrs) => {
+      const a = attrs || '';
+      if (/href\s*=/i.test(a)) return match;
+      return `<a href="${defaultHref}"${a}>`;
+    });
+  }, [hasJobContext]);
+
   // Stable callback for onSave - use imported toast (stable ref) to avoid re-init
   const handleSaveCallback = useCallback((jsonFile: string, htmlFile: string) => {
     try {
       const beeJson = JSON.parse(jsonFile);
-      onSave(beeJson, htmlFile);
+      const fixedHtml = fixButtonLinks(htmlFile);
+      onSave(beeJson, fixedHtml);
       toast({
         title: 'Template saved',
         description: 'Your email template has been saved successfully.',
@@ -133,7 +144,7 @@ export const BeefreeEmailEditor = ({
         variant: 'destructive',
       });
     }
-  }, [onSave]);
+  }, [onSave, fixButtonLinks]);
 
   useEffect(() => {
     let isMounted = true;

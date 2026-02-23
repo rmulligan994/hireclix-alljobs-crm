@@ -177,9 +177,10 @@ Deno.serve(async (req) => {
         baseUrl: org.base_url || Deno.env.get("APP_URL") || "",
       };
       const personalizedSubject = replaceMergeTags(firstEmail.subject, mergeContext);
-      let personalizedHtml = firstEmail.html_content
-        ? replaceMergeTags(firstEmail.html_content, mergeContext)
-        : `<p>Hello ${candidate.first_name || "there"},</p><p>This is a campaign email.</p>`;
+      let rawHtml = firstEmail.html_content || `<p>Hello ${candidate.first_name || "there"},</p><p>This is a campaign email.</p>`;
+      // Fix anchors missing href (Beefree sometimes strips merge-tag URLs from buttons)
+      rawHtml = fixBrokenButtonLinks(rawHtml, !!jobData);
+      let personalizedHtml = replaceMergeTags(rawHtml, mergeContext);
 
       // Append a proper unsubscribe footer so the link is always present and clickable
       const unsubscribeUrl = mergeContext.baseUrl
@@ -300,6 +301,16 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+/** Fix anchors missing href (Beefree may strip merge-tag URLs from buttons) */
+function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
+  const defaultHref = hasJob ? "{{jobUrl}}" : "#";
+  return html.replace(/<a(\s[^>]*)>/gi, (match, attrs) => {
+    const a = attrs || "";
+    if (/href\s*=/i.test(a)) return match;
+    return `<a href="${defaultHref}"${a}>`;
+  });
+}
 
 /** Appends unsubscribe footer before </body> or at end of HTML */
 function appendUnsubscribeFooter(html: string, footer: string): string {

@@ -549,6 +549,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               onContinue={handleSequenceContinue}
               templateBeeJson={templateBeeJson}
               templateHtml={templateHtml}
+              campaignJobId={selectedJobId}
             />
           )}
 
