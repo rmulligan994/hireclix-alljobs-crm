@@ -110,6 +110,17 @@ export interface CampaignJobOption {
   location: string | null;
 }
 
+/** Full job for merge panel (actual text to paste) */
+export interface JobForMergePanel {
+  id: string;
+  title: string;
+  department: string | null;
+  location: string | null;
+  type: string | null;
+  description: string | null;
+  url: string | null;
+}
+
 /**
  * Fetches jobs for campaign job selector (returns UUID for FK).
  */
@@ -142,5 +153,43 @@ export async function fetchJobsForCampaign(search?: string): Promise<CampaignJob
     title: r.title,
     department: r.department,
     location: r.location,
+  }));
+}
+
+/**
+ * Fetches jobs with full fields for merge panel (paste actual job content).
+ */
+export async function fetchJobsForMergePanel(search?: string): Promise<JobForMergePanel[]> {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+  if (sessionError || !session) {
+    return [];
+  }
+
+  let query = supabase
+    .from('jobs')
+    .select('id, title, department, location, type, description, url')
+    .order('last_updated', { ascending: false });
+
+  if (search && search.trim()) {
+    const q = escapeLike(search.trim());
+    const pattern = `%${q}%`;
+    query = query.or(`title.ilike.${pattern},req_id.ilike.${pattern}`);
+  }
+
+  const { data, error } = await query.limit(50);
+
+  if (error) return [];
+
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    title: r.title ?? '',
+    department: r.department,
+    location: r.location,
+    type: r.type,
+    description: r.description,
+    url: r.url,
   }));
 }

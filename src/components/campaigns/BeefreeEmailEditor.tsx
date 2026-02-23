@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import BeefreeSDK from '@beefree.io/sdk';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Loader2, X, Eye, Monitor, Smartphone, Tags } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Loader2, X, Eye, Monitor, Smartphone, Tags, Check } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 import { MergeTagsPanel } from './MergeTagsPanel';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 
@@ -47,9 +47,10 @@ const defaultTemplate = {
 };
 
 // Merge tags for personalization - aligned with send-campaign-email replaceMergeTags
+// Order: most-used first for @ autocomplete in editor
 const getMergeTags = (hasJob: boolean) => {
   const base = [
-    // Candidate fields
+    // Candidate (most common for greetings)
     { name: 'First Name', value: '{{firstName}}' },
     { name: 'Last Name', value: '{{lastName}}' },
     { name: 'Full Name', value: '{{fullName}}' },
@@ -60,15 +61,15 @@ const getMergeTags = (hasJob: boolean) => {
     { name: 'Location', value: '{{location}}' },
     { name: 'Source', value: '{{source}}' },
     { name: 'LinkedIn URL', value: '{{linkedinUrl}}' },
-    // Campaign
-    { name: 'Campaign Name', value: '{{campaignName}}' },
-    { name: 'Current Date', value: '{{currentDate}}' },
-    { name: 'Current Time', value: '{{currentTime}}' },
-    // Sender (from profile + org settings)
+    // Sender
     { name: 'Sender Name', value: '{{senderName}}' },
     { name: 'Sender Company', value: '{{senderCompany}}' },
     { name: 'Sender Brand', value: '{{senderBrand}}' },
     { name: 'Sender Email', value: '{{senderEmail}}' },
+    // Campaign
+    { name: 'Campaign Name', value: '{{campaignName}}' },
+    { name: 'Current Date', value: '{{currentDate}}' },
+    { name: 'Current Time', value: '{{currentTime}}' },
   ];
   if (hasJob) {
     base.push(
@@ -101,10 +102,25 @@ export const BeefreeEmailEditor = ({
   const [error, setError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile' | null>(null);
   const [mergePanelOpen, setMergePanelOpen] = useState(true);
-  const { toast } = useToast();
+  const [dropZoneCopied, setDropZoneCopied] = useState(false);
   const hasJobContext = Boolean(campaignJobId);
 
-  // Stable callback for onSave
+  // Focus editor iframe after copy so user can paste immediately
+  const focusEditorAfterCopy = useCallback(() => {
+    requestAnimationFrame(() => {
+      const container = document.getElementById('bee-plugin-container');
+      const iframe = container?.querySelector('iframe');
+      if (iframe) {
+        try {
+          (iframe as HTMLIFrameElement).focus();
+        } catch {
+          // Cross-origin may block; ignore
+        }
+      }
+    });
+  }, []);
+
+  // Stable callback for onSave - use imported toast (stable ref) to avoid re-init
   const handleSaveCallback = useCallback((jsonFile: string, htmlFile: string) => {
     try {
       const beeJson = JSON.parse(jsonFile);
@@ -121,7 +137,7 @@ export const BeefreeEmailEditor = ({
         variant: 'destructive',
       });
     }
-  }, [onSave, toast]);
+  }, [onSave]);
 
   useEffect(() => {
     let isMounted = true;
@@ -204,7 +220,7 @@ export const BeefreeEmailEditor = ({
         beeInstanceRef.current = null;
       }
     };
-  }, [initialTemplate, handleSaveCallback, toast, hasJobContext]);
+  }, [initialTemplate, handleSaveCallback, hasJobContext]);
 
   const handleSave = () => {
     if (beeInstanceRef.current) {
@@ -331,25 +347,52 @@ export const BeefreeEmailEditor = ({
         <Collapsible open={mergePanelOpen} onOpenChange={setMergePanelOpen} className="flex flex-col shrink-0">
           <CollapsibleContent>
             <div className="w-56 border rounded-lg p-3 bg-card overflow-y-auto max-h-[calc(100vh-280px)]">
-              <MergeTagsPanel hasJobContext={hasJobContext} />
+              <MergeTagsPanel onCopy={focusEditorAfterCopy} />
             </div>
           </CollapsibleContent>
         </Collapsible>
-        <div className="flex-1 relative min-w-0">
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-              <div className="flex flex-col items-center space-y-4">
-                <Loader2 className="w-8 h-8 animate-spin text-sky-blue" />
-                <p className="text-muted-foreground">Loading email editor...</p>
+        <div className="flex-1 relative min-w-0 flex flex-col">
+          {/* Drop zone strip - drop merge tags/job content here, then paste in editor */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const text = e.dataTransfer.getData('text/plain');
+              if (text) {
+                navigator.clipboard.writeText(text);
+                setDropZoneCopied(true);
+                setTimeout(() => setDropZoneCopied(false), 2500);
+                focusEditorAfterCopy();
+              }
+            }}
+            className="shrink-0 py-1.5 px-3 rounded-b-lg border border-t-0 border-border bg-muted/50 text-center text-xs text-muted-foreground hover:bg-muted/80 transition-colors"
+          >
+            {dropZoneCopied ? (
+              <span className="text-green-600 dark:text-green-400 flex items-center justify-center gap-1 font-medium">
+                <Check className="w-3.5 h-3.5 shrink-0" /> Copied! Click in editor and paste (⌘V)
+              </span>
+            ) : (
+              'Drop tag or job content here to copy · paste in editor with ⌘V'
+            )}
+          </div>
+          <div className="flex-1 relative min-h-0">
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+                <div className="flex flex-col items-center space-y-4">
+                  <Loader2 className="w-8 h-8 animate-spin text-sky-blue" />
+                  <p className="text-muted-foreground">Loading email editor...</p>
+                </div>
               </div>
-            </div>
-          )}
-          <div 
-            id="bee-plugin-container"
-            ref={containerRef} 
-            className="h-full w-full"
-            style={{ minHeight: '600px' }}
-          />
+            )}
+            <div 
+              id="bee-plugin-container"
+              ref={containerRef} 
+              className="h-full w-full focus:outline-none"
+              style={{ minHeight: '500px' }}
+              tabIndex={-1}
+              title="Click here, then paste (⌘V) to insert merge tags"
+            />
+          </div>
         </div>
       </div>
     </div>
