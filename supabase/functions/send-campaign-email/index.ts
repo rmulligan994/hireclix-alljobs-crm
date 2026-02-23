@@ -302,13 +302,25 @@ Deno.serve(async (req) => {
   }
 });
 
-/** Fix anchors missing href (Beefree may strip merge-tag URLs from buttons) */
+/** Fix anchors missing or empty href (Beefree may strip merge-tag URLs from buttons) */
 function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
-  const defaultHref = hasJob ? "{{jobUrl}}" : "#";
-  return html.replace(/<a(\s[^>]*)>/gi, (match, attrs) => {
+  return html.replace(/<a(\s[^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, content) => {
     const a = attrs || "";
-    if (/href\s*=/i.test(a)) return match;
-    return `<a href="${defaultHref}"${a}>`;
+    // Keep if href exists and is non-empty (not "", '#', or merge tag that was stripped)
+    const hrefMatch = a.match(/href\s*=\s*["']([^"']*)["']/i);
+    if (hrefMatch) {
+      const val = hrefMatch[1].trim();
+      if (val && val !== "#" && !/^\s*$/.test(val)) return match;
+    }
+    // Infer href from button text (strip HTML, normalize whitespace)
+    const text = (content || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").toLowerCase().trim();
+    let href = "#";
+    if (/(^|\s)(email|contact|reach out|reply)(\s|$)/.test(text) || /^email$/.test(text)) href = "mailto:{{senderEmail}}";
+    else if (/linkedin|linked in|connect/.test(text)) href = "{{senderLinkedinUrl}}";
+    else if (/unsubscribe/.test(text)) href = "{{unsubscribeLink}}";
+    else if (hasJob && /(apply|view job|learn more)/.test(text)) href = "{{jobUrl}}";
+    else if (hasJob) href = "{{jobUrl}}"; // default for job campaigns
+    return `<a href="${href}"${a}>${content}</a>`;
   });
 }
 

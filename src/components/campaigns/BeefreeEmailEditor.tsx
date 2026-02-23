@@ -118,11 +118,21 @@ export const BeefreeEmailEditor = ({
 
   // Fix anchors missing href (Beefree sometimes strips merge-tag URLs)
   const fixButtonLinks = useCallback((html: string): string => {
-    const defaultHref = hasJobContext ? '{{jobUrl}}' : '#';
-    return html.replace(/<a(\s[^>]*)>/gi, (match, attrs) => {
+    return html.replace(/<a(\s[^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, content) => {
       const a = attrs || '';
-      if (/href\s*=/i.test(a)) return match;
-      return `<a href="${defaultHref}"${a}>`;
+      const hrefMatch = a.match(/href\s*=\s*["']([^"']*)["']/i);
+      if (hrefMatch) {
+        const val = hrefMatch[1].trim();
+        if (val && val !== '#' && !/^\s*$/.test(val)) return match;
+      }
+      const text = (content || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').toLowerCase().trim();
+      let href = '#';
+      if (/(^|\s)(email|contact|reach out|reply)(\s|$)/.test(text) || text === 'email') href = 'mailto:{{senderEmail}}';
+      else if (/linkedin|linked in|connect/.test(text)) href = '{{senderLinkedinUrl}}';
+      else if (/unsubscribe/.test(text)) href = '{{unsubscribeLink}}';
+      else if (hasJobContext && /(apply|view job|learn more)/.test(text)) href = '{{jobUrl}}';
+      else if (hasJobContext) href = '{{jobUrl}}';
+      return `<a href="${href}"${a}>${content}</a>`;
     });
   }, [hasJobContext]);
 
