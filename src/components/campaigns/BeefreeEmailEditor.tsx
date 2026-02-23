@@ -334,6 +334,5 @@ export const BeefreeEmailEditor = ({
           </div>
         </div>
       </div>
-    </div>
   );
 };
