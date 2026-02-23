@@ -101,3 +101,46 @@ export async function fetchJobsFromSupabase(
 export async function fetchJobs(page = 1, search?: string): Promise<JobsResponse> {
   return fetchJobsFromSupabase(page, search);
 }
+
+/** Job with UUID for campaign job_id FK */
+export interface CampaignJobOption {
+  id: string;
+  title: string;
+  department: string | null;
+  location: string | null;
+}
+
+/**
+ * Fetches jobs for campaign job selector (returns UUID for FK).
+ */
+export async function fetchJobsForCampaign(search?: string): Promise<CampaignJobOption[]> {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+  if (sessionError || !session) {
+    throw new Error('You must be signed in to view jobs.');
+  }
+
+  let query = supabase
+    .from('jobs')
+    .select('id, title, department, location')
+    .order('last_updated', { ascending: false });
+
+  if (search && search.trim()) {
+    const q = escapeLike(search.trim());
+    const pattern = `%${q}%`;
+    query = query.or(`title.ilike.${pattern},req_id.ilike.${pattern}`);
+  }
+
+  const { data, error } = await query.limit(50);
+
+  if (error) throw error;
+
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    title: r.title,
+    department: r.department,
+    location: r.location,
+  }));
+}

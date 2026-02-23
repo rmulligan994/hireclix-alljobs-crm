@@ -7,6 +7,7 @@ export interface Campaign {
   goal?: string;
   audience_filter?: AudienceFilter;
   scheduled_at?: string;
+  job_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +53,7 @@ export interface CreateCampaignInput {
   goal?: string;
   audience_filter?: AudienceFilter;
   scheduled_at?: string;
+  job_id?: string | null;
 }
 
 export interface UpdateCampaignInput {
@@ -61,6 +63,7 @@ export interface UpdateCampaignInput {
   goal?: string;
   audience_filter?: AudienceFilter;
   scheduled_at?: string;
+  job_id?: string | null;
 }
 
 export interface CreateCampaignEmailInput {

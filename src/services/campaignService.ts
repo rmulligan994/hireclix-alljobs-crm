@@ -70,6 +70,7 @@ export const campaignService = {
         goal: input.goal,
         audience_filter: audienceFilterToJson(input.audience_filter),
         scheduled_at: input.scheduled_at,
+        job_id: input.job_id ?? null,
       })
       .select()
       .single();
@@ -90,6 +91,7 @@ export const campaignService = {
     if (input.goal !== undefined) updateData.goal = input.goal;
     if (input.audience_filter !== undefined) updateData.audience_filter = audienceFilterToJson(input.audience_filter);
     if (input.scheduled_at !== undefined) updateData.scheduled_at = input.scheduled_at;
+    if (input.job_id !== undefined) updateData.job_id = input.job_id;
 
     const { data, error } = await supabase
       .from('campaigns')

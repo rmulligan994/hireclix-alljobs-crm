@@ -136,7 +136,10 @@ Deno.serve(async (req) => {
         break;
 
       case "delivered":
-        // Recipient's server accepted the email
+        // For scheduled emails: update status from "scheduled" to "sent"; set sent_at
+        updateData.sent_at = eventTime;
+        // Only set status to "sent" if currently "scheduled" (don't overwrite opened/clicked)
+        updateData.status = "sent";
         break;
 
       case "opened":

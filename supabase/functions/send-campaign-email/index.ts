@@ -8,6 +8,7 @@ const corsHeaders = {
 interface SendEmailRequest {
   campaignId: string;
   recipientId?: string; // If provided, send to specific recipient; otherwise send to all pending
+  scheduledAt?: string; // ISO date string - if provided, use Mailgun o:deliverytime to schedule
 }
 
 Deno.serve(async (req) => {
@@ -33,7 +34,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { campaignId, recipientId }: SendEmailRequest = await req.json();
+    const { campaignId, recipientId, scheduledAt }: SendEmailRequest = await req.json();
 
     if (!campaignId) {
       return new Response(
@@ -74,7 +75,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get recipients to send to (pending only; unsubscribed/bounced/complained are excluded)
+    // Get recipients to send to (pending only; unsubscribed/bounced/complained excluded by status filter)
     let recipientsQuery = supabase
       .from("campaign_recipients")
       .select(`
@@ -95,7 +96,7 @@ Deno.serve(async (req) => {
         )
       `)
       .eq("campaign_id", campaignId)
-      .eq("status", "pending");
+      .in("status", ["pending"]);
 
     if (recipientId) {
       recipientsQuery = recipientsQuery.eq("id", recipientId);
@@ -133,6 +134,17 @@ Deno.serve(async (req) => {
       .limit(1);
     const org = orgRows?.[0] || { company_name: "", brand_name: "", base_url: "" };
 
+    // Fetch job for job_alert campaigns (job merge tags)
+    let jobData: { title?: string; department?: string; location?: string; type?: string; description?: string; url?: string } | null = null;
+    if (campaign.job_id) {
+      const { data: job } = await supabase
+        .from("jobs")
+        .select("title, department, location, type, description, url")
+        .eq("id", campaign.job_id)
+        .single();
+      jobData = job || null;
+    }
+
     console.log(`Found ${recipients.length} pending recipients`);
 
     // For now, send the first email in the sequence
@@ -160,6 +172,7 @@ Deno.serve(async (req) => {
         campaign,
         sender: senderData,
         org,
+        job: jobData,
         recipientId: recipient.id,
         baseUrl: org.base_url || Deno.env.get("APP_URL") || "",
       };
@@ -179,7 +192,7 @@ Deno.serve(async (req) => {
       personalizedHtml = appendUnsubscribeFooter(personalizedHtml, unsubscribeFooter);
 
       try {
-        console.log(`Sending email to ${candidate.email}`);
+        console.log(`Sending email to ${candidate.email}` + (scheduledAt ? ` (scheduled for ${scheduledAt})` : ""));
 
         // Mailgun expects multipart/form-data
         const formData = new FormData();
@@ -193,6 +206,13 @@ Deno.serve(async (req) => {
         formData.append("v:recipient_id", recipient.id);
         formData.append("v:campaign_id", campaignId);
         formData.append("v:candidate_id", recipient.candidate_id);
+
+        // Schedule for later via Mailgun o:deliverytime (RFC 2822 format)
+        if (scheduledAt) {
+          const d = new Date(scheduledAt);
+          const rfc2822 = d.toUTCString(); // e.g. "Fri, 25 Feb 2025 09:00:00 GMT"
+          formData.append("o:deliverytime", rfc2822);
+        }
 
         const response = await fetch(mailgunUrl, {
           method: "POST",
@@ -209,29 +229,32 @@ Deno.serve(async (req) => {
           const result = await response.json();
           const messageId = result.id; // e.g. "<20230201120000.1.ABC123@domain.com>"
 
-          console.log(`Email sent successfully to ${candidate.email}, message-id: ${messageId}`);
+          console.log(`Email ${scheduledAt ? "queued" : "sent"} successfully to ${candidate.email}, message-id: ${messageId}`);
 
-          // Update recipient status and store message_id for webhook correlation
+          // Update recipient status: "scheduled" if queued for later, "sent" if immediate
+          const recipientStatus = scheduledAt ? "scheduled" : "sent";
           await supabase
             .from("campaign_recipients")
             .update({
-              status: "sent",
-              sent_at: new Date().toISOString(),
+              status: recipientStatus,
+              sent_at: scheduledAt ? null : new Date().toISOString(),
               message_id: messageId,
             })
             .eq("id", recipient.id);
 
-          // Log to communications for activity feed and analytics
-          await supabase.from("communications").insert({
-            candidate_id: recipient.candidate_id,
-            type: "email",
-            subject: personalizedSubject,
-            content: personalizedHtml.replace(/<[^>]*>/g, "").slice(0, 500), // Plain text excerpt
-            direction: "outbound",
-            occurred_at: new Date().toISOString(),
-            campaign_recipient_id: recipient.id,
-            external_message_id: messageId,
-          });
+          // Log to communications for activity feed (only when actually sent, not when scheduled)
+          if (!scheduledAt) {
+            await supabase.from("communications").insert({
+              candidate_id: recipient.candidate_id,
+              type: "email",
+              subject: personalizedSubject,
+              content: personalizedHtml.replace(/<[^>]*>/g, "").slice(0, 500), // Plain text excerpt
+              direction: "outbound",
+              occurred_at: new Date().toISOString(),
+              campaign_recipient_id: recipient.id,
+              external_message_id: messageId,
+            });
+          }
 
           sentCount++;
         } else {
@@ -245,11 +268,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update campaign status if all emails sent
-    if (campaign.status === "scheduled" || campaign.status === "draft") {
+    // Update campaign status: if scheduled send, keep "scheduled"; if immediate, set "active"
+    if (!scheduledAt && (campaign.status === "scheduled" || campaign.status === "draft")) {
       await supabase
         .from("campaigns")
         .update({ status: "active" })
+        .eq("id", campaignId);
+    } else if (scheduledAt && (campaign.status === "scheduled" || campaign.status === "draft")) {
+      await supabase
+        .from("campaigns")
+        .update({ status: "scheduled" })
         .eq("id", campaignId);
     }
 
@@ -287,10 +315,11 @@ function replaceMergeTags(content: string, ctx: {
   campaign: any;
   sender: any;
   org: any;
+  job: { title?: string; department?: string; location?: string; type?: string; description?: string; url?: string } | null;
   recipientId: string;
   baseUrl: string;
 }): string {
-  const { candidate, campaign, sender, org, recipientId, baseUrl } = ctx;
+  const { candidate, campaign, sender, org, job, recipientId, baseUrl } = ctx;
   const fullName = [candidate.first_name, candidate.last_name].filter(Boolean).join(" ") || "";
   const skills = Array.isArray(candidate.tags) ? candidate.tags.join(", ") : (candidate.tags || "");
   const senderName = [sender.first_name, sender.last_name].filter(Boolean).join(" ") || "";
@@ -318,6 +347,12 @@ function replaceMergeTags(content: string, ctx: {
     .replace(/\{\{senderCompany\}\}/g, senderCompany)
     .replace(/\{\{senderBrand\}\}/g, org.brand_name || "")
     .replace(/\{\{senderEmail\}\}/g, sender.email || "")
+    .replace(/\{\{jobTitle\}\}/g, job?.title || "")
+    .replace(/\{\{jobDepartment\}\}/g, job?.department || "")
+    .replace(/\{\{jobLocation\}\}/g, job?.location || "")
+    .replace(/\{\{jobType\}\}/g, job?.type || "")
+    .replace(/\{\{jobDescription\}\}/g, job?.description || "")
+    .replace(/\{\{jobUrl\}\}/g, job?.url || "")
     .replace(/\{\{unsubscribeLink\}\}/g, unsubscribeLink)
     .replace(/\{\{viewInBrowserLink\}\}/g, "#");
 }

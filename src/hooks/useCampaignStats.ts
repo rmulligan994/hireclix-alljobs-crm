@@ -5,9 +5,12 @@ export interface CampaignStats {
   recipients: number;
   pending: number;
   sent: number;
+  scheduled: number;
   opened: number;
+  clicked: number;
   responded: number;
   responseRate: number;
+  clickRate: number;
 }
 
 export function useCampaignStats(campaignId: string) {
@@ -15,9 +18,12 @@ export function useCampaignStats(campaignId: string) {
     recipients: 0,
     pending: 0,
     sent: 0,
+    scheduled: 0,
     opened: 0,
+    clicked: 0,
     responded: 0,
     responseRate: 0,
+    clickRate: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -34,12 +40,15 @@ export function useCampaignStats(campaignId: string) {
 
     const recipients = data.length;
     const pending = data.filter(r => r.status === 'pending').length;
-    const sent = data.filter(r => r.status !== 'pending').length;
+    const scheduled = data.filter(r => r.status === 'scheduled').length;
+    const sent = data.filter(r => r.status === 'sent').length;
     const opened = data.filter(r => r.status === 'opened' || r.status === 'clicked' || r.status === 'responded').length;
+    const clicked = data.filter(r => r.status === 'clicked' || r.status === 'responded').length;
     const responded = data.filter(r => r.status === 'responded').length;
     const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
+    const clickRate = recipients > 0 ? Math.round((clicked / recipients) * 100) : 0;
 
-    setStats({ recipients, pending, sent, opened, responded, responseRate });
+    setStats({ recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, clickRate });
     setIsLoading(false);
   };
 
@@ -97,12 +106,15 @@ export function useAllCampaignsStats(campaignIds: string[]) {
       const campaignData = data.filter(r => r.campaign_id === campaignId);
       const recipients = campaignData.length;
       const pending = campaignData.filter(r => r.status === 'pending').length;
-      const sent = campaignData.filter(r => r.status !== 'pending').length;
+      const scheduled = campaignData.filter(r => r.status === 'scheduled').length;
+      const sent = campaignData.filter(r => r.status === 'sent').length;
       const opened = campaignData.filter(r => r.status === 'opened' || r.status === 'clicked' || r.status === 'responded').length;
+      const clicked = campaignData.filter(r => r.status === 'clicked' || r.status === 'responded').length;
       const responded = campaignData.filter(r => r.status === 'responded').length;
       const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
+      const clickRate = recipients > 0 ? Math.round((clicked / recipients) * 100) : 0;
 
-      newStatsMap[campaignId] = { recipients, pending, sent, opened, responded, responseRate };
+      newStatsMap[campaignId] = { recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, clickRate };
     });
 
     setStatsMap(newStatsMap);

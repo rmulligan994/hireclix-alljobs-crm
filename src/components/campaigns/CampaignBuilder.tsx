@@ -13,25 +13,28 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { SequenceBuilder } from './SequenceBuilder';
 import { TemplateLibrary } from './TemplateLibrary';
 import { BeefreeEmailEditor } from './BeefreeEmailEditor';
-import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Clock, Users, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Clock, Users, Loader2, Search } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
 import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients, useCreateCampaignEmail } from '@/hooks/useCampaigns';
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
+import { useJobsForCampaign } from '@/hooks/useJobs';
 import { EmailTemplate } from '@/services/emailTemplateService';
 import { AudienceFilter, CampaignEmail, Campaign } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CampaignBuilderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingCampaign?: Campaign | null;
+  initialTemplate?: EmailTemplate | null;
 }
 
-export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: CampaignBuilderProps) => {
+export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTemplate }: CampaignBuilderProps) => {
   const [currentStep, setCurrentStep] = useState<'details' | 'template' | 'editor' | 'sequence' | 'audience' | 'review'>('details');
   const [campaignName, setCampaignName] = useState('');
   const [campaignType, setCampaignType] = useState('');
@@ -49,6 +52,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
       setCampaignType(editingCampaign.type);
       setCampaignGoal(editingCampaign.goal || '');
       setCampaignId(editingCampaign.id);
+      setSelectedJobId(editingCampaign.job_id ?? null);
       if (editingCampaign.audience_filter) {
         const filter = editingCampaign.audience_filter as AudienceFilter;
         setAudienceFilter(filter);
@@ -58,6 +62,19 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
       }
     }
   }, [editingCampaign]);
+
+  // When opening with initialTemplate (from Template Library), go straight to editor
+  useEffect(() => {
+    if (open && !editingCampaign && initialTemplate !== undefined) {
+      setSelectedTemplate(initialTemplate ?? null);
+      if (initialTemplate?.bee_json && typeof initialTemplate.bee_json === 'object' && !Array.isArray(initialTemplate.bee_json)) {
+        setTemplateBeeJson(initialTemplate.bee_json as Record<string, unknown>);
+      } else {
+        setTemplateBeeJson(null);
+      }
+      setCurrentStep('editor');
+    }
+  }, [open, editingCampaign, initialTemplate]);
   
   // Audience state
   const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>({});
@@ -69,6 +86,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
   const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
   const [scheduleTime, setScheduleTime] = useState('09:00');
   const [isScheduled, setIsScheduled] = useState(false);
+
+  // Job state (for job_alert campaigns)
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [jobSearch, setJobSearch] = useState('');
   
   const { toast } = useToast();
   const { createTemplate } = useEmailTemplates();
@@ -78,6 +99,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
   const createCampaignEmail = useCreateCampaignEmail();
   const { data: talentPools } = useTalentPools();
   const { data: pipelines } = usePipelines();
+  const { data: campaignJobs } = useJobsForCampaign(jobSearch);
   const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
   const { data: recipientCount } = useRecipientCount(audienceFilter);
 
@@ -148,6 +170,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
           type: campaignType,
           goal: campaignGoal,
           audience_filter: audienceFilter,
+          job_id: campaignType === 'job_alert' ? selectedJobId : null,
         });
         setCampaignId(campaign.id);
         
@@ -172,6 +195,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
             goal: campaignGoal,
             status: 'draft',
             audience_filter: audienceFilter,
+            job_id: campaignType === 'job_alert' ? selectedJobId : null,
           },
         });
       }
@@ -204,6 +228,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
       const scheduledAt = new Date(scheduleDate);
       const [hours, minutes] = scheduleTime.split(':').map(Number);
       scheduledAt.setHours(hours, minutes);
+      const scheduledAtIso = scheduledAt.toISOString();
+
+      let finalCampaignId = campaignId;
 
       if (!campaignId) {
         const campaign = await createCampaign.mutateAsync({
@@ -211,9 +238,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
           type: campaignType,
           goal: campaignGoal,
           audience_filter: audienceFilter,
-          scheduled_at: scheduledAt.toISOString(),
+          scheduled_at: scheduledAtIso,
+          job_id: campaignType === 'job_alert' ? selectedJobId : null,
         });
         setCampaignId(campaign.id);
+        finalCampaignId = campaign.id;
         
         // Save email steps
         if (emailSteps.length > 0) {
@@ -236,20 +265,31 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
           id: campaignId,
           input: {
             status: 'scheduled',
-            scheduled_at: scheduledAt.toISOString(),
+            scheduled_at: scheduledAtIso,
+            job_id: campaignType === 'job_alert' ? selectedJobId : null,
           },
         });
       }
 
+      // Queue emails with Mailgun via o:deliverytime
+      const { data, error } = await supabase.functions.invoke('send-campaign-email', {
+        body: { campaignId: finalCampaignId, scheduledAt: scheduledAtIso },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const queued = data?.sent ?? 0;
       toast({
         title: 'Campaign scheduled',
-        description: `Your campaign will be sent on ${format(scheduledAt, 'PPP')} at ${scheduleTime}.`,
+        description: `${queued} emails queued for ${format(scheduledAt, 'PPP')} at ${scheduleTime}.`,
       });
       handleClose();
     } catch (err) {
       toast({
         title: 'Schedule failed',
-        description: 'Failed to schedule campaign. Please try again.',
+        description: (err as Error)?.message || 'Failed to schedule campaign. Please try again.',
         variant: 'destructive',
       });
     }
@@ -263,6 +303,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
           type: campaignType,
           goal: campaignGoal,
           audience_filter: audienceFilter,
+          job_id: campaignType === 'job_alert' ? selectedJobId : null,
         });
         setCampaignId(campaign.id);
         
@@ -273,7 +314,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
         
         await updateCampaign.mutateAsync({
           id: campaign.id,
-          input: { status: 'active' },
+          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null },
         });
 
         if (filteredCandidates && filteredCandidates.length > 0) {
@@ -285,7 +326,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
       } else {
         await updateCampaign.mutateAsync({
           id: campaignId,
-          input: { status: 'active' },
+          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null },
         });
       }
 
@@ -319,6 +360,8 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
     setSelectedTags([]);
     setScheduleDate(undefined);
     setIsScheduled(false);
+    setSelectedJobId(null);
+    setJobSearch('');
     onOpenChange(false);
   };
 
@@ -342,6 +385,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
             initialTemplate={templateBeeJson}
             onSave={handleEditorSave}
             onCancel={handleEditorCancel}
+            campaignJobId={selectedJobId}
           />
         </DialogContent>
       </Dialog>
@@ -437,6 +481,48 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign }: Campaig
                   onChange={(e) => setCampaignGoal(e.target.value)}
                 />
               </div>
+
+              {campaignType === 'job_alert' && (
+                <div className="space-y-2">
+                  <Label>Select Job</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search jobs..."
+                      value={jobSearch}
+                      onChange={(e) => setJobSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <ScrollArea className="h-32 border rounded-md p-2">
+                    {campaignJobs?.length ? (
+                      <div className="space-y-1">
+                        {campaignJobs.map((job) => (
+                          <div
+                            key={job.id}
+                            onClick={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
+                            className={`flex items-center justify-between p-2 rounded cursor-pointer text-sm ${
+                              selectedJobId === job.id ? 'bg-sky-blue/20 border border-sky-blue' : 'hover:bg-muted'
+                            }`}
+                          >
+                            <span className="font-medium">{job.title}</span>
+                            {(job.department || job.location) && (
+                              <span className="text-xs text-muted-foreground">
+                                {[job.department, job.location].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No jobs found. Sync jobs from your career site.</p>
+                    )}
+                  </ScrollArea>
+                  {selectedJobId && (
+                    <p className="text-xs text-muted-foreground">Job selected for merge tags ({{jobTitle}}, etc.)</p>
+                  )}
+                </div>
+              )}
 
               <Button 
                 className="w-full bg-gradient-primary hover:opacity-90"

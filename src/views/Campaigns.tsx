@@ -5,19 +5,23 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { CampaignBuilder } from '@/components/campaigns/CampaignBuilder';
+import { TemplateLibrary } from '@/components/campaigns/TemplateLibrary';
+import { CampaignScheduledQueue } from '@/components/campaigns/CampaignScheduledQueue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCampaigns, useUpdateCampaign, useDeleteCampaign } from '@/hooks/useCampaigns';
 import { useAllCampaignsStats } from '@/hooks/useCampaignStats';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import type { Campaign } from '@/types/Campaign';
+import type { EmailTemplate } from '@/services/emailTemplateService';
 
 const Campaigns = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -26,6 +30,9 @@ const Campaigns = () => {
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [activeTab, setActiveTab] = useState('all');
   const [sendingCampaignId, setSendingCampaignId] = useState<string | null>(null);
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+  const [expandedQueueCampaignId, setExpandedQueueCampaignId] = useState<string | null>(null);
+  const [selectedTemplateForCampaign, setSelectedTemplateForCampaign] = useState<EmailTemplate | null | undefined>(undefined);
   
   const { data: campaigns, isLoading, refetch } = useCampaigns();
   const updateCampaign = useUpdateCampaign();
@@ -43,15 +50,15 @@ const Campaigns = () => {
   // Calculate aggregate stats
   const totalRecipients = Object.values(statsMap).reduce((sum, s) => sum + s.recipients, 0);
   const totalOpened = Object.values(statsMap).reduce((sum, s) => sum + s.opened, 0);
-  const totalResponded = Object.values(statsMap).reduce((sum, s) => sum + s.responded, 0);
+  const totalClicked = Object.values(statsMap).reduce((sum, s) => sum + s.clicked, 0);
   const overallOpenRate = totalRecipients > 0 ? Math.round((totalOpened / totalRecipients) * 100) : 0;
-  const overallResponseRate = totalRecipients > 0 ? Math.round((totalResponded / totalRecipients) * 100) : 0;
+  const overallClickRate = totalRecipients > 0 ? Math.round((totalClicked / totalRecipients) * 100) : 0;
 
   const stats = {
     active: campaigns?.filter(c => c.status === 'active').length || 0,
     totalRecipients,
     openRate: overallOpenRate,
-    responseRate: overallResponseRate,
+    clickRate: overallClickRate,
   };
 
   const handlePauseCampaign = async (id: string) => {
@@ -134,6 +141,13 @@ const Campaigns = () => {
   const handleCloseBuilder = () => {
     setShowCampaignBuilder(false);
     setEditingCampaign(null);
+    setSelectedTemplateForCampaign(undefined);
+  };
+
+  const handleTemplateLibrarySelect = (template: EmailTemplate | null) => {
+    setSelectedTemplateForCampaign(template);
+    setShowTemplateLibrary(false);
+    setShowCampaignBuilder(true);
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -176,7 +190,11 @@ const Campaigns = () => {
                 </p>
               </div>
               <div className="flex items-center space-x-3">
-                <Button variant="outline" className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white">
+                <Button 
+                  variant="outline" 
+                  className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                  onClick={() => setShowTemplateLibrary(true)}
+                >
                   Template Library
                 </Button>
                 <Button 
@@ -229,8 +247,8 @@ const Campaigns = () => {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-bold text-foreground">{stats.responseRate}%</div>
-                    <div className="text-sm text-muted-foreground">Response Rate</div>
+                    <div className="text-2xl font-bold text-foreground">{stats.clickRate}%</div>
+                    <div className="text-sm text-muted-foreground">Click Rate</div>
                   </div>
                   <Calendar className="w-8 h-8 text-sunrise" />
                 </div>
@@ -324,7 +342,7 @@ const Campaigns = () => {
                               <Pause className="w-4 h-4 mr-2" />
                               Pause
                             </Button>
-                          ) : campaign.status === 'draft' || campaign.status === 'scheduled' ? (
+                          ) : campaign.status === 'draft' ? (
                             <Button 
                               variant="outline" 
                               size="sm" 
@@ -338,6 +356,21 @@ const Campaigns = () => {
                                 <Send className="w-4 h-4 mr-2" />
                               )}
                               {sendingCampaignId === campaign.id ? 'Sending...' : 'Launch'}
+                            </Button>
+                          ) : campaign.status === 'scheduled' && (statsMap[campaign.id]?.pending ?? 0) > 0 ? (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                              onClick={() => handleLaunchCampaign(campaign.id)}
+                              disabled={sendingCampaignId === campaign.id}
+                            >
+                              {sendingCampaignId === campaign.id ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Send className="w-4 h-4 mr-2" />
+                              )}
+                              {sendingCampaignId === campaign.id ? 'Sending...' : `Send ${statsMap[campaign.id]?.pending} Pending`}
                             </Button>
                           ) : campaign.status === 'paused' ? (
                             <Button 
@@ -388,7 +421,7 @@ const Campaigns = () => {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-5 gap-4">
+                      <div className="grid grid-cols-6 gap-4">
                         <div className="text-center">
                           <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.recipients ?? 0}</div>
                           <div className="text-xs text-muted-foreground">Recipients</div>
@@ -398,18 +431,44 @@ const Campaigns = () => {
                           <div className="text-xs text-muted-foreground">Sent</div>
                         </div>
                         <div className="text-center">
+                          <div className="text-2xl font-bold text-sunrise">{statsMap[campaign.id]?.scheduled ?? 0}</div>
+                          <div className="text-xs text-muted-foreground">Scheduled</div>
+                        </div>
+                        <div className="text-center">
                           <div className="text-2xl font-bold text-sky-blue">{statsMap[campaign.id]?.opened ?? 0}</div>
                           <div className="text-xs text-muted-foreground">Opened</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-sunrise">{statsMap[campaign.id]?.responded ?? 0}</div>
-                          <div className="text-xs text-muted-foreground">Responded</div>
+                          <div className="text-2xl font-bold text-sunrise">{statsMap[campaign.id]?.clicked ?? 0}</div>
+                          <div className="text-xs text-muted-foreground">Clicked</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.responseRate ?? 0}%</div>
-                          <div className="text-xs text-muted-foreground">Response Rate</div>
+                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.clickRate ?? 0}%</div>
+                          <div className="text-xs text-muted-foreground">Click Rate</div>
                         </div>
                       </div>
+                      {(statsMap[campaign.id]?.scheduled ?? 0) > 0 && campaign.status === 'scheduled' && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-3 text-sunrise hover:text-sunrise"
+                            onClick={() => setExpandedQueueCampaignId(expandedQueueCampaignId === campaign.id ? null : campaign.id)}
+                          >
+                            {expandedQueueCampaignId === campaign.id ? (
+                              <ChevronUp className="w-4 h-4 mr-1" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 mr-1" />
+                            )}
+                            {expandedQueueCampaignId === campaign.id ? 'Hide queue' : 'View queue'}
+                          </Button>
+                          <CampaignScheduledQueue
+                            campaignId={campaign.id}
+                            scheduledAt={campaign.scheduled_at ?? null}
+                            isExpanded={expandedQueueCampaignId === campaign.id}
+                          />
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 ))
@@ -428,7 +487,18 @@ const Campaigns = () => {
         open={showCampaignBuilder}
         onOpenChange={handleCloseBuilder}
         editingCampaign={editingCampaign}
+        initialTemplate={selectedTemplateForCampaign}
       />
+
+      <Dialog open={showTemplateLibrary} onOpenChange={setShowTemplateLibrary}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Template Library</DialogTitle>
+            <DialogDescription>Choose a template to start your campaign</DialogDescription>
+          </DialogHeader>
+          <TemplateLibrary onSelectTemplate={handleTemplateLibrarySelect} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
