@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import BeefreeSDK from '@beefree.io/sdk';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Loader2, X, Eye, Monitor, Smartphone, Tags } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Loader2, X, Eye, Monitor, Smartphone, Tags, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { MergeTagsPanel } from './MergeTagsPanel';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
@@ -90,7 +91,6 @@ const getMergeTags = (hasJob: boolean) => {
 const getSpecialLinks = (hasJob: boolean) => {
   const base = [
     { type: 'Unsubscribe', label: 'Unsubscribe', link: '{{unsubscribeLink}}' },
-    { type: 'View in Browser', label: 'View in Browser', link: '{{viewInBrowserLink}}' },
     { type: 'Sender Email', label: 'Email Recruiter', link: 'mailto:{{senderEmail}}' },
     { type: 'Sender LinkedIn', label: 'Recruiter LinkedIn', link: '{{senderLinkedinUrl}}' },
   ];
@@ -112,6 +112,8 @@ export const BeefreeEmailEditor = ({
   const [error, setError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile' | null>(null);
   const [mergePanelOpen, setMergePanelOpen] = useState(true);
+  const [helpBannerOpen, setHelpBannerOpen] = useState(true);
+  const [helpBannerDismissed, setHelpBannerDismissed] = useState(false);
   const hasJobContext = Boolean(campaignJobId);
 
   // Stable callback for onSave - use imported toast (stable ref) to avoid re-init
@@ -170,6 +172,7 @@ export const BeefreeEmailEditor = ({
           language: 'en-US',
           mergeTags: getMergeTags(hasJobContext),
           specialLinks: getSpecialLinks(hasJobContext),
+          disableLinkSanitize: true,
           onSave: handleSaveCallback,
           onSaveAsTemplate: (jsonFile: string) => {
             console.log('Save as template:', jsonFile);
@@ -346,6 +349,30 @@ export const BeefreeEmailEditor = ({
           </CollapsibleContent>
         </Collapsible>
         <div className="flex-1 relative min-h-0 flex flex-col min-w-0">
+          {!helpBannerDismissed && (
+            <Collapsible open={helpBannerOpen} onOpenChange={setHelpBannerOpen} className="shrink-0">
+              <Alert className="mb-3 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <AlertTitle className="flex items-center gap-2 text-sm cursor-pointer" onClick={() => setHelpBannerOpen(!helpBannerOpen)}>
+                      <Info className="w-4 h-4 shrink-0" />
+                      How to add links to buttons
+                      {helpBannerOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </AlertTitle>
+                    <CollapsibleContent>
+                      <AlertDescription className="mt-1.5 text-xs">
+                        <strong>Step 1:</strong> Click the button in the editor. <strong>Step 2:</strong> Click the link icon in the toolbar. <strong>Step 3:</strong> Choose a link (Apply to Job, Email Recruiter, etc.) or paste from the Merge Tags panel.
+                        <span className="block mt-1 text-muted-foreground">Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">@</kbd> in text to insert merge tags (e.g. Hi {'{{firstName}}'}).</span>
+                      </AlertDescription>
+                    </CollapsibleContent>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setHelpBannerDismissed(true)} aria-label="Dismiss">
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </Alert>
+            </Collapsible>
+          )}
           <div className="flex-1 relative min-h-0">
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">

@@ -13,18 +13,20 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { SequenceBuilder } from './SequenceBuilder';
 import { TemplateLibrary } from './TemplateLibrary';
 import { BeefreeEmailEditor } from './BeefreeEmailEditor';
-import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Clock, Users, Loader2, Search } from 'lucide-react';
+import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Clock, Users, Loader2, Search, AlertTriangle } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
 import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients, useCreateCampaignEmail } from '@/hooks/useCampaigns';
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
 import { useJobsForCampaign } from '@/hooks/useJobs';
+import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
 import { EmailTemplate } from '@/services/emailTemplateService';
 import { AudienceFilter, CampaignEmail, Campaign } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 
 interface CampaignBuilderProps {
@@ -99,6 +101,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const createCampaignEmail = useCreateCampaignEmail();
   const { data: talentPools } = useTalentPools();
   const { data: pipelines } = usePipelines();
+  const { settings: orgSettings } = useOrganizationSettings();
   const { data: campaignJobs } = useJobsForCampaign(jobSearch);
   const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
   const { data: recipientCount } = useRecipientCount(audienceFilter);
@@ -660,6 +663,15 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
           {currentStep === 'review' && (
             <div className="space-y-6">
+              {(!orgSettings?.base_url || !orgSettings.base_url.trim()) && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Base URL not set</AlertTitle>
+                  <AlertDescription>
+                    Set Base URL in Settings → Organization so unsubscribe links work.
+                  </AlertDescription>
+                </Alert>
+              )}
               <Card>
                 <CardHeader>
                   <CardTitle>Campaign Summary</CardTitle>

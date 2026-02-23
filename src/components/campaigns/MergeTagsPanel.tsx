@@ -106,12 +106,43 @@ export const MergeTagsPanel = ({ campaignJobId }: MergeTagsPanelProps) => {
 
   const jobUrl = job?.url || job?.view_url;
 
+  const quickLinks = [
+    { name: 'Unsubscribe', value: '{{unsubscribeLink}}' },
+    { name: 'Email Recruiter', value: 'mailto:{{senderEmail}}' },
+    { name: 'Recruiter LinkedIn', value: '{{senderLinkedinUrl}}' },
+    ...(campaignJobId ? [{ name: 'Apply to Job', value: '{{jobUrl}}' }] : []),
+  ];
+
   return (
     <div className="flex flex-col h-full">
       <div className="text-xs font-medium text-muted-foreground mb-2">Merge Tags</div>
       <p className="text-[10px] text-muted-foreground mb-3">
-        Click to copy. Use <kbd className="px-1 py-0.5 rounded bg-muted text-[9px]">@</kbd> in text, or pick links for buttons.
+        Click to copy. For buttons: add a link in the editor, then paste or pick from the link list.
       </p>
+
+      <div className="mb-4">
+        <div className="text-[10px] font-medium text-muted-foreground mb-2">Quick links for buttons</div>
+        <div className="space-y-1.5">
+          {quickLinks.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => copyToClipboard(item.value)}
+              className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-sky-blue/10 hover:bg-sky-blue/20 text-left group border border-sky-blue/20"
+            >
+              <span className="truncate">{item.name}</span>
+              {copiedValue === item.value ? (
+                <Check className="w-3 h-3 text-green-600 shrink-0" />
+              ) : (
+                <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="text-[9px] text-muted-foreground mt-1.5">
+          Click a button in the editor, then the link icon in the toolbar. Paste the link or choose from the link picker.
+        </p>
+      </div>
 
       <ScrollArea className="flex-1 pr-2">
         <div className="space-y-4">
