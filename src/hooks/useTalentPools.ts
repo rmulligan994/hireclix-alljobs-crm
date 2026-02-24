@@ -112,12 +112,21 @@ export const useAddCandidatesToPool = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ poolId, candidateIds }: { poolId: string; candidateIds: string[] }) => 
+    mutationFn: ({ poolId, candidateIds }: { poolId: string; candidateIds: string[] }) =>
       talentPoolService.addCandidates(poolId, candidateIds),
-    onSuccess: (_, variables) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['talentPools', variables.poolId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
-      toast.success(`${variables.candidateIds.length} candidates added to pool`);
+      const { added, skipped } = result;
+      if (skipped > 0) {
+        toast.success(
+          added > 0
+            ? `${added} candidate${added !== 1 ? 's' : ''} added to pool (${skipped} already in pool)`
+            : `All ${skipped} candidate${skipped !== 1 ? 's' : ''} were already in the pool`
+        );
+      } else {
+        toast.success(`${added} candidate${added !== 1 ? 's' : ''} added to pool`);
+      }
     },
     onError: (error: Error) => {
       toast.error(`Failed to add candidates: ${error.message}`);

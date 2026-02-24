@@ -16,6 +16,8 @@ import type {
  * This is the ONLY place where database calls for pipelines should exist.
  */
 
+const FETCH_LIMIT = 5000;
+
 const defaultStages: PipelineStage[] = [
   { id: '1', name: 'New', order: 0, color: '#54A3DA' },
   { id: '2', name: 'Contacted', order: 1, color: '#0B3555' },
@@ -43,7 +45,8 @@ export const pipelineService = {
     const { data, error } = await supabase
       .from('pipelines')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(FETCH_LIMIT);
 
     if (error) throw error;
     return (data || []).map(mapRowToPipeline);
@@ -57,7 +60,8 @@ export const pipelineService = {
       .from('pipelines')
       .select('*')
       .eq('status', 'active')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(FETCH_LIMIT);
 
     if (error) throw error;
     return (data || []).map(mapRowToPipeline);
@@ -71,7 +75,8 @@ export const pipelineService = {
       .from('pipelines')
       .select('*')
       .eq('status', 'archived')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(FETCH_LIMIT);
 
     if (error) throw error;
     return (data || []).map(mapRowToPipeline);
@@ -107,7 +112,8 @@ export const pipelineService = {
     const { data: candidates, error: candidatesError } = await supabase
       .from('pipeline_candidates')
       .select('candidate_id, stage, added_at')
-      .eq('pipeline_id', id);
+      .eq('pipeline_id', id)
+      .limit(FETCH_LIMIT);
 
     if (candidatesError) throw candidatesError;
 
@@ -271,7 +277,8 @@ export const pipelineService = {
     const { data, error } = await supabase
       .from('pipeline_candidates')
       .select('*')
-      .eq('pipeline_id', pipelineId);
+      .eq('pipeline_id', pipelineId)
+      .limit(FETCH_LIMIT);
 
     if (error) throw error;
     return (data || []).map((c: any) => ({

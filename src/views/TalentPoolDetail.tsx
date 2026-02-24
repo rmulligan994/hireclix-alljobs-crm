@@ -15,13 +15,11 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Table,
-  TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { TableVirtuoso } from 'react-virtuoso';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -544,42 +542,69 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
             </div>
           ) : (
             <div className="bg-card rounded-lg border border-border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-deep-sea hover:bg-deep-sea">
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedCandidates.length === filteredCandidates.length && filteredCandidates.length > 0}
-                        onCheckedChange={handleSelectAll}
-                        className="border-white data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
-                      />
-                    </TableHead>
-                    <TableHead className="text-white">Name</TableHead>
-                    <TableHead className="text-white">Title</TableHead>
-                    <TableHead className="text-white">Company</TableHead>
-                    <TableHead className="text-white">Tags</TableHead>
-                    <TableHead className="text-white">Date Added</TableHead>
-                    <TableHead className="text-white w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCandidates.map((candidate) => (
-                    <TableRow
-                      key={candidate.id}
-                      className="hover:bg-sky-blue/5 cursor-pointer"
-                      onClick={() => router.push(`/candidates/${candidate.candidateId}`)}
-                    >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+              <div className="h-[calc(100vh-420px)] min-h-[400px]" style={{ borderCollapse: 'separate' }}>
+                <TableVirtuoso
+                  data={filteredCandidates}
+                  className="w-full border-separate border-spacing-0 table-fixed"
+                  components={{
+                    Table: ({ children, style, ...props }) => (
+                      <table {...props} style={{ ...style, tableLayout: 'fixed' }} className="w-full border-separate border-spacing-0">
+                        <colgroup>
+                          <col style={{ width: 40 }} />
+                          <col style={{ width: '20%' }} />
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '22%' }} />
+                          <col style={{ width: '14%' }} />
+                          <col style={{ width: 48 }} />
+                        </colgroup>
+                        {children}
+                      </table>
+                    ),
+                    TableRow: ({ children, ...props }) => {
+                      const index = props['data-index' as keyof typeof props];
+                      const candidate = typeof index === 'number' ? filteredCandidates[index] : null;
+                      return (
+                        <TableRow
+                          {...props}
+                          className="hover:bg-sky-blue/5 cursor-pointer border-b border-border"
+                          onClick={() => candidate && router.push(`/candidates/${candidate.candidateId}`)}
+                        >
+                          {children}
+                        </TableRow>
+                      );
+                    },
+                  }}
+                  fixedHeaderContent={() => (
+                    <TableRow className="bg-deep-sea hover:bg-deep-sea border-0">
+                      <TableHead className="text-white w-12 border-b border-deep-sea">
+                        <Checkbox
+                          checked={selectedCandidates.length === filteredCandidates.length && filteredCandidates.length > 0}
+                          onCheckedChange={handleSelectAll}
+                          className="border-white data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
+                        />
+                      </TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Name</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Title</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Company</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Tags</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Date Added</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea w-12"></TableHead>
+                    </TableRow>
+                  )}
+                  itemContent={(index, candidate) => (
+                    <>
+                      <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
                         <Checkbox
                           checked={selectedCandidates.includes(candidate.id)}
                           onCheckedChange={() => handleSelectCandidate(candidate.id)}
                           className="border-muted-foreground data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
                         />
                       </TableCell>
-                      <TableCell className="font-medium text-foreground">{candidate.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{candidate.title}</TableCell>
-                      <TableCell className="text-muted-foreground">{candidate.company}</TableCell>
-                      <TableCell>
+                      <TableCell className="font-medium text-foreground border-b border-border">{candidate.name}</TableCell>
+                      <TableCell className="text-muted-foreground border-b border-border">{candidate.title}</TableCell>
+                      <TableCell className="text-muted-foreground border-b border-border">{candidate.company}</TableCell>
+                      <TableCell className="border-b border-border">
                         <div className="flex flex-wrap gap-1">
                           {candidate.tags.slice(0, 3).map((tag) => (
                             <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
@@ -589,13 +614,13 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-b border-border">
                         <div className="flex items-center gap-1 text-muted-foreground text-sm">
                           <Calendar className="w-3 h-3" />
                           {new Date(candidate.dateAdded).toLocaleDateString()}
                         </div>
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
@@ -626,10 +651,10 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                    </>
+                  )}
+                />
+              </div>
             </div>
           )}
 

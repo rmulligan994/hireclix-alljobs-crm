@@ -14,6 +14,8 @@ import type {
  * This is the ONLY place where database calls for talent pools should exist.
  */
 
+const FETCH_LIMIT = 5000;
+
 const mapRowToTalentPool = (row: any): TalentPool => ({
   id: row.id,
   name: row.name,
@@ -31,7 +33,8 @@ export const talentPoolService = {
     const { data, error } = await supabase
       .from('talent_pools')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(FETCH_LIMIT);
 
     if (error) throw error;
     return (data || []).map(mapRowToTalentPool);
@@ -44,7 +47,8 @@ export const talentPoolService = {
     const { data: pools, error: poolsError } = await supabase
       .from('talent_pools')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(FETCH_LIMIT);
 
     if (poolsError) throw poolsError;
 
@@ -53,7 +57,8 @@ export const talentPoolService = {
         const { data: candidates, error: candidatesError } = await supabase
           .from('talent_pool_candidates')
           .select('candidate_id, added_at')
-          .eq('talent_pool_id', pool.id);
+          .eq('talent_pool_id', pool.id)
+          .limit(FETCH_LIMIT);
 
         if (candidatesError) throw candidatesError;
 
@@ -101,7 +106,8 @@ export const talentPoolService = {
     const { data: candidates, error: candidatesError } = await supabase
       .from('talent_pool_candidates')
       .select('candidate_id, added_at')
-      .eq('talent_pool_id', id);
+      .eq('talent_pool_id', id)
+      .limit(FETCH_LIMIT);
 
     if (candidatesError) throw candidatesError;
 
@@ -189,19 +195,37 @@ export const talentPoolService = {
   },
 
   /**
-   * Add multiple candidates to a talent pool
+   * Add multiple candidates to a talent pool.
+   * Returns counts so the UI can show how many were added vs already in pool.
    */
-  addCandidates: async (poolId: string, candidateIds: string[]): Promise<void> => {
-    const inserts = candidateIds.map(candidateId => ({
+  addCandidates: async (poolId: string, candidateIds: string[]): Promise<{ added: number; skipped: number }> => {
+    if (candidateIds.length === 0) return { added: 0, skipped: 0 };
+
+    // Find which candidates are already in the pool
+    const { data: existing } = await supabase
+      .from('talent_pool_candidates')
+      .select('candidate_id')
+      .eq('talent_pool_id', poolId)
+      .in('candidate_id', candidateIds);
+
+    const existingIds = new Set((existing ?? []).map((r) => r.candidate_id));
+    const toAdd = candidateIds.filter((id) => !existingIds.has(id));
+
+    if (toAdd.length === 0) {
+      return { added: 0, skipped: candidateIds.length };
+    }
+
+    const inserts = toAdd.map((candidateId) => ({
       talent_pool_id: poolId,
       candidate_id: candidateId,
     }));
 
     const { error } = await supabase
       .from('talent_pool_candidates')
-      .upsert(inserts, { onConflict: 'talent_pool_id,candidate_id' });
+      .insert(inserts);
 
     if (error) throw error;
+    return { added: toAdd.length, skipped: existingIds.size };
   },
 
   /**
@@ -237,7 +261,8 @@ export const talentPoolService = {
     const { data, error } = await supabase
       .from('talent_pool_candidates')
       .select('*')
-      .eq('talent_pool_id', poolId);
+      .eq('talent_pool_id', poolId)
+      .limit(FETCH_LIMIT);
 
     if (error) throw error;
     return (data || []).map((c: any) => ({
