@@ -49,6 +49,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { parseBooleanSearch } from '@/utils/booleanSearchParser';
+import { getStageColorClass } from '@/utils/stageColors';
 
 function formatLastContact(date: Date | null): string {
   if (!date) return 'Never';
@@ -509,17 +510,7 @@ const TalentPool = () => {
     { label: 'In Active Pipelines', value: filteredCandidates.filter(c => c.pipelineAssociations.length > 0).length, icon: GitBranch },
   ];
 
-  const getStageColor = (stage: string) => {
-    switch (stage) {
-      case 'Sourced': return 'bg-muted/50 text-muted-foreground border-muted';
-      case 'Contacted': return 'bg-deep-sea/20 text-sky-blue border-deep-sea';
-      case 'Engaged': return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
-      case 'Qualified': return 'bg-sunrise/20 text-sunrise border-sunrise';
-      case 'Submitted': return 'bg-green-500/20 text-green-400 border-green-500';
-      case 'Hired': return 'bg-green-600/30 text-green-300 border-green-600';
-      default: return 'bg-muted text-muted-foreground border-border';
-    }
-  };
+  const getStageColor = (stage: string) => getStageColorClass(stage);
 
   const toggleSelectAll = () => {
     if (selectedCandidates.length === filteredCandidates.length) {

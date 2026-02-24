@@ -6,14 +6,32 @@ export interface PipelineStage {
   order: number;
 }
 
+export interface PipelineTemplateStage {
+  name: string;
+  order: number;
+  color?: string;
+}
+
 export interface PipelineTemplate {
   id: string;
   name: string;
   description: string;
-  stages: Omit<PipelineStage, 'id'>[];
+  stages: PipelineTemplateStage[];
 }
 
 export const defaultTemplates: PipelineTemplate[] = [
+  {
+    id: 'recruiter',
+    name: 'Recruiter',
+    description: 'Standard recruitment workflow with Not A Fit',
+    stages: [
+      { name: 'New', order: 0, color: '#54A3DA' },
+      { name: 'Contacted', order: 1, color: '#0B3555' },
+      { name: 'Screened', order: 2, color: '#FAA21B' },
+      { name: 'Submitted', order: 3, color: '#22C55E' },
+      { name: 'Not A Fit', order: 4, color: '#EF4444' },
+    ],
+  },
   {
     id: 'standard',
     name: 'Standard',
@@ -84,6 +102,7 @@ export const templateToStages = (template: PipelineTemplate): PipelineStage[] =>
     id: generateId(),
     name: stage.name,
     order: index,
+    color: stage.color,
   }));
 };
 

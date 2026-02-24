@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
+import { getStageColorClass } from '@/utils/stageColors';
 import { AddToPipelineDialog } from '@/components/candidates/AddToPipelineDialog';
 import { AddToTalentPoolDialog } from '@/components/candidates/AddToTalentPoolDialog';
 import { LogCommunicationDialog } from '@/components/candidates/LogCommunicationDialog';
@@ -193,17 +194,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
     }
   };
 
-  const getStageColor = (stage: string) => {
-    switch (stage) {
-      case 'Sourced': return 'bg-muted/50 text-muted-foreground';
-      case 'Contacted': return 'bg-deep-sea/20 text-sky-blue';
-      case 'Engaged': return 'bg-sky-blue/20 text-sky-blue';
-      case 'Qualified': return 'bg-sunrise/20 text-sunrise';
-      case 'Submitted': return 'bg-green-500/20 text-green-400';
-      case 'Hired': return 'bg-green-600/30 text-green-300';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
+  const getStageColor = (stage: string) => getStageColorClass(stage);
 
   const getInitials = (firstName?: string | null, lastName?: string | null) => {
     const first = firstName?.charAt(0) || '';

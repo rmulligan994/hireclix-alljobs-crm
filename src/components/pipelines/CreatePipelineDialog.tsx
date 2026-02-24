@@ -35,6 +35,7 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
       id: crypto.randomUUID(),
       name: stage.name,
       order: index,
+      color: stage.color,
     }))
   );
 
@@ -66,6 +67,7 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
       id: crypto.randomUUID(),
       name: stage.name,
       order: index,
+      color: stage.color,
     })));
   };
 

@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidatesToPipelineDialog } from '@/components/pipelines/AddCandidatesToPipelineDialog';
+import { MoveToPipelineDialog } from '@/components/pipelines/MoveToPipelineDialog';
 import { QuickNoteDialog } from '@/components/pipelines/QuickNoteDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,12 +48,12 @@ import {
   BarChart3,
   GitBranch,
 } from 'lucide-react';
-import { usePipelineWithCandidates, useAddCandidateToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
+import { usePipelineWithCandidates, usePipelines, useAddCandidateToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
 import { useCandidates } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { useCreateNote } from '@/hooks/useCommunications';
-import { PipelineStage } from '@/types/Pipeline';
+import type { Pipeline, PipelineStage } from '@/types/Pipeline';
 
 interface CandidateInStage {
   id: string;
@@ -78,8 +79,11 @@ const PipelineDetail = ({ id }: { id: string }) => {
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteCandidate, setNoteCandidate] = useState<{ id: string; name: string } | null>(null);
   const [candidatesInStages, setCandidatesInStages] = useState<CandidateInStage[]>([]);
+  const [moveToPipelineOpen, setMoveToPipelineOpen] = useState(false);
+  const [pendingNotFitMove, setPendingNotFitMove] = useState<{ candidateIds: string[]; targetStageId: string } | null>(null);
 
   const { data: pipeline, isLoading } = usePipelineWithCandidates(id || '');
+  const { data: allPipelines = [] } = usePipelines('active');
   const { data: allCandidates } = useCandidates();
   const addCandidateToPipeline = useAddCandidateToPipeline();
   const removeCandidateFromPipeline = useRemoveCandidateFromPipeline();
@@ -182,26 +186,44 @@ const PipelineDetail = ({ id }: { id: string }) => {
     setDragOverStage(null);
   };
 
+  const isNotFitStage = (stage: PipelineStage) => stage.name?.toLowerCase().includes('not a fit');
+
+  const performMoveToStage = async (candidateIds: string[], targetStageId: string) => {
+    try {
+      for (const candidateId of candidateIds) {
+        await updateCandidateStage.mutateAsync({
+          pipelineId: id || '',
+          candidateId,
+          stage: targetStageId,
+        });
+      }
+      setCandidatesInStages(prev => prev.map(c => {
+        if (candidateIds.includes(c.id)) {
+          return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
+        }
+        return c;
+      }));
+      if (candidateIds.length > 1) {
+        toast({ title: 'Candidates moved', description: `Moved ${candidateIds.length} candidates to stage` });
+      }
+      setSelectedCandidates(prev => prev.filter(id => !candidateIds.includes(id)));
+    } catch {
+      toast({ title: 'Failed to move candidate(s)', variant: 'destructive' });
+    }
+  };
+
   const moveCandidate = async (candidateId: string, targetStageId: string) => {
     const candidate = candidatesInStages.find(c => c.id === candidateId);
     const targetStage = stages.find(s => s.id === targetStageId);
     if (!targetStage || !candidate || candidate.stageId === targetStageId) return;
 
-    try {
-      await updateCandidateStage.mutateAsync({
-        pipelineId: id || '',
-        candidateId,
-        stage: targetStageId,
-      });
-      setCandidatesInStages(prev => prev.map(c => {
-        if (c.id === candidateId) {
-          return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
-        }
-        return c;
-      }));
-    } catch {
-      toast({ title: 'Failed to move candidate', variant: 'destructive' });
+    if (isNotFitStage(targetStage)) {
+      setPendingNotFitMove({ candidateIds: [candidateId], targetStageId });
+      setMoveToPipelineOpen(true);
+      return;
     }
+
+    await performMoveToStage([candidateId], targetStageId);
   };
 
   const handleSelectCandidate = (candidateId: string) => {
@@ -212,22 +234,57 @@ const PipelineDetail = ({ id }: { id: string }) => {
     );
   };
 
-  const handleBulkMove = (targetStageId: string) => {
+  const handleBulkMove = async (targetStageId: string) => {
     const targetStage = stages.find(s => s.id === targetStageId);
     if (!targetStage || selectedCandidates.length === 0) return;
 
-    setCandidatesInStages(prev => prev.map(c => {
-      if (selectedCandidates.includes(c.id)) {
-        return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
-      }
-      return c;
-    }));
+    if (isNotFitStage(targetStage)) {
+      setPendingNotFitMove({ candidateIds: [...selectedCandidates], targetStageId });
+      setMoveToPipelineOpen(true);
+      return;
+    }
 
-    toast({
-      title: 'Candidates moved',
-      description: `Moved ${selectedCandidates.length} candidates to ${targetStage.name}`,
-    });
-    setSelectedCandidates([]);
+    await performMoveToStage(selectedCandidates, targetStageId);
+  };
+
+  const handleNotFitLeave = () => {
+    if (!pendingNotFitMove) return;
+    performMoveToStage(pendingNotFitMove.candidateIds, pendingNotFitMove.targetStageId);
+    setPendingNotFitMove(null);
+    setMoveToPipelineOpen(false);
+  };
+
+  const handleNotFitMoveToPipeline = async (targetPipelineId: string) => {
+    if (!pendingNotFitMove || !id) return;
+    const targetPipeline = allPipelines.find((p: Pipeline) => p.id === targetPipelineId);
+    if (!targetPipeline?.stages?.length) {
+      toast({ title: 'Target pipeline not found', variant: 'destructive' });
+      return;
+    }
+    const notFitStage = targetPipeline.stages.find(s => s.name?.toLowerCase().includes('not a fit'));
+    const targetStageId = notFitStage?.id ?? targetPipeline.stages[0]?.id;
+    if (!targetStageId) return;
+
+    try {
+      for (const candidateId of pendingNotFitMove.candidateIds) {
+        await removeCandidateFromPipeline.mutateAsync({ pipelineId: id, candidateId });
+        await addCandidateToPipeline.mutateAsync({
+          pipelineId: targetPipelineId,
+          candidateId,
+          stage: targetStageId,
+        });
+      }
+      setCandidatesInStages(prev => prev.filter(c => !pendingNotFitMove.candidateIds.includes(c.id)));
+      setSelectedCandidates(prev => prev.filter(id => !pendingNotFitMove.candidateIds.includes(id)));
+      toast({
+        title: 'Candidates moved',
+        description: `Moved ${pendingNotFitMove.candidateIds.length} candidate${pendingNotFitMove.candidateIds.length !== 1 ? 's' : ''} to ${targetPipeline.name}`,
+      });
+    } catch {
+      toast({ title: 'Failed to move candidates', variant: 'destructive' });
+    }
+    setPendingNotFitMove(null);
+    setMoveToPipelineOpen(false);
   };
 
   const handleRemoveCandidate = async (candidateId: string, candidateName: string) => {
@@ -319,7 +376,9 @@ const PipelineDetail = ({ id }: { id: string }) => {
     router.push('/pipelines');
   };
 
-  const getStageColor = (index: number, total: number) => {
+  const getStageColor = (stage: PipelineStage, index: number, total: number) => {
+    const name = stage.name?.toLowerCase() || '';
+    if (name.includes('not a fit')) return 'bg-red-500/20 text-red-500 border-red-500/50';
     const progress = total > 1 ? index / (total - 1) : 0;
     if (progress === 0) return 'bg-muted/50 text-muted-foreground border-muted';
     if (progress < 0.3) return 'bg-deep-sea/20 text-sky-blue border-deep-sea';
@@ -328,7 +387,9 @@ const PipelineDetail = ({ id }: { id: string }) => {
     return 'bg-green-500/20 text-green-400 border-green-500';
   };
 
-  const getStageBgColor = (index: number, total: number) => {
+  const getStageBgColor = (stage: PipelineStage, index: number, total: number) => {
+    const name = stage.name?.toLowerCase() || '';
+    if (name.includes('not a fit')) return 'bg-red-500/10';
     const progress = total > 1 ? index / (total - 1) : 0;
     if (progress === 0) return 'bg-muted/20';
     if (progress < 0.3) return 'bg-deep-sea/10';
@@ -480,7 +541,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
                     onDrop={(e) => handleDrop(e, stage.id)}
                   >
                     {/* Stage Header */}
-                    <div className={`flex items-center justify-between mb-3 px-2 py-2 rounded-lg ${getStageBgColor(index, stages.length)} ${isDragOver ? 'ring-2 ring-sky-blue' : ''}`}>
+                    <div className={`flex items-center justify-between mb-3 px-2 py-2 rounded-lg ${getStageBgColor(stage, index, stages.length)} ${isDragOver ? 'ring-2 ring-sky-blue' : ''}`}>
                       {isCollapsed ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -503,7 +564,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
                               <ChevronDown className="w-4 h-4" />
                             </button>
                             <span className="font-medium text-foreground text-sm">{stage.name}</span>
-                            <Badge className={`text-xs ${getStageColor(index, stages.length)}`}>{stageCandidates.length}</Badge>
+                            <Badge className={`text-xs ${getStageColor(stage, index, stages.length)}`}>{stageCandidates.length}</Badge>
                           </div>
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => setAddCandidatesOpen(true)}>
                             <Plus className="w-4 h-4" />
@@ -616,6 +677,19 @@ const PipelineDetail = ({ id }: { id: string }) => {
           }}
         />
       )}
+
+      <MoveToPipelineDialog
+        open={moveToPipelineOpen}
+        onOpenChange={(open) => {
+          setMoveToPipelineOpen(open);
+          if (!open) setPendingNotFitMove(null);
+        }}
+        currentPipelineId={id || ''}
+        currentPipelineName={pipeline?.name || ''}
+        candidateCount={pendingNotFitMove?.candidateIds.length ?? 0}
+        onLeave={handleNotFitLeave}
+        onMoveToPipeline={handleNotFitMoveToPipeline}
+      />
     </div>
   );
 };

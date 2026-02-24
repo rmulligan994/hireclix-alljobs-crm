@@ -18,10 +18,10 @@ import type {
 
 const defaultStages: PipelineStage[] = [
   { id: '1', name: 'New', order: 0, color: '#54A3DA' },
-  { id: '2', name: 'Screening', order: 1, color: '#FAA21B' },
-  { id: '3', name: 'Interview', order: 2, color: '#0B3555' },
-  { id: '4', name: 'Offer', order: 3, color: '#22C55E' },
-  { id: '5', name: 'Hired', order: 4, color: '#10B981' },
+  { id: '2', name: 'Contacted', order: 1, color: '#0B3555' },
+  { id: '3', name: 'Screened', order: 2, color: '#FAA21B' },
+  { id: '4', name: 'Submitted', order: 3, color: '#22C55E' },
+  { id: '5', name: 'Not A Fit', order: 4, color: '#EF4444' },
 ];
 
 const mapRowToPipeline = (row: any): Pipeline => ({

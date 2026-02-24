@@ -20,6 +20,7 @@ export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) 
       id: crypto.randomUUID(),
       name: stage.name,
       order: index,
+      color: stage.color,
     }));
     onChange(newStages);
   };
