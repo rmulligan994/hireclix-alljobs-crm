@@ -151,10 +151,22 @@ const PipelineDetail = ({ id }: { id: string }) => {
   };
 
   const totalCandidates = candidatesInStages.length;
-  const lastStage = stages[stages.length - 1];
-  const hiredCount = lastStage ? getCandidatesInStage(lastStage.id).length : 0;
+  const successStages = stages.filter(s => {
+    const name = s.name?.toLowerCase() || '';
+    return name.includes('submitted') && !name.includes('not a fit');
+  });
+  const hiredCount = successStages.reduce((sum, s) => sum + getCandidatesInStage(s.id).length, 0);
   const conversionRate = totalCandidates > 0 ? Math.round((hiredCount / totalCandidates) * 100) : 0;
-  const avgDaysInPipeline = 14;
+  const now = new Date();
+  const pipelineCandidates = pipeline?.candidates ?? [];
+  const avgDaysInPipeline = pipelineCandidates.length > 0
+    ? Math.round(
+        pipelineCandidates.reduce((sum, pc) => {
+          const added = pc.addedAt instanceof Date ? pc.addedAt : new Date(pc.addedAt);
+          return sum + Math.floor((now.getTime() - added.getTime()) / (1000 * 60 * 60 * 24));
+        }, 0) / pipelineCandidates.length
+      )
+    : 0;
 
   const handleDragStart = (e: React.DragEvent, candidateId: string) => {
     e.dataTransfer.setData('candidateId', candidateId);
@@ -493,7 +505,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
                 </div>
                 <div>
                   <p className="text-lg font-bold text-foreground">{hiredCount}</p>
-                  <p className="text-xs text-muted-foreground">Hired</p>
+                  <p className="text-xs text-muted-foreground">Submitted</p>
                 </div>
               </div>
             </div>

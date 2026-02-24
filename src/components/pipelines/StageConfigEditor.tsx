@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { GripVertical, Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
-import { defaultTemplates } from '@/data/pipelineStages';
 import type { PipelineStage } from '@/types';
 
 interface StageConfigEditorProps {
@@ -12,18 +11,12 @@ interface StageConfigEditorProps {
   onChange: (stages: PipelineStage[]) => void;
 }
 
+const isSubmittedStage = (name: string) => (name || '').toLowerCase().includes('submitted');
+const isNotFitStage = (name: string) => (name || '').toLowerCase().includes('not a fit');
+const isRequiredStage = (name: string) => isSubmittedStage(name) || isNotFitStage(name);
+
 export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) {
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
-
-  const handleTemplateSelect = (template: typeof defaultTemplates[0]) => {
-    const newStages = template.stages.map((stage, index) => ({
-      id: crypto.randomUUID(),
-      name: stage.name,
-      order: index,
-      color: stage.color,
-    }));
-    onChange(newStages);
-  };
 
   const handleAddStage = () => {
     const newStage: PipelineStage = {
@@ -36,7 +29,8 @@ export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) 
   };
 
   const handleRemoveStage = (stageId: string) => {
-    if (stages.length <= 2) return; // Minimum 2 stages required
+    const stage = stages.find(s => s.id === stageId);
+    if (!stage || stages.length <= 2 || isRequiredStage(stage.name)) return;
     const filtered = stages.filter(s => s.id !== stageId);
     const reordered = filtered.map((s, index) => ({ ...s, order: index }));
     onChange(reordered);
@@ -55,34 +49,21 @@ export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) 
     onChange(reordered);
   };
 
-  const handleStageName = (stageId: string, name: string) => {
-    onChange(stages.map(s => s.id === stageId ? { ...s, name } : s));
+  const handleStageName = (stageId: string, newName: string) => {
+    const stage = stages.find(s => s.id === stageId);
+    if (!stage) return;
+    if (isSubmittedStage(stage.name) && !isSubmittedStage(newName)) return; // Must keep "submitted"
+    if (isNotFitStage(stage.name) && !isNotFitStage(newName)) return; // Must keep "not a fit"
+    onChange(stages.map(s => s.id === stageId ? { ...s, name: newName } : s));
   };
 
   return (
     <div className="space-y-4">
-      {/* Template Selection */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-foreground">Start from a template</label>
-        <div className="flex flex-wrap gap-2">
-          {defaultTemplates.map((template) => (
-            <Badge
-              key={template.id}
-              variant="outline"
-              className="cursor-pointer hover:bg-sky-blue/10 hover:border-sky-blue hover:text-sky-blue px-3 py-1.5"
-              onClick={() => handleTemplateSelect(template)}
-            >
-              {template.name}
-            </Badge>
-          ))}
-        </div>
-      </div>
-
       {/* Stages List */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium text-foreground">Pipeline Stages</label>
-          <span className="text-xs text-muted-foreground">Min 2 stages required</span>
+          <span className="text-xs text-muted-foreground">Submitted and Not A Fit stages required</span>
         </div>
         
         <div className="space-y-2">
@@ -141,7 +122,8 @@ export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) 
                       size="icon"
                       className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
                       onClick={() => handleRemoveStage(stage.id)}
-                      disabled={stages.length <= 2}
+                      disabled={stages.length <= 2 || isRequiredStage(stage.name)}
+                      title={isRequiredStage(stage.name) ? 'Submitted and Not A Fit stages are required' : 'Remove stage'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

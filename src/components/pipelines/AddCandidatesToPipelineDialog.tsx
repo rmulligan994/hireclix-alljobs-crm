@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
 import { useCandidates } from '@/hooks/useCandidates';
+import { useDebounce } from '@/hooks/useDebounce';
+import { parseBooleanSearch } from '@/utils/booleanSearchParser';
 
 interface AddCandidatesToPipelineDialogProps {
   open: boolean;
@@ -31,19 +33,46 @@ export function AddCandidatesToPipelineDialog({
 }: AddCandidatesToPipelineDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  
+
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const { data: candidates, isLoading } = useCandidates();
 
-  const filteredCandidates = (candidates || []).filter(c => {
-    const name = `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase();
-    const matchesSearch = 
-      name.includes(searchQuery.toLowerCase()) ||
-      (c.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.company || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.tags || []).some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
-    const notAlreadyInPipeline = !existingCandidateIds.includes(c.id);
-    return matchesSearch && notAlreadyInPipeline;
-  });
+  const filteredCandidates = useMemo(() => {
+    const available = (candidates || []).filter(
+      c => !existingCandidateIds.includes(c.id)
+    );
+    let results = [...available];
+
+    if (debouncedSearchQuery.trim()) {
+      const matcher = parseBooleanSearch(debouncedSearchQuery.trim());
+      if (matcher) {
+        results = results.filter(c =>
+          matcher({
+            firstName: c.firstName || '',
+            lastName: c.lastName || '',
+            email: c.email || '',
+            phone: c.phone || '',
+            company: c.company || '',
+            title: c.title || '',
+            location: c.location || '',
+            skills: c.tags || [],
+          })
+        );
+      } else {
+        const q = debouncedSearchQuery.toLowerCase();
+        results = results.filter(
+          c =>
+            `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase().includes(q) ||
+            (c.title || '').toLowerCase().includes(q) ||
+            (c.company || '').toLowerCase().includes(q) ||
+            (c.location || '').toLowerCase().includes(q) ||
+            (c.tags || []).some(s => s.toLowerCase().includes(q))
+        );
+      }
+    }
+
+    return results;
+  }, [candidates, existingCandidateIds, debouncedSearchQuery]);
 
   const handleToggleCandidate = (id: string) => {
     setSelectedIds(prev => 
@@ -81,7 +110,7 @@ export function AddCandidatesToPipelineDialog({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name, title, company, or skills..."
+            placeholder='Search... Use "phrases", AND, OR, NOT, (grouping)'
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 border-border focus:border-sky-blue"

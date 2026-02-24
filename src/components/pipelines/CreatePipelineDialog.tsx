@@ -39,7 +39,9 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
     }))
   );
 
-  const isValid = title.trim().length > 0 && stages.length >= 2;
+  const hasSubmittedStage = stages.some(s => (s.name || '').toLowerCase().includes('submitted'));
+  const hasNotFitStage = stages.some(s => (s.name || '').toLowerCase().includes('not a fit'));
+  const isValid = title.trim().length > 0 && stages.length >= 2 && hasSubmittedStage && hasNotFitStage;
 
   const handleCreate = async () => {
     if (!isValid) return;
@@ -126,6 +128,15 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
               Configure Stages
             </div>
             <StageConfigEditor stages={stages} onChange={setStages} />
+            {(!hasSubmittedStage || !hasNotFitStage) && stages.length > 0 && (
+              <p className="text-xs text-sunrise">
+                {!hasSubmittedStage && !hasNotFitStage
+                  ? 'Pipeline must include stages named "Submitted" and "Not A Fit".'
+                  : !hasSubmittedStage
+                    ? 'Pipeline must include a stage named "Submitted".'
+                    : 'Pipeline must include a stage named "Not A Fit".'}
+              </p>
+            )}
           </div>
 
           {/* Actions */}
