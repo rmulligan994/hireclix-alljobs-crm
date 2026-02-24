@@ -46,7 +46,7 @@ export const CandidateSearchBar = ({
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps -- inputValue intentionally excluded to avoid overwriting while typing
 
   // Debounce parent updates so parent doesn't re-render on every keystroke (fixes input lag)
-  const debouncedInputValue = useDebounce(inputValue, 300);
+  const debouncedInputValue = useDebounce(inputValue, 50);
   useEffect(() => {
     if (debouncedInputValue !== value) {
       onChange(debouncedInputValue);

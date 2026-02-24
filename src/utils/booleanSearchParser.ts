@@ -169,9 +169,14 @@ export interface SearchableCandidate {
   title: string;
   location: string;
   skills: string[];
+  /** Pre-computed for performance; when present, used instead of rebuilding */
+  _searchStr?: string;
 }
 
 function getSearchableText(c: SearchableCandidate): string {
+  if (c._searchStr != null && typeof c._searchStr === "string") {
+    return c._searchStr;
+  }
   return [
     `${c.firstName} ${c.lastName}`,
     c.email,
@@ -179,7 +184,7 @@ function getSearchableText(c: SearchableCandidate): string {
     c.company,
     c.title,
     c.location,
-    ...c.skills,
+    ...(c.skills || []),
   ]
     .filter(Boolean)
     .join(" ")

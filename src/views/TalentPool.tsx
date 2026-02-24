@@ -38,6 +38,7 @@ import {
   SortDropdown,
   type CandidateFilters,
   type FilterOption,
+  type AdvancedSearchFields,
 } from '@/components/candidates/search';
 import { useCandidateSearch } from '@/hooks/useCandidateSearch';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -116,6 +117,218 @@ function getLastContactBoundary(preset: string): { from?: Date; never?: boolean 
   return null;
 }
 
+interface FilterableCandidate {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  title: string;
+  company: string;
+  location: string;
+  skills: string[];
+  pipelineAssociations: { id: string; name: string; stage: string }[];
+  source: string;
+  linkedinUrl: string;
+  lastContact: string;
+  lastContactAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  _searchStr: string;
+}
+
+function applyAdvanced(
+  candidates: FilterableCandidate[],
+  advancedFields: AdvancedSearchFields
+): FilterableCandidate[] {
+  let results = [...candidates];
+  if (advancedFields.name) {
+    const nameQuery = advancedFields.name.toLowerCase();
+    results = results.filter(c =>
+      `${c.firstName} ${c.lastName}`.toLowerCase().includes(nameQuery)
+    );
+  }
+  if (advancedFields.email) {
+    const emailQuery = advancedFields.email.toLowerCase();
+    results = results.filter(c =>
+      (c.email || '').toLowerCase().includes(emailQuery)
+    );
+  }
+  if (advancedFields.phone) {
+    const phoneQuery = advancedFields.phone.replace(/\D/g, '');
+    results = results.filter(c =>
+      (c.phone || '').replace(/\D/g, '').includes(phoneQuery)
+    );
+  }
+  if (advancedFields.company) {
+    const companyQuery = advancedFields.company.toLowerCase();
+    results = results.filter(c =>
+      (c.company || '').toLowerCase().includes(companyQuery)
+    );
+  }
+  if (advancedFields.title) {
+    const titleQuery = advancedFields.title.toLowerCase();
+    results = results.filter(c =>
+      (c.title || '').toLowerCase().includes(titleQuery)
+    );
+  }
+  if (advancedFields.location) {
+    const locationQuery = advancedFields.location.toLowerCase();
+    results = results.filter(c =>
+      (c.location || '').toLowerCase().includes(locationQuery)
+    );
+  }
+  if (advancedFields.skills.length > 0) {
+    results = results.filter(c =>
+      advancedFields.skills.every(skill =>
+        c.skills.some(s => s.toLowerCase() === skill.toLowerCase())
+      )
+    );
+  }
+  if (advancedFields.dateAddedFrom) {
+    const from = new Date(advancedFields.dateAddedFrom);
+    from.setHours(0, 0, 0, 0);
+    results = results.filter(c => c.createdAt >= from);
+  }
+  if (advancedFields.dateAddedTo) {
+    const to = new Date(advancedFields.dateAddedTo);
+    to.setHours(23, 59, 59, 999);
+    results = results.filter(c => c.createdAt <= to);
+  }
+  if (advancedFields.lastContactedFrom) {
+    const from = new Date(advancedFields.lastContactedFrom);
+    results = results.filter(c =>
+      c.lastContactAt ? new Date(c.lastContactAt) >= from : false
+    );
+  }
+  if (advancedFields.lastContactedTo) {
+    const to = new Date(advancedFields.lastContactedTo);
+    to.setHours(23, 59, 59, 999);
+    results = results.filter(c =>
+      c.lastContactAt ? new Date(c.lastContactAt) <= to : false
+    );
+  }
+  return results;
+}
+
+function applySearch(
+  candidates: FilterableCandidate[],
+  query: string
+): FilterableCandidate[] {
+  if (!query.trim()) return candidates;
+  const matcher = parseBooleanSearch(query.trim());
+  if (matcher) {
+    return candidates.filter(c => matcher(c));
+  }
+  const q = query.toLowerCase();
+  return candidates.filter(c => c._searchStr.includes(q));
+}
+
+function applyFilters(
+  candidates: FilterableCandidate[],
+  filters: CandidateFilters
+): FilterableCandidate[] {
+  let results = [...candidates];
+  if (filters.skills.length > 0) {
+    results = results.filter(c =>
+      filters.skills.some(skill => c.skills.includes(skill))
+    );
+  }
+  if (filters.locations.length > 0) {
+    results = results.filter(c =>
+      filters.locations.includes(c.location || '')
+    );
+  }
+  if (filters.pipelines.length > 0) {
+    if (filters.pipelines.includes('none')) {
+      results = results.filter(c => c.pipelineAssociations.length === 0);
+    } else {
+      results = results.filter(c =>
+        c.pipelineAssociations.some(p => filters.pipelines.includes(p.name))
+      );
+    }
+  }
+  if (filters.pipelineStages.length > 0) {
+    results = results.filter(c =>
+      c.pipelineAssociations.some(p => filters.pipelineStages.includes(p.stage))
+    );
+  }
+  if (filters.sources.length > 0) {
+    results = results.filter(c =>
+      filters.sources.includes(c.source || '')
+    );
+  }
+  if (filters.companies.length > 0) {
+    results = results.filter(c =>
+      filters.companies.includes(c.company || '')
+    );
+  }
+  if (filters.experienceLevels.length > 0) {
+    results = results.filter(c => {
+      const levels = inferExperienceLevels(c.title);
+      return filters.experienceLevels.some(l => levels.includes(l));
+    });
+  }
+  if (filters.dateAdded && filters.dateAdded !== 'custom') {
+    const from = getDateAddedBoundary(filters.dateAdded);
+    if (from) {
+      results = results.filter(c => c.createdAt >= from);
+    }
+  }
+  if (filters.lastContact && filters.lastContact !== 'custom') {
+    const boundary = getLastContactBoundary(filters.lastContact);
+    if (boundary?.never) {
+      results = results.filter(c => !c.lastContactAt);
+    } else if (boundary?.from) {
+      results = results.filter(c =>
+        c.lastContactAt ? new Date(c.lastContactAt) >= boundary.from! : false
+      );
+    }
+  }
+  return results;
+}
+
+function applySort(
+  candidates: FilterableCandidate[],
+  sortOption: string
+): FilterableCandidate[] {
+  const arr = [...candidates];
+  switch (sortOption) {
+    case 'name_asc':
+      arr.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+      break;
+    case 'name_desc':
+      arr.sort((a, b) => `${b.firstName} ${b.lastName}`.localeCompare(`${a.firstName} ${a.lastName}`));
+      break;
+    case 'recently_added':
+      arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      break;
+    case 'oldest_first':
+      arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      break;
+    case 'last_contacted_recent':
+      arr.sort((a, b) => {
+        const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
+        const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
+        return bTime - aTime;
+      });
+      break;
+    case 'last_contacted_oldest':
+      arr.sort((a, b) => {
+        const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
+        const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
+        return aTime - bTime;
+      });
+      break;
+    case 'last_updated':
+      arr.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      break;
+    default:
+      break;
+  }
+  return arr;
+}
+
 const TalentPool = () => {
   const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -173,229 +386,64 @@ const TalentPool = () => {
     }
   }, [debouncedSearchQuery]);
 
-  // Filter and sort candidates - use real database candidates with enrichment
-  const filteredCandidates = useMemo(() => {
-    const candidates = (dbCandidates || []).map(c => ({
-      id: c.id,
-      firstName: c.firstName || '',
-      lastName: c.lastName || '',
-      email: c.email || '',
-      phone: c.phone || '',
-      title: c.title || '',
-      company: c.company || '',
-      location: c.location || '',
-      skills: c.tags || [],
-      pipelineAssociations: c.pipelineAssociations || [],
-      source: c.source || '',
-      linkedinUrl: c.linkedinUrl || '',
-      lastContact: formatLastContact(c.lastContactAt),
-      lastContactAt: c.lastContactAt,
-      createdAt: new Date(c.createdAt),
-      updatedAt: new Date(c.updatedAt),
-    }));
+  // Pre-compute search string once when dbCandidates loads (avoids rebuilding per keystroke)
+  const candidatesWithSearchStr = useMemo((): FilterableCandidate[] => {
+    return (dbCandidates || []).map(c => {
+      const firstName = c.firstName || '';
+      const lastName = c.lastName || '';
+      const skills = c.tags || [];
+      const _searchStr = [
+        firstName,
+        lastName,
+        c.email || '',
+        c.phone || '',
+        c.company || '',
+        c.title || '',
+        c.location || '',
+        ...skills,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return {
+        id: c.id,
+        firstName,
+        lastName,
+        email: c.email || '',
+        phone: c.phone || '',
+        title: c.title || '',
+        company: c.company || '',
+        location: c.location || '',
+        skills,
+        pipelineAssociations: c.pipelineAssociations || [],
+        source: c.source || '',
+        linkedinUrl: c.linkedinUrl || '',
+        lastContact: formatLastContact(c.lastContactAt),
+        lastContactAt: c.lastContactAt,
+        createdAt: new Date(c.createdAt),
+        updatedAt: new Date(c.updatedAt),
+        _searchStr,
+      };
+    });
+  }, [dbCandidates]);
 
-    let results = [...candidates];
-
-    // Apply advanced search fields
-    if (advancedFields.name) {
-      const nameQuery = advancedFields.name.toLowerCase();
-      results = results.filter(c =>
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(nameQuery)
-      );
-    }
-    if (advancedFields.email) {
-      const emailQuery = advancedFields.email.toLowerCase();
-      results = results.filter(c =>
-        (c.email || '').toLowerCase().includes(emailQuery)
-      );
-    }
-    if (advancedFields.phone) {
-      const phoneQuery = advancedFields.phone.replace(/\D/g, '');
-      results = results.filter(c =>
-        (c.phone || '').replace(/\D/g, '').includes(phoneQuery)
-      );
-    }
-    if (advancedFields.company) {
-      const companyQuery = advancedFields.company.toLowerCase();
-      results = results.filter(c =>
-        (c.company || '').toLowerCase().includes(companyQuery)
-      );
-    }
-    if (advancedFields.title) {
-      const titleQuery = advancedFields.title.toLowerCase();
-      results = results.filter(c =>
-        (c.title || '').toLowerCase().includes(titleQuery)
-      );
-    }
-    if (advancedFields.location) {
-      const locationQuery = advancedFields.location.toLowerCase();
-      results = results.filter(c =>
-        (c.location || '').toLowerCase().includes(locationQuery)
-      );
-    }
-    if (advancedFields.skills.length > 0) {
-      results = results.filter(c =>
-        advancedFields.skills.every(skill =>
-          c.skills.some(s => s.toLowerCase() === skill.toLowerCase())
-        )
-      );
-    }
-    if (advancedFields.dateAddedFrom) {
-      const from = new Date(advancedFields.dateAddedFrom);
-      from.setHours(0, 0, 0, 0);
-      results = results.filter(c => c.createdAt >= from);
-    }
-    if (advancedFields.dateAddedTo) {
-      const to = new Date(advancedFields.dateAddedTo);
-      to.setHours(23, 59, 59, 999);
-      results = results.filter(c => c.createdAt <= to);
-    }
-    if (advancedFields.lastContactedFrom) {
-      const from = new Date(advancedFields.lastContactedFrom);
-      from.setHours(0, 0, 0, 0);
-      results = results.filter(c =>
-        c.lastContactAt ? new Date(c.lastContactAt) >= from : false
-      );
-    }
-    if (advancedFields.lastContactedTo) {
-      const to = new Date(advancedFields.lastContactedTo);
-      to.setHours(23, 59, 59, 999);
-      results = results.filter(c =>
-        c.lastContactAt ? new Date(c.lastContactAt) <= to : false
-      );
-    }
-
-    // Apply text search (supports boolean: "Senior Engineer" AND (Boston OR Gloucester) NOT Manchester)
-    if (debouncedSearchQuery) {
-      const matcher = parseBooleanSearch(debouncedSearchQuery);
-      if (matcher) {
-        results = results.filter((c) => matcher(c));
-      } else {
-        // Fallback: simple substring match when parse fails
-        const query = debouncedSearchQuery.toLowerCase();
-        results = results.filter(c =>
-          `${c.firstName} ${c.lastName}`.toLowerCase().includes(query) ||
-          c.email?.toLowerCase().includes(query) ||
-          c.phone?.includes(query) ||
-          c.company?.toLowerCase().includes(query) ||
-          c.title?.toLowerCase().includes(query) ||
-          c.location?.toLowerCase().includes(query) ||
-          c.skills.some(s => s.toLowerCase().includes(query))
-        );
-      }
-    }
-
-    // Apply skill filters
-    if (filters.skills.length > 0) {
-      results = results.filter(c => 
-        filters.skills.some(skill => c.skills.includes(skill))
-      );
-    }
-
-    // Apply location filters
-    if (filters.locations.length > 0) {
-      results = results.filter(c => 
-        filters.locations.includes(c.location || '')
-      );
-    }
-
-    // Apply pipeline filters
-    if (filters.pipelines.length > 0) {
-      if (filters.pipelines.includes('none')) {
-        results = results.filter(c => c.pipelineAssociations.length === 0);
-      } else {
-        results = results.filter(c => 
-          c.pipelineAssociations.some(p => filters.pipelines.includes(p.name))
-        );
-      }
-    }
-
-    // Apply pipeline stage filters
-    if (filters.pipelineStages.length > 0) {
-      results = results.filter(c => 
-        c.pipelineAssociations.some(p => filters.pipelineStages.includes(p.stage))
-      );
-    }
-
-    // Apply source filters
-    if (filters.sources.length > 0) {
-      results = results.filter(c => 
-        filters.sources.includes(c.source || '')
-      );
-    }
-
-    // Apply company filters
-    if (filters.companies.length > 0) {
-      results = results.filter(c => 
-        filters.companies.includes(c.company || '')
-      );
-    }
-
-    // Apply experience level filter (inferred from title)
-    if (filters.experienceLevels.length > 0) {
-      results = results.filter(c => {
-        const levels = inferExperienceLevels(c.title);
-        return filters.experienceLevels.some(l => levels.includes(l));
-      });
-    }
-
-    // Apply date added filter
-    if (filters.dateAdded && filters.dateAdded !== 'custom') {
-      const from = getDateAddedBoundary(filters.dateAdded);
-      if (from) {
-        results = results.filter(c => c.createdAt >= from);
-      }
-    }
-
-    // Apply last contact filter
-    if (filters.lastContact && filters.lastContact !== 'custom') {
-      const boundary = getLastContactBoundary(filters.lastContact);
-      if (boundary?.never) {
-        results = results.filter(c => !c.lastContactAt);
-      } else if (boundary?.from) {
-        results = results.filter(c =>
-          c.lastContactAt ? new Date(c.lastContactAt) >= boundary.from! : false
-        );
-      }
-    }
-
-    // Apply sorting
-    switch (sortOption) {
-      case 'name_asc':
-        results.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-        break;
-      case 'name_desc':
-        results.sort((a, b) => `${b.firstName} ${b.lastName}`.localeCompare(`${a.firstName} ${a.lastName}`));
-        break;
-      case 'recently_added':
-        results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        break;
-      case 'oldest_first':
-        results.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        break;
-      case 'last_contacted_recent':
-        results.sort((a, b) => {
-          const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
-          const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
-          return bTime - aTime;
-        });
-        break;
-      case 'last_contacted_oldest':
-        results.sort((a, b) => {
-          const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
-          const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
-          return aTime - bTime;
-        });
-        break;
-      case 'last_updated':
-        results.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-        break;
-      default:
-        break;
-    }
-
-    return results;
-  }, [dbCandidates, debouncedSearchQuery, filters, sortOption, advancedFields]);
+  // Chained useMemos: each stage caches independently; changing sort doesn't re-run search
+  const advancedFiltered = useMemo(
+    () => applyAdvanced(candidatesWithSearchStr, advancedFields),
+    [candidatesWithSearchStr, advancedFields]
+  );
+  const searchFiltered = useMemo(
+    () => applySearch(advancedFiltered, debouncedSearchQuery),
+    [advancedFiltered, debouncedSearchQuery]
+  );
+  const fullFiltered = useMemo(
+    () => applyFilters(searchFiltered, filters),
+    [searchFiltered, filters]
+  );
+  const filteredCandidates = useMemo(
+    () => applySort(fullFiltered, sortOption),
+    [fullFiltered, sortOption]
+  );
 
   // Update candidate list context when filtered candidates change
   useEffect(() => {
