@@ -14,11 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Table,
-  TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table';
 import {
@@ -50,6 +47,7 @@ import { useCandidateListContext } from '@/contexts/CandidateListContext';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { parseBooleanSearch } from '@/utils/booleanSearchParser';
 import { getStageColorClass } from '@/utils/stageColors';
+import { TableVirtuoso } from 'react-virtuoso';
 
 function formatLastContact(date: Date | null): string {
   if (!date) return 'Never';
@@ -810,38 +808,54 @@ const TalentPool = () => {
                 </Button>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-deep-sea hover:bg-deep-sea">
-                    <TableHead className="text-white w-10">
-                      <Checkbox
-                        checked={selectedCandidates.length === filteredCandidates.length && filteredCandidates.length > 0}
-                        onCheckedChange={toggleSelectAll}
-                      />
-                    </TableHead>
-                    <TableHead className="text-white">Name</TableHead>
-                    <TableHead className="text-white">Current Role</TableHead>
-                    <TableHead className="text-white">Location</TableHead>
-                    <TableHead className="text-white">Skills</TableHead>
-                    <TableHead className="text-white">Pipelines</TableHead>
-                    <TableHead className="text-white">Last Contact</TableHead>
-                    <TableHead className="text-white">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCandidates.map((candidate) => (
-                    <TableRow 
-                      key={candidate.id} 
-                      className="hover:bg-sky-blue/5 cursor-pointer"
-                      onClick={() => router.push(`/candidates/${candidate.id}`)}
-                    >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+              <div className="h-[calc(100vh-380px)] min-h-[400px]" style={{ borderCollapse: 'separate' }}>
+                <TableVirtuoso
+                  data={filteredCandidates}
+                  className="w-full border-separate border-spacing-0"
+                  components={{
+                    TableRow: ({ children, ...props }) => {
+                      const index = props['data-index' as keyof typeof props];
+                      const candidate = typeof index === 'number' ? filteredCandidates[index] : null;
+                      return (
+                        <TableRow
+                          {...props}
+                          className="hover:bg-sky-blue/5 cursor-pointer border-b border-border"
+                          onClick={() => candidate && router.push(`/candidates/${candidate.id}`)}
+                        >
+                          {children}
+                        </TableRow>
+                      );
+                    },
+                  }}
+                  fixedHeaderContent={() => (
+                    <TableRow className="bg-deep-sea hover:bg-deep-sea border-0">
+                      <TableHead className="text-white w-10 border-b border-deep-sea">
+                        <Checkbox
+                          checked={selectedCandidates.length === filteredCandidates.length && filteredCandidates.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Name</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Current Role</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Location</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Skills</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Pipelines</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Last Contact</TableHead>
+                      <TableHead className="text-white border-b border-deep-sea">Actions</TableHead>
+                    </TableRow>
+                  )}
+                  itemContent={(index, candidate) => (
+                    <>
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()}
+                        className="border-b border-border"
+                      >
                         <Checkbox
                           checked={selectedCandidates.includes(candidate.id)}
                           onCheckedChange={() => toggleSelectCandidate(candidate.id)}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium border-b border-border">
                         <div>
                           <div className="text-foreground hover:text-sky-blue transition-colors">
                             {candidate.firstName} {candidate.lastName}
@@ -852,13 +866,13 @@ const TalentPool = () => {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-b border-border">
                         <div>
                           <div className="text-foreground">{candidate.title}</div>
                           <div className="text-xs text-muted-foreground">{candidate.company}</div>
                         </div>
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
                         <button
                           onClick={() => handleLocationClick(candidate.location || '')}
                           className="flex items-center text-muted-foreground hover:text-sky-blue transition-colors"
@@ -867,12 +881,12 @@ const TalentPool = () => {
                           {candidate.location}
                         </button>
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
                         <div className="flex flex-wrap gap-1">
                           {candidate.skills.slice(0, 4).map((skill) => (
-                            <Badge 
-                              key={skill} 
-                              variant="secondary" 
+                            <Badge
+                              key={skill}
+                              variant="secondary"
                               className="text-xs cursor-pointer hover:bg-sky-blue/20 hover:text-sky-blue transition-colors"
                               onClick={() => handleSkillClick(skill)}
                             >
@@ -884,7 +898,7 @@ const TalentPool = () => {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
                         <div className="flex flex-col gap-1 max-w-xs">
                           {candidate.pipelineAssociations.length === 0 ? (
                             <span className="text-xs text-muted-foreground">Not in pipeline</span>
@@ -895,7 +909,7 @@ const TalentPool = () => {
                               </span>
                               <div className="flex flex-wrap gap-1">
                                 {candidate.pipelineAssociations.map((pipeline) => (
-                                  <Badge 
+                                  <Badge
                                     key={`${pipeline.id}-${pipeline.name}`}
                                     className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${getStageColor(pipeline.stage)}`}
                                     onClick={() => handlePipelineClick(pipeline.name)}
@@ -908,21 +922,23 @@ const TalentPool = () => {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{candidate.lastContact}</TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                      <TableCell className="text-muted-foreground border-b border-border">
+                        {candidate.lastContact}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="text-sky-blue hover:bg-sky-blue/10"
                           onClick={() => router.push(`/candidates/${candidate.id}`)}
                         >
                           View
                         </Button>
                       </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                    </>
+                  )}
+                />
+              </div>
             )}
           </div>
         </main>
