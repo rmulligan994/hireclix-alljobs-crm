@@ -3,7 +3,7 @@ import BeefreeSDK from '@beefree.io/sdk';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, X, Eye, Monitor, Smartphone, Tags, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { Loader2, X, Tags, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { MergeTagsPanel } from './MergeTagsPanel';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
@@ -110,7 +110,6 @@ export const BeefreeEmailEditor = ({
   const beeInstanceRef = useRef<BeefreeSDK | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile' | null>(null);
   const [mergePanelOpen, setMergePanelOpen] = useState(true);
   const [helpBannerOpen, setHelpBannerOpen] = useState(true);
   const [helpBannerDismissed, setHelpBannerDismissed] = useState(false);
@@ -187,7 +186,7 @@ export const BeefreeEmailEditor = ({
         const bee = new BeefreeSDK(data);
 
         // Config for the editor
-        const beeConfig = {
+        const beeConfig: Record<string, unknown> = {
           uid: 'user-' + Date.now(),
           container: 'bee-plugin-container',
           language: 'en-US',
@@ -214,6 +213,8 @@ export const BeefreeEmailEditor = ({
             }
           },
         };
+        // Hide Beefree's built-in save button - we use our own "Save Template" in the toolbar
+        (beeConfig as Record<string, unknown>).showSave = false;
 
         // Start the editor
         await bee.start(beeConfig, initialTemplate || defaultTemplate);
@@ -243,46 +244,6 @@ export const BeefreeEmailEditor = ({
   const handleSave = () => {
     if (beeInstanceRef.current) {
       beeInstanceRef.current.save();
-    }
-  };
-
-  const handlePreview = (mode: 'desktop' | 'mobile') => {
-    if (beeInstanceRef.current) {
-      try {
-        // Toggle preview mode
-        if (previewMode === mode) {
-          beeInstanceRef.current.togglePreview();
-          setPreviewMode(null);
-        } else {
-          if (previewMode) {
-            // If already in preview, toggle off first
-            beeInstanceRef.current.togglePreview();
-          }
-          beeInstanceRef.current.togglePreview();
-          setPreviewMode(mode);
-        }
-      } catch (err) {
-        console.log('Preview toggle error:', err);
-        // BeeFree may not support togglePreview in all versions
-        toast({
-          title: 'Preview',
-          description: 'Use the preview button in the editor toolbar.',
-        });
-      }
-    }
-  };
-
-  const handleMergeTagsPreview = () => {
-    if (beeInstanceRef.current) {
-      try {
-        beeInstanceRef.current.toggleMergeTagsPreview();
-        toast({
-          title: 'Merge Tags Preview',
-          description: 'Showing how merge tags will appear with sample data.',
-        });
-      } catch (err) {
-        console.log('Merge tags preview not supported');
-      }
     }
   };
 
@@ -321,34 +282,6 @@ export const BeefreeEmailEditor = ({
             <Tags className="w-4 h-4 mr-2" />
             Merge Tags
           </Button>
-          <Button
-            variant={previewMode === 'desktop' ? 'secondary' : 'outline'}
-            size="sm"
-            onClick={() => handlePreview('desktop')}
-            disabled={isLoading}
-            title="Desktop Preview"
-          >
-            <Monitor className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={previewMode === 'mobile' ? 'secondary' : 'outline'}
-            size="sm"
-            onClick={() => handlePreview('mobile')}
-            disabled={isLoading}
-            title="Mobile Preview"
-          >
-            <Smartphone className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleMergeTagsPreview}
-            disabled={isLoading}
-            title="Preview with Sample Data"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            Preview Data
-          </Button>
         </div>
 
         <Button 
@@ -384,6 +317,7 @@ export const BeefreeEmailEditor = ({
                       <AlertDescription className="mt-1.5 text-xs">
                         <strong>Step 1:</strong> Click the button in the editor. <strong>Step 2:</strong> Click the link icon in the toolbar. <strong>Step 3:</strong> Choose a link (Apply to Job, Email Recruiter, etc.) or paste from the Merge Tags panel.
                         <span className="block mt-1 text-muted-foreground">Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">@</kbd> in text to insert merge tags (e.g. Hi {'{{firstName}}'}).</span>
+                        <span className="block mt-1 text-muted-foreground">For images: use image URLs (right-click image → paste URL) for reliable persistence; uploaded images may not persist across saves.</span>
                       </AlertDescription>
                     </CollapsibleContent>
                   </div>

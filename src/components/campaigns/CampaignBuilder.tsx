@@ -74,6 +74,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       } else {
         setTemplateBeeJson(null);
       }
+      setTemplateHtml(initialTemplate?.html_content ?? null);
       setCurrentStep('editor');
     }
   }, [open, editingCampaign, initialTemplate]);
@@ -94,7 +95,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const [jobSearch, setJobSearch] = useState('');
   
   const { toast } = useToast();
-  const { createTemplate } = useEmailTemplates();
+  const { createTemplate, updateTemplate } = useEmailTemplates();
   const createCampaign = useCreateCampaign();
   const updateCampaign = useUpdateCampaign();
   const addRecipients = useAddCampaignRecipients();
@@ -137,6 +138,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     } else {
       setTemplateBeeJson(null);
     }
+    setTemplateHtml(template?.html_content ?? null);
     setCurrentStep('editor');
   };
 
@@ -144,7 +146,15 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setTemplateBeeJson(beeJson);
     setTemplateHtml(html);
     
-    if (!selectedTemplate) {
+    if (selectedTemplate) {
+      updateTemplate({
+        id: selectedTemplate.id,
+        input: {
+          bee_json: beeJson as Json,
+          html_content: html,
+        },
+      });
+    } else {
       createTemplate({
         name: campaignName || 'Untitled Template',
         category: campaignType || 'custom',
