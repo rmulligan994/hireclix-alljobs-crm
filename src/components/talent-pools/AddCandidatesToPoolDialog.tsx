@@ -13,7 +13,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, UserPlus, User, Building, MapPin, Filter } from 'lucide-react';
-import { useCandidates } from '@/hooks/useCandidates';
+import { Virtuoso } from 'react-virtuoso';
+import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
 import { useDebounce } from '@/hooks/useDebounce';
 import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
 import {
@@ -54,7 +55,7 @@ export const AddCandidatesToPoolDialog = ({
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const { data: candidates, isLoading } = useCandidates();
+  const { data: candidates, isLoading } = useCandidatesWithEnrichment();
 
   const availableCandidates = (candidates || []).filter(
     (c) => !existingCandidateIds.includes(c.id)
@@ -76,11 +77,17 @@ export const AddCandidatesToPoolDialog = ({
     const locationCounts = new Map<string, number>();
     const companyCounts = new Map<string, number>();
     const sourceCounts = new Map<string, number>();
+    const pipelineCounts = new Map<string, number>();
+    const stageCounts = new Map<string, number>();
     availableCandidates.forEach((c) => {
       (c.tags || []).forEach((s) => skillCounts.set(s, (skillCounts.get(s) || 0) + 1));
       if (c.location) locationCounts.set(c.location, (locationCounts.get(c.location) || 0) + 1);
       if (c.company) companyCounts.set(c.company, (companyCounts.get(c.company) || 0) + 1);
       if (c.source) sourceCounts.set(c.source, (sourceCounts.get(c.source) || 0) + 1);
+      (c.pipelineAssociations || []).forEach((p) => {
+        if (p?.name) pipelineCounts.set(p.name, (pipelineCounts.get(p.name) || 0) + 1);
+        if (p?.stage) stageCounts.set(p.stage, (stageCounts.get(p.stage) || 0) + 1);
+      });
     });
     return {
       skills: Array.from(skillCounts.entries())
@@ -89,8 +96,12 @@ export const AddCandidatesToPoolDialog = ({
       locations: Array.from(locationCounts.entries())
         .sort((a, b) => b[1] - a[1])
         .map(([value]) => ({ value, label: value, count: locationCounts.get(value) } as FilterOption)),
-      pipelines: [] as FilterOption[],
-      pipelineStages: [] as FilterOption[],
+      pipelines: Array.from(pipelineCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: pipelineCounts.get(value) } as FilterOption)),
+      pipelineStages: Array.from(stageCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => ({ value, label: value, count: stageCounts.get(value) } as FilterOption)),
       talentPools: [] as FilterOption[],
       sources: Array.from(sourceCounts.entries())
         .sort((a, b) => b[1] - a[1])
@@ -139,6 +150,20 @@ export const AddCandidatesToPoolDialog = ({
     if (filters.sources.length > 0) {
       results = results.filter((c) =>
         filters.sources.includes(c.source || '')
+      );
+    }
+    if (filters.pipelines.length > 0) {
+      if (filters.pipelines.includes('none')) {
+        results = results.filter((c) => (c.pipelineAssociations || []).length === 0);
+      } else {
+        results = results.filter((c) =>
+          (c.pipelineAssociations || []).some((p) => filters.pipelines.includes(p.name))
+        );
+      }
+    }
+    if (filters.pipelineStages.length > 0) {
+      results = results.filter((c) =>
+        (c.pipelineAssociations || []).some((p) => filters.pipelineStages.includes(p.stage))
       );
     }
 
@@ -194,7 +219,9 @@ export const AddCandidatesToPoolDialog = ({
     filters.skills.length +
     filters.locations.length +
     filters.companies.length +
-    filters.sources.length;
+    filters.sources.length +
+    filters.pipelines.length +
+    filters.pipelineStages.length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -260,13 +287,13 @@ export const AddCandidatesToPoolDialog = ({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px] max-h-[400px]">
+        <div className="flex-1 min-h-[200px] max-h-[400px] overflow-hidden">
           {isLoading ? (
-            <>
+            <div className="space-y-2">
               {[1, 2, 3].map(i => (
                 <Skeleton key={i} className="h-20 w-full" />
               ))}
-            </>
+            </div>
           ) : filteredCandidates.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {availableCandidates.length === 0
@@ -274,55 +301,60 @@ export const AddCandidatesToPoolDialog = ({
                 : 'No candidates found matching your search'}
             </div>
           ) : (
-            filteredCandidates.map((candidate) => (
-              <div
-                key={candidate.id}
-                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  selectedCandidates.includes(candidate.id)
-                    ? 'border-sky-blue bg-sky-blue/10'
-                    : 'border-border hover:border-sky-blue/50'
-                }`}
-                onClick={() => handleToggleCandidate(candidate.id)}
-              >
-                <Checkbox
-                  checked={selectedCandidates.includes(candidate.id)}
-                  onCheckedChange={() => handleToggleCandidate(candidate.id)}
-                  className="border-muted-foreground data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
-                />
-                <div className="flex-1">
-                  <p className="font-medium text-foreground">
-                    {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
-                  </p>
-                  <div className="flex items-center gap-4 mt-1 flex-wrap">
-                    {candidate.title && (
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        {candidate.title}
-                      </span>
-                    )}
-                    {candidate.company && (
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Building className="w-3 h-3" />
-                        {candidate.company}
-                      </span>
-                    )}
-                    {candidate.location && (
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {candidate.location}
-                      </span>
-                    )}
+            <Virtuoso
+              data={filteredCandidates}
+              className="pr-2 overflow-y-scroll"
+              itemContent={(index, candidate) => (
+                <div className="pb-2">
+                  <div
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedCandidates.includes(candidate.id)
+                        ? 'border-sky-blue bg-sky-blue/10'
+                        : 'border-border hover:border-sky-blue/50'
+                    }`}
+                    onClick={() => handleToggleCandidate(candidate.id)}
+                  >
+                  <Checkbox
+                    checked={selectedCandidates.includes(candidate.id)}
+                    onCheckedChange={() => handleToggleCandidate(candidate.id)}
+                    className="border-muted-foreground data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground">
+                      {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
+                    </p>
+                    <div className="flex items-center gap-4 mt-1 flex-wrap">
+                      {candidate.title && (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {candidate.title}
+                        </span>
+                      )}
+                      {candidate.company && (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Building className="w-3 h-3" />
+                          {candidate.company}
+                        </span>
+                      )}
+                      {candidate.location && (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {candidate.location}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {(candidate.tags || []).slice(0, 2).map((skill) => (
+                      <Badge key={skill} variant="secondary" className="text-xs">
+                        {skill}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {(candidate.tags || []).slice(0, 2).map((skill) => (
-                    <Badge key={skill} variant="secondary" className="text-xs">
-                      {skill}
-                    </Badge>
-                  ))}
                 </div>
-              </div>
-            ))
+              )}
+            />
           )}
         </div>
 

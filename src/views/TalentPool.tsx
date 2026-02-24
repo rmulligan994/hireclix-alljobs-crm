@@ -859,8 +859,23 @@ const TalentPool = () => {
               <div className="h-[calc(100vh-380px)] min-h-[400px]" style={{ borderCollapse: 'separate' }}>
                 <TableVirtuoso
                   data={filteredCandidates}
-                  className="w-full border-separate border-spacing-0"
+                  className="w-full border-separate border-spacing-0 table-fixed"
                   components={{
+                    Table: ({ children, style, ...props }) => (
+                      <table {...props} style={{ ...style, tableLayout: 'fixed' }} className="w-full border-separate border-spacing-0">
+                        <colgroup>
+                          <col style={{ width: 40 }} />
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '12%' }} />
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '10%' }} />
+                          <col style={{ width: 80 }} />
+                        </colgroup>
+                        {children}
+                      </table>
+                    ),
                     TableRow: ({ children, ...props }) => {
                       const index = props['data-index' as keyof typeof props];
                       const candidate = typeof index === 'number' ? filteredCandidates[index] : null;

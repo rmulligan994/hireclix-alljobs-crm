@@ -11,7 +11,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
-import { useCandidates } from '@/hooks/useCandidates';
+import { Virtuoso } from 'react-virtuoso';
+import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
 import { useDebounce } from '@/hooks/useDebounce';
 import { parseBooleanSearch } from '@/utils/booleanSearchParser';
 
@@ -34,13 +35,14 @@ export function AddCandidatesToPipelineDialog({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const { data: candidates, isLoading } = useCandidates();
+  const { data: candidates, isLoading } = useCandidatesWithEnrichment();
+
+  const availableCandidates = (candidates || []).filter(
+    c => !existingCandidateIds.includes(c.id)
+  );
 
   const filteredCandidates = useMemo(() => {
-    const available = (candidates || []).filter(
-      c => !existingCandidateIds.includes(c.id)
-    );
-    let results = [...available];
+    let results = [...availableCandidates];
 
     if (debouncedSearchQuery.trim()) {
       const matcher = parseBooleanSearch(debouncedSearchQuery.trim());
@@ -71,7 +73,7 @@ export function AddCandidatesToPipelineDialog({
     }
 
     return results;
-  }, [candidates, existingCandidateIds, debouncedSearchQuery]);
+  }, [availableCandidates, debouncedSearchQuery]);
 
   const handleToggleCandidate = (id: string) => {
     setSelectedIds(prev => 
@@ -134,72 +136,81 @@ export function AddCandidatesToPipelineDialog({
         )}
 
         {/* Candidates List */}
-        <div className="overflow-y-auto min-h-[200px] max-h-[400px] space-y-2 pr-2">
-            {isLoading ? (
-              <>
-                {[1, 2, 3].map(i => (
-                  <Skeleton key={i} className="h-24 w-full" />
-                ))}
-              </>
-            ) : filteredCandidates.map((candidate) => (
-              <div
-                key={candidate.id}
-                className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                  selectedIds.includes(candidate.id)
-                    ? 'border-sky-blue bg-sky-blue/5'
-                    : 'border-border hover:border-muted-foreground'
-                }`}
-                onClick={() => handleToggleCandidate(candidate.id)}
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    checked={selectedIds.includes(candidate.id)}
-                    onCheckedChange={() => handleToggleCandidate(candidate.id)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground">
-                      {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
-                    </p>
-                    <div className="flex items-center gap-4 mt-1 flex-wrap">
-                      {candidate.title && (
-                        <span className="text-sm text-muted-foreground flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {candidate.title}
-                        </span>
-                      )}
-                      {candidate.company && (
-                        <span className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Building className="w-3 h-3" />
-                          {candidate.company}
-                        </span>
-                      )}
-                      {candidate.location && (
-                        <span className="text-sm text-muted-foreground flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {candidate.location}
-                        </span>
+        <div className="min-h-[200px] max-h-[400px] overflow-hidden">
+          {isLoading ? (
+            <div className="space-y-2 pr-2">
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : filteredCandidates.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">
+                {availableCandidates.length === 0
+                  ? 'All candidates are already in this pipeline'
+                  : 'No candidates found matching your search'}
+              </p>
+            </div>
+          ) : (
+            <Virtuoso
+              data={filteredCandidates}
+              className="pr-2 overflow-y-scroll"
+              itemContent={(index, candidate) => (
+                <div className="pb-2">
+                  <div
+                    className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                      selectedIds.includes(candidate.id)
+                        ? 'border-sky-blue bg-sky-blue/5'
+                        : 'border-border hover:border-muted-foreground'
+                    }`}
+                    onClick={() => handleToggleCandidate(candidate.id)}
+                  >
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      checked={selectedIds.includes(candidate.id)}
+                      onCheckedChange={() => handleToggleCandidate(candidate.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground">
+                        {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
+                      </p>
+                      <div className="flex items-center gap-4 mt-1 flex-wrap">
+                        {candidate.title && (
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {candidate.title}
+                          </span>
+                        )}
+                        {candidate.company && (
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Building className="w-3 h-3" />
+                            {candidate.company}
+                          </span>
+                        )}
+                        {candidate.location && (
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {candidate.location}
+                          </span>
+                        )}
+                      </div>
+                      {candidate.tags && candidate.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {candidate.tags.slice(0, 5).map((skill) => (
+                            <Badge key={skill} variant="secondary" className="text-xs">
+                              {skill}
+                            </Badge>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {candidate.tags && candidate.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {candidate.tags.slice(0, 5).map((skill) => (
-                          <Badge key={skill} variant="secondary" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
-              </div>
-            ))}
-
-            {!isLoading && filteredCandidates.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No candidates found</p>
-              </div>
-            )}
+                </div>
+              )}
+            />
+          )}
         </div>
 
         {/* Actions */}
