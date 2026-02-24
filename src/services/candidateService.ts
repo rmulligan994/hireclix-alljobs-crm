@@ -511,7 +511,7 @@ export const candidateService = {
    * Paginates past Supabase's 1000-row default limit.
    */
   getListWithEnrichment: async (): Promise<CandidateListEnriched[]> => {
-    const PAGE_SIZE = 1000;
+    const PAGE_SIZE = 5000; // Larger pages = fewer round trips (25k candidates: 5 requests vs 25)
     const all: any[] = [];
     let offset = 0;
     let hasMore = true;
