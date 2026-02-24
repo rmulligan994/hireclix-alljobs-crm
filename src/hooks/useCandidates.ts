@@ -11,6 +11,7 @@ export const useCandidates = () => {
   return useQuery({
     queryKey: ['candidates'],
     queryFn: candidateService.getAll,
+    staleTime: 5 * 60 * 1000, // 5 minutes - instant back-navigation to cached data
   });
 };
 
@@ -18,6 +19,7 @@ export const useCandidatesWithEnrichment = () => {
   return useQuery({
     queryKey: ['candidates', 'enriched'],
     queryFn: candidateService.getListWithEnrichment,
+    staleTime: 5 * 60 * 1000, // 5 minutes - instant back-navigation to cached data
   });
 };
 
@@ -55,6 +57,7 @@ export const useCandidateStats = () => {
       ]);
       return { total, newThisWeek };
     },
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 };
 

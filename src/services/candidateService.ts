@@ -507,70 +507,43 @@ export const candidateService = {
 
   /**
    * Get all candidates with pipeline associations (stage names) and last contact date.
-   * Last contact = most recent of: communications.occurred_at, campaign_recipients.sent_at
+   * Uses candidates_enriched view - single query, server-side join.
    * Paginates past Supabase's 1000-row default limit.
    */
   getListWithEnrichment: async (): Promise<CandidateListEnriched[]> => {
-    const svc = candidateService;
-    const [candidatesData, pipelineData, pipelinesRes, commsData, campaignData] = await Promise.all([
-      svc._fetchAllPaginated<any>('candidates', '*'),
-      svc._fetchAllPaginated<any>(
-        'pipeline_candidates',
-        'candidate_id, pipeline_id, stage, pipelines(id, name)',
-        'candidate_id'
-      ),
-      supabase.from('pipelines').select('id, stages'),
-      svc._fetchAllPaginated<any>('communications', 'candidate_id, occurred_at', 'occurred_at', false),
-      svc._fetchAllPaginated<any>(
-        'campaign_recipients',
-        'candidate_id, sent_at',
-        'sent_at',
-        false,
-        (q) => q.not('sent_at', 'is', null)
-      ),
-    ]);
+    const PAGE_SIZE = 1000;
+    const all: any[] = [];
+    let offset = 0;
+    let hasMore = true;
 
-    if (pipelinesRes.error) throw pipelinesRes.error;
+    while (hasMore) {
+      // candidates_enriched is a DB view; use type assertion until types are regenerated
+      const { data, error } = await (supabase as any)
+        .from('candidates_enriched')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
 
-    const candidates = candidatesData.map(mapRowToCandidate);
-
-    const stageNameMap = new Map<string, string>();
-    for (const p of pipelinesRes.data || []) {
-      const stages = (p.stages as { id: string; name: string }[]) || [];
-      for (const s of stages) {
-        if (s?.id && s?.name) stageNameMap.set(s.id, s.name);
-      }
+      if (error) throw error;
+      const rows = (data || []) as any[];
+      all.push(...rows);
+      hasMore = rows.length === PAGE_SIZE;
+      offset += PAGE_SIZE;
     }
 
-    const pipelineByCandidate = new Map<string, { id: string; name: string; stage: string }[]>();
-    for (const pc of pipelineData || []) {
-      const stageName = stageNameMap.get(pc.stage) || pc.stage;
-      const pipelineName = (pc.pipelines as { id: string; name: string } | null)?.name || pc.pipeline_id;
-      const list = pipelineByCandidate.get(pc.candidate_id) || [];
-      list.push({
-        id: pc.pipeline_id,
-        name: pipelineName,
-        stage: stageName,
-      });
-      pipelineByCandidate.set(pc.candidate_id, list);
-    }
-
-    const lastContactByCandidate = new Map<string, Date>();
-    for (const c of commsData || []) {
-      const at = new Date(c.occurred_at);
-      const existing = lastContactByCandidate.get(c.candidate_id);
-      if (!existing || at > existing) lastContactByCandidate.set(c.candidate_id, at);
-    }
-    for (const r of campaignData || []) {
-      const at = new Date(r.sent_at!);
-      const existing = lastContactByCandidate.get(r.candidate_id);
-      if (!existing || at > existing) lastContactByCandidate.set(r.candidate_id, at);
-    }
-
-    return candidates.map((c) => ({
-      ...c,
-      pipelineAssociations: pipelineByCandidate.get(c.id) || [],
-      lastContactAt: lastContactByCandidate.get(c.id) || null,
-    }));
+    return all.map((row) => {
+      const candidate = mapRowToCandidate(row);
+      const pipelineAssociations = (row.pipeline_associations || []).map((p: { id: string; name: string; stage: string }) => ({
+        id: p.id,
+        name: p.name,
+        stage: p.stage,
+      }));
+      const lastContactAt = row.last_contact_at ? new Date(row.last_contact_at) : null;
+      return {
+        ...candidate,
+        pipelineAssociations,
+        lastContactAt,
+      };
+    });
   },
 };
