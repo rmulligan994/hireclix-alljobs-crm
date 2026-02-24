@@ -136,7 +136,7 @@ export function AddCandidatesToPipelineDialog({
         )}
 
         {/* Candidates List */}
-        <div className="min-h-[200px] max-h-[400px] overflow-hidden">
+        <div className="h-[400px] overflow-hidden shrink-0">
           {isLoading ? (
             <div className="space-y-2 pr-2">
               {[1, 2, 3].map(i => (

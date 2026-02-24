@@ -287,7 +287,7 @@ export const AddCandidatesToPoolDialog = ({
           </div>
         )}
 
-        <div className="flex-1 min-h-[200px] max-h-[400px] overflow-hidden">
+        <div className="h-[400px] overflow-hidden shrink-0">
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map(i => (
