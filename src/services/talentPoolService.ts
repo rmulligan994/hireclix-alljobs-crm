@@ -199,20 +199,21 @@ export const talentPoolService = {
    * Returns counts so the UI can show how many were added vs already in pool.
    */
   addCandidates: async (poolId: string, candidateIds: string[]): Promise<{ added: number; skipped: number }> => {
-    if (candidateIds.length === 0) return { added: 0, skipped: 0 };
+    const uniqueIds = [...new Set(candidateIds)];
+    if (uniqueIds.length === 0) return { added: 0, skipped: 0 };
 
     // Find which candidates are already in the pool
     const { data: existing } = await supabase
       .from('talent_pool_candidates')
       .select('candidate_id')
       .eq('talent_pool_id', poolId)
-      .in('candidate_id', candidateIds);
+      .in('candidate_id', uniqueIds);
 
     const existingIds = new Set((existing ?? []).map((r) => r.candidate_id));
-    const toAdd = candidateIds.filter((id) => !existingIds.has(id));
+    const toAdd = uniqueIds.filter((id) => !existingIds.has(id));
 
     if (toAdd.length === 0) {
-      return { added: 0, skipped: candidateIds.length };
+      return { added: 0, skipped: uniqueIds.length };
     }
 
     const inserts = toAdd.map((candidateId) => ({
@@ -220,9 +221,10 @@ export const talentPoolService = {
       candidate_id: candidateId,
     }));
 
+    // Use upsert with ignoreDuplicates to avoid unique constraint errors from race conditions
     const { error } = await supabase
       .from('talent_pool_candidates')
-      .insert(inserts);
+      .upsert(inserts, { onConflict: 'talent_pool_id,candidate_id', ignoreDuplicates: true });
 
     if (error) throw error;
     return { added: toAdd.length, skipped: existingIds.size };
