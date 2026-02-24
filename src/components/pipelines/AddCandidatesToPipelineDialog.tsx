@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
 import { useCandidates } from '@/hooks/useCandidates';
@@ -135,8 +134,7 @@ export function AddCandidatesToPipelineDialog({
         )}
 
         {/* Candidates List */}
-        <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
-          <div className="space-y-2 pr-4">
+        <div className="overflow-y-auto min-h-[200px] max-h-[400px] space-y-2 pr-2">
             {isLoading ? (
               <>
                 {[1, 2, 3].map(i => (
@@ -202,8 +200,7 @@ export function AddCandidatesToPipelineDialog({
                 <p className="text-muted-foreground">No candidates found</p>
               </div>
             )}
-          </div>
-        </ScrollArea>
+        </div>
 
         {/* Actions */}
         <div className="flex gap-3 pt-4 border-t border-border">
