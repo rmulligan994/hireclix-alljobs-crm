@@ -76,9 +76,17 @@ export function AddCandidatesToPipelineDialog({
   }, [availableCandidates, debouncedSearchQuery]);
 
   const handleToggleCandidate = (id: string) => {
-    setSelectedIds(prev => 
+    setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredCandidates.length && filteredCandidates.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredCandidates.map(c => c.id));
+    }
   };
 
   const handleAddSelected = () => {
@@ -96,7 +104,7 @@ export function AddCandidatesToPipelineDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="bg-card border-border max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="bg-card border-border max-w-2xl max-h-[600px] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-sky-blue" />
@@ -135,8 +143,31 @@ export function AddCandidatesToPipelineDialog({
           </div>
         )}
 
+        {/* Select all header */}
+        {!isLoading && filteredCandidates.length > 0 && (
+          <div className="flex items-center gap-2 py-2 border-b border-border">
+            <Checkbox
+              id="select-all-pipeline"
+              checked={
+                selectedIds.length === 0
+                  ? false
+                  : selectedIds.length === filteredCandidates.length
+                    ? true
+                    : 'indeterminate'
+              }
+              onCheckedChange={handleSelectAll}
+            />
+            <label
+              htmlFor="select-all-pipeline"
+              className="text-sm text-muted-foreground cursor-pointer select-none"
+            >
+              Select all ({filteredCandidates.length} candidates)
+            </label>
+          </div>
+        )}
+
         {/* Candidates List */}
-        <div className="h-[400px] overflow-hidden shrink-0">
+        <div className="min-h-0 flex-1 overflow-hidden shrink-0" style={{ maxHeight: '320px' }}>
           {isLoading ? (
             <div className="space-y-2 pr-2">
               {[1, 2, 3].map(i => (
@@ -228,7 +259,7 @@ export function AddCandidatesToPipelineDialog({
             className="flex-1 bg-gradient-primary hover:opacity-90 disabled:opacity-50"
           >
             <UserPlus className="w-4 h-4 mr-2" />
-            Add {selectedIds.length > 0 ? selectedIds.length : ''} Candidate{selectedIds.length !== 1 ? 's' : ''}
+            Confirm & Add {selectedIds.length > 0 ? selectedIds.length : ''} Candidate{selectedIds.length !== 1 ? 's' : ''}
           </Button>
         </div>
       </DialogContent>

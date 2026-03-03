@@ -178,6 +178,14 @@ export const AddCandidatesToPoolDialog = ({
     );
   };
 
+  const handleSelectAll = () => {
+    if (selectedCandidates.length === filteredCandidates.length && filteredCandidates.length > 0) {
+      setSelectedCandidates([]);
+    } else {
+      setSelectedCandidates(filteredCandidates.map(c => c.id));
+    }
+  };
+
   const handleAddSelected = () => {
     onAddCandidates(selectedCandidates);
     setSelectedCandidates([]);
@@ -225,7 +233,7 @@ export const AddCandidatesToPoolDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="bg-card border-border max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="bg-card border-border max-w-2xl max-h-[600px] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <UserPlus className="w-5 h-5 text-sky-blue" />
@@ -287,7 +295,31 @@ export const AddCandidatesToPoolDialog = ({
           </div>
         )}
 
-        <div className="h-[400px] overflow-hidden shrink-0">
+        {/* Select all header */}
+        {!isLoading && filteredCandidates.length > 0 && (
+          <div className="flex items-center gap-2 py-2 border-b border-border mb-2">
+            <Checkbox
+              id="select-all-pool"
+              checked={
+                selectedCandidates.length === 0
+                  ? false
+                  : selectedCandidates.length === filteredCandidates.length
+                    ? true
+                    : 'indeterminate'
+              }
+              onCheckedChange={handleSelectAll}
+              className="border-muted-foreground data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
+            />
+            <label
+              htmlFor="select-all-pool"
+              className="text-sm text-muted-foreground cursor-pointer select-none"
+            >
+              Select all ({filteredCandidates.length} candidates)
+            </label>
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-hidden shrink-0" style={{ maxHeight: '320px' }}>
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map(i => (
@@ -368,7 +400,7 @@ export const AddCandidatesToPoolDialog = ({
             className="bg-gradient-primary hover:opacity-90"
           >
             <UserPlus className="w-4 h-4 mr-2" />
-            Add {selectedCandidates.length > 0 ? selectedCandidates.length : ''} Candidate{selectedCandidates.length !== 1 ? 's' : ''}
+            Confirm & Add {selectedCandidates.length > 0 ? selectedCandidates.length : ''} Candidate{selectedCandidates.length !== 1 ? 's' : ''}
           </Button>
         </DialogFooter>
       </DialogContent>
