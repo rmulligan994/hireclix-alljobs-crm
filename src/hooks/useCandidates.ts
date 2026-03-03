@@ -68,6 +68,8 @@ export const useCreateCandidate = () => {
     mutationFn: (data: CreateCandidateData) => candidateService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['myActivity'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'stats'] });
       toast.success('Candidate created successfully');
     },
     onError: (error: Error) => {

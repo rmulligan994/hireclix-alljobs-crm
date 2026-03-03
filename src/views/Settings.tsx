@@ -13,12 +13,19 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Save, Plus, Trash2, Copy, GitBranch, Building2, Briefcase, CheckCircle, XCircle, Loader2, CloudDownload } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Save, Plus, Trash2, Copy, GitBranch, Building2, Briefcase, CheckCircle, XCircle, Loader2, CloudDownload, ChevronDown } from 'lucide-react';
 import { useJobsSyncLogs, useTriggerJobsSync } from '@/hooks/useJobsSync';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
 import { useCurrentUser, useUpdateProfile, useAllProfiles } from '@/hooks/useAuth';
+import type { UserRole } from '@/types/User';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -40,6 +47,7 @@ const Settings = () => {
   const { data: currentUser, isLoading: currentUserLoading } = useCurrentUser();
   const userId = currentUser?.id;
   const profile = currentUser?.profile;
+  const isAdmin = profile?.role === 'admin';
   const updateProfile = useUpdateProfile();
   const { data: allProfiles = [], isLoading: teamLoading, isError: teamError, refetch: refetchTeam } = useAllProfiles(!!userId);
 
@@ -706,6 +714,14 @@ const Settings = () => {
                       {allProfiles.map((p) => {
                         const name = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'Unknown';
                         const isCurrentUser = p.userId === userId;
+                        const displayRole: UserRole = p.role === 'admin' ? 'admin' : 'recruiter';
+                        const handleRoleChange = (newRole: UserRole) => {
+                          if (!isAdmin || isCurrentUser) return;
+                          updateProfile.mutate(
+                            { userId: p.userId, data: { role: newRole } },
+                            { onSuccess: () => refetchTeam() }
+                          );
+                        };
                         return (
                           <div key={p.id} className="flex items-center justify-between p-4 border border-border rounded-lg">
                             <div>
@@ -719,10 +735,32 @@ const Settings = () => {
                             </div>
                             <div className="flex items-center space-x-3">
                               <Badge className="bg-sky-blue/20 text-sky-blue border-sky-blue">
-                                {isCurrentUser ? 'Admin' : 'Member'}
+                                {displayRole === 'admin' ? 'Admin' : 'Recruiter'}
                               </Badge>
-                              {!isCurrentUser && (
-                                <Button variant="ghost" size="sm">Manage</Button>
+                              {isAdmin && !isCurrentUser && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm">
+                                      Manage <ChevronDown className="w-3 h-3 ml-1" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="bg-card border-border">
+                                    <DropdownMenuItem
+                                      onClick={() => handleRoleChange('admin')}
+                                      disabled={displayRole === 'admin'}
+                                      className="cursor-pointer"
+                                    >
+                                      Set as Admin
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => handleRoleChange('recruiter')}
+                                      disabled={displayRole === 'recruiter'}
+                                      className="cursor-pointer"
+                                    >
+                                      Set as Recruiter
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               )}
                             </div>
                           </div>

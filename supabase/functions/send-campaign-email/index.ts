@@ -254,6 +254,7 @@ Deno.serve(async (req) => {
               occurred_at: new Date().toISOString(),
               campaign_recipient_id: recipient.id,
               external_message_id: messageId,
+              created_by: campaign.user_id,
             });
           }
 

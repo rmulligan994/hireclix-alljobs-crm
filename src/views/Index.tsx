@@ -6,7 +6,8 @@ import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PipelineChart } from '@/components/dashboard/PipelineChart';
-import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
+import { MyActivity } from '@/components/dashboard/MyActivity';
+import { ActivityChart } from '@/components/dashboard/ActivityChart';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { useCandidateStats } from '@/hooks/useCandidates';
@@ -111,10 +112,15 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Charts and Activity */}
+          {/* Pipeline Overview and My Activity */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <PipelineChart />
-            <ActivityFeed />
+            <MyActivity />
+          </div>
+
+          {/* Activity Over Time - Line Chart */}
+          <div className="mt-6">
+            <ActivityChart />
           </div>
         </main>
       </div>

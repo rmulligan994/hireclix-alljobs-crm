@@ -20,6 +20,8 @@ import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
 import { useJobsForCampaign } from '@/hooks/useJobs';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
+import { useCurrentUserRole } from '@/hooks/useCurrentUserRole';
+import { isOverRecipientLimit, getRecipientLimitForRole } from '@/config/roleLimits';
 import { EmailTemplate } from '@/services/emailTemplateService';
 import { AudienceFilter, CampaignEmail, Campaign } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
@@ -102,6 +104,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const createCampaignEmail = useCreateCampaignEmail();
   const { data: talentPools } = useTalentPools();
   const { data: pipelines } = usePipelines();
+  const userRole = useCurrentUserRole();
   const { settings: orgSettings } = useOrganizationSettings();
   const { data: campaignJobs } = useJobsForCampaign(jobSearch);
   const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
@@ -627,7 +630,14 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                       <Users className="w-5 h-5 text-sky-blue" />
                       <div>
                         <div className="font-semibold text-foreground">Estimated Recipients</div>
-                        <div className="text-sm text-muted-foreground">Based on current filters</div>
+                        <div className="text-sm text-muted-foreground">
+                          Based on current filters
+                          {userRole === 'recruiter' && (
+                            <span className="block mt-0.5 text-muted-foreground">
+                              Recruiter limit: {getRecipientLimitForRole(userRole)?.toLocaleString()} recipients
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="text-3xl font-bold text-sky-blue">
@@ -638,6 +648,18 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                       )}
                     </div>
                   </div>
+
+                  {/* Role limit warning */}
+                  {recipientCount !== undefined && recipientCount > 0 && isOverRecipientLimit(userRole, recipientCount) && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>Recipient limit exceeded</AlertTitle>
+                      <AlertDescription>
+                        Recruiters can send to a maximum of {getRecipientLimitForRole(userRole)?.toLocaleString()} recipients. 
+                        You have {recipientCount.toLocaleString()} selected. Narrow your audience or ask an Admin to send this campaign.
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   {/* Preview Recipients */}
                   {filteredCandidates && filteredCandidates.length > 0 && (
@@ -663,7 +685,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                   <Button 
                     className="w-full bg-gradient-primary hover:opacity-90" 
                     onClick={() => setCurrentStep('review')}
-                    disabled={!filteredCandidates || filteredCandidates.length === 0}
+                    disabled={
+                      !filteredCandidates ||
+                      filteredCandidates.length === 0 ||
+                      (recipientCount !== undefined && isOverRecipientLimit(userRole, recipientCount))
+                    }
                   >
                     Continue to Review
                   </Button>

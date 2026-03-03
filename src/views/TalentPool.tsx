@@ -1034,7 +1034,11 @@ const TalentPool = () => {
       <ImportCandidatesDialog
         open={importCandidatesOpen}
         onOpenChange={setImportCandidatesOpen}
-        onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['candidates'] })}
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['candidates'] });
+          queryClient.invalidateQueries({ queryKey: ['myActivity'] });
+          queryClient.invalidateQueries({ queryKey: ['candidates', 'stats'] });
+        }}
       />
 
       <BulkAddToPipelineDialog

@@ -26,6 +26,13 @@ export {
 export { talentPoolService } from './talentPoolService';
 export { userService } from './userService';
 export { communicationService } from './communicationService';
+export {
+  getMyActivityStats,
+  getMyActivityTimeSeries,
+  type MyActivityStats,
+  type ActivityMetricKey,
+  type ActivityTimeSeriesPoint,
+} from './activityService';
 
 // Re-export types for convenience
 export * from '@/types';

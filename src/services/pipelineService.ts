@@ -303,4 +303,47 @@ export const pipelineService = {
     if (error) throw error;
     return count || 0;
   },
+
+  /**
+   * Get candidates grouped by stage for dashboard chart.
+   * When pipelineId is provided, filter to that pipeline. Otherwise aggregate across all active pipelines.
+   */
+  getCandidatesByStage: async (pipelineId?: string): Promise<{ stage: string; count: number }[]> => {
+    let query = supabase.from('pipeline_candidates').select('stage, pipeline_id');
+
+    if (pipelineId) {
+      query = query.eq('pipeline_id', pipelineId);
+    } else {
+      const { data: activePipelines } = await supabase
+        .from('pipelines')
+        .select('id')
+        .eq('status', 'active');
+      const ids = (activePipelines || []).map((p) => p.id);
+      if (ids.length === 0) return [];
+      query = query.in('pipeline_id', ids);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const { data: pipelines } = await supabase.from('pipelines').select('id, stages');
+    const stageNameMap = new Map<string, string>();
+    for (const p of pipelines || []) {
+      const stages = (p.stages as { id: string; name: string }[]) || [];
+      for (const s of stages) {
+        if (s?.id && s?.name) stageNameMap.set(s.id, s.name);
+      }
+    }
+
+    const grouped = new Map<string, number>();
+    for (const row of data || []) {
+      const stageId = row.stage || '';
+      const stageName = stageNameMap.get(stageId) || stageId || 'Unknown';
+      grouped.set(stageName, (grouped.get(stageName) || 0) + 1);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([stage, count]) => ({ stage, count }))
+      .sort((a, b) => b.count - a.count);
+  },
 };

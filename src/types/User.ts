@@ -8,6 +8,8 @@ export interface User {
   updatedAt: Date;
 }
 
+export type UserRole = 'admin' | 'recruiter';
+
 export interface Profile {
   id: string;
   userId: string;
@@ -18,6 +20,7 @@ export interface Profile {
   company?: string;
   linkedinUrl?: string;
   avatarUrl?: string;
+  role?: UserRole;
   createdAt: Date;
   updatedAt: Date;
 }

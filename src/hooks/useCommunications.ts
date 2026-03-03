@@ -26,6 +26,7 @@ export const useCreateCommunication = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['communications', variables.candidateId] });
       queryClient.invalidateQueries({ queryKey: ['activity', variables.candidateId] });
+      queryClient.invalidateQueries({ queryKey: ['myActivity'] });
       toast.success('Communication logged');
     },
     onError: (error: Error) => {

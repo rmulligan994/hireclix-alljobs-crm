@@ -46,6 +46,13 @@ export const useActivePipelineCount = () => {
   });
 };
 
+export const useCandidatesByStage = (pipelineId?: string) => {
+  return useQuery({
+    queryKey: ['pipelines', 'candidatesByStage', pipelineId ?? 'all'],
+    queryFn: () => pipelineService.getCandidatesByStage(pipelineId),
+  });
+};
+
 export const useCreatePipeline = () => {
   const queryClient = useQueryClient();
 
@@ -132,6 +139,7 @@ export const useAddCandidatesToPipeline = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pipelines'] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['myActivity'] });
       toast.success(`${variables.candidateIds.length} candidate${variables.candidateIds.length !== 1 ? 's' : ''} added to pipeline`);
     },
     onError: (error: Error) => {
@@ -149,6 +157,7 @@ export const useAddCandidateToPipeline = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pipelines', variables.pipelineId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['myActivity'] });
       toast.success('Candidate added to pipeline');
     },
     onError: (error: Error) => {
@@ -182,6 +191,7 @@ export const useUpdateCandidateStage = () => {
       pipelineService.updateCandidateStage(pipelineId, candidateId, stage),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pipelines', variables.pipelineId] });
+      queryClient.invalidateQueries({ queryKey: ['myActivity'] });
       toast.success('Stage updated');
     },
     onError: (error: Error) => {
