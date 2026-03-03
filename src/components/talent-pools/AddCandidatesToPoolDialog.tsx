@@ -233,8 +233,8 @@ export const AddCandidatesToPoolDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="bg-card border-border max-w-2xl max-h-[600px] flex flex-col overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="bg-card border-border max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-6 gap-4">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <UserPlus className="w-5 h-5 text-sky-blue" />
             Add Candidates to {poolName}
@@ -244,7 +244,9 @@ export const AddCandidatesToPoolDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 mb-4">
+        {/* Scrollable body - scrolls when selection bar appears */}
+        <div className="min-h-0 flex-1 overflow-y-auto flex flex-col gap-4">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -280,7 +282,7 @@ export const AddCandidatesToPoolDialog = ({
         />
 
         {selectedCandidates.length > 0 && (
-          <div className="flex items-center gap-2 mb-3 p-2 bg-sky-blue/10 rounded-lg">
+          <div className="flex items-center gap-2 mb-3 p-2 bg-sky-blue/10 rounded-lg shrink-0">
             <span className="text-sm text-foreground">
               {selectedCandidates.length} candidate{selectedCandidates.length !== 1 ? 's' : ''} selected
             </span>
@@ -297,7 +299,7 @@ export const AddCandidatesToPoolDialog = ({
 
         {/* Select all header */}
         {!isLoading && filteredCandidates.length > 0 && (
-          <div className="flex items-center gap-2 py-2 border-b border-border mb-2">
+          <div className="flex items-center gap-2 py-2 border-b border-border mb-2 shrink-0">
             <Checkbox
               id="select-all-pool"
               checked={
@@ -319,7 +321,7 @@ export const AddCandidatesToPoolDialog = ({
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-hidden shrink-0" style={{ maxHeight: '320px' }}>
+        <div className="h-[280px] overflow-hidden shrink-0">
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map(i => (
@@ -389,8 +391,9 @@ export const AddCandidatesToPoolDialog = ({
             />
           )}
         </div>
+        </div>
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="mt-4 shrink-0">
           <Button variant="outline" onClick={handleClose} className="border-border">
             Cancel
           </Button>

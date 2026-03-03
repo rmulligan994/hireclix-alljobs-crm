@@ -104,8 +104,8 @@ export function AddCandidatesToPipelineDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="bg-card border-border max-w-2xl max-h-[600px] flex flex-col overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="bg-card border-border max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-6 gap-4">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-sky-blue" />
             Add Candidates to Pipeline
@@ -115,8 +115,10 @@ export function AddCandidatesToPipelineDialog({
           </p>
         </DialogHeader>
 
+        {/* Scrollable body - scrolls when selection bar appears */}
+        <div className="min-h-0 flex-1 overflow-y-auto flex flex-col gap-4">
         {/* Search */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder='Search... Use "phrases", AND, OR, NOT, (grouping)'
@@ -128,6 +130,7 @@ export function AddCandidatesToPipelineDialog({
 
         {/* Selection count */}
         {selectedIds.length > 0 && (
+          <div className="shrink-0">
           <div className="flex items-center justify-between p-2 bg-sky-blue/10 border border-sky-blue/30 rounded-lg">
             <span className="text-sm text-foreground">
               {selectedIds.length} candidate{selectedIds.length !== 1 ? 's' : ''} selected
@@ -141,11 +144,12 @@ export function AddCandidatesToPipelineDialog({
               Clear
             </Button>
           </div>
+          </div>
         )}
 
         {/* Select all header */}
         {!isLoading && filteredCandidates.length > 0 && (
-          <div className="flex items-center gap-2 py-2 border-b border-border">
+          <div className="flex items-center gap-2 py-2 border-b border-border shrink-0">
             <Checkbox
               id="select-all-pipeline"
               checked={
@@ -166,8 +170,8 @@ export function AddCandidatesToPipelineDialog({
           </div>
         )}
 
-        {/* Candidates List */}
-        <div className="min-h-0 flex-1 overflow-hidden shrink-0" style={{ maxHeight: '320px' }}>
+        {/* Candidates List - fixed height ensures footer stays visible */}
+        <div className="h-[280px] overflow-hidden shrink-0">
           {isLoading ? (
             <div className="space-y-2 pr-2">
               {[1, 2, 3].map(i => (
@@ -185,7 +189,7 @@ export function AddCandidatesToPipelineDialog({
           ) : (
             <Virtuoso
               data={filteredCandidates}
-              className="pr-2 overflow-y-scroll"
+              className="pr-2 overflow-y-auto"
               itemContent={(index, candidate) => (
                 <div className="pb-2">
                   <div
@@ -243,9 +247,10 @@ export function AddCandidatesToPipelineDialog({
             />
           )}
         </div>
+        </div>
 
-        {/* Actions */}
-        <div className="flex gap-3 pt-4 border-t border-border">
+        {/* Actions - shrink-0 keeps footer visible */}
+        <div className="flex gap-3 pt-4 border-t border-border shrink-0">
           <Button
             variant="outline"
             onClick={handleClose}
