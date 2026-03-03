@@ -29,6 +29,7 @@ import {
   GitBranch, GitMerge, Loader2 
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   CandidateSearchBar,
   AdvancedSearchPanel,
@@ -375,16 +376,6 @@ const TalentPool = () => {
   const { data: dbCandidates, isLoading } = useCandidatesWithEnrichment();
   const { data: stats } = useCandidateStats();
 
-  // Measure time from debounce firing to results rendered (no "Searching..." for client-side filter - keeps results visible while typing)
-  const searchStartRef = useRef<number | null>(null);
-  const [lastRenderMs, setLastRenderMs] = useState<number | null>(null);
-  const prevDebouncedRef = useRef(debouncedSearchQuery);
-  useEffect(() => {
-    if (debouncedSearchQuery !== prevDebouncedRef.current) {
-      prevDebouncedRef.current = debouncedSearchQuery;
-      searchStartRef.current = performance.now();
-    }
-  }, [debouncedSearchQuery]);
 
   // Pre-compute search string once when dbCandidates loads (avoids rebuilding per keystroke)
   const candidatesWithSearchStr = useMemo((): FilterableCandidate[] => {
@@ -450,13 +441,6 @@ const TalentPool = () => {
     setCandidateList(filteredCandidates.map(c => c.id));
   }, [filteredCandidates, setCandidateList]);
 
-  // Capture render time when filtered results update
-  useEffect(() => {
-    if (searchStartRef.current != null) {
-      setLastRenderMs(Math.round(performance.now() - searchStartRef.current));
-      searchStartRef.current = null;
-    }
-  }, [filteredCandidates]);
 
 
   // Debounce suggestions to avoid blocking main thread on every keystroke
@@ -550,10 +534,11 @@ const TalentPool = () => {
   const availableSkills = useMemo(() => filterOptions.skills.map((s) => s.value), [filterOptions.skills]);
 
   const totalCandidates = dbCandidates?.length || 0;
+  const totalInPipelines = (dbCandidates || []).filter(c => (c.pipelineAssociations?.length ?? 0) > 0).length;
   const snapshotMetrics = [
     { label: 'Total Candidates', value: stats?.total || totalCandidates, icon: Users },
     { label: 'New This Week', value: stats?.newThisWeek || 0, icon: CalendarPlus },
-    { label: 'In Active Pipelines', value: filteredCandidates.filter(c => c.pipelineAssociations.length > 0).length, icon: GitBranch },
+    { label: 'In Active Pipelines', value: totalInPipelines, icon: GitBranch },
   ];
 
   const getStageColor = (stage: string) => getStageColorClass(stage);
@@ -682,24 +667,42 @@ const TalentPool = () => {
 
           {/* Snapshot Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {snapshotMetrics.map((metric) => {
-              const Icon = metric.icon;
-              return (
-                <Card key={metric.label} className="bg-card border-border">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-lg bg-sky-blue/10">
-                        <Icon className="w-5 h-5 text-sky-blue" />
+            {isLoading ? (
+              <>
+                {[1, 2, 3].map((i) => (
+                  <Card key={i} className="bg-card border-border">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-4">
+                        <Skeleton className="h-12 w-12 rounded-lg" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-8 w-16" />
+                          <Skeleton className="h-4 w-24" />
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-3xl font-bold text-foreground">{metric.value.toLocaleString()}</p>
-                        <p className="text-sm text-muted-foreground">{metric.label}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </>
+            ) : (
+              snapshotMetrics.map((metric) => {
+                const Icon = metric.icon;
+                return (
+                  <Card key={metric.label} className="bg-card border-border">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-lg bg-sky-blue/10">
+                          <Icon className="w-5 h-5 text-sky-blue" />
+                        </div>
+                        <div>
+                          <p className="text-3xl font-bold text-foreground">{metric.value.toLocaleString()}</p>
+                          <p className="text-sm text-muted-foreground">{metric.label}</p>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
           </div>
 
           {/* Search and Filter Bar */}
@@ -764,7 +767,7 @@ const TalentPool = () => {
             />
           </div>
 
-          {/* Results count + render time (testing) */}
+          {/* Results count + in-pipelines for current search */}
           {!isLoading && (
             <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
               <span>
@@ -772,12 +775,10 @@ const TalentPool = () => {
                   ? `Showing ${filteredCandidates.length.toLocaleString()} of ${totalCandidates.toLocaleString()} candidates`
                   : `${filteredCandidates.length.toLocaleString()} candidates`}
               </span>
-              {lastRenderMs != null && (
-                <>
-                  <span className="text-border">•</span>
-                  <span>Rendered in {lastRenderMs}ms</span>
-                </>
-              )}
+              <span className="text-border">•</span>
+              <span>
+                {filteredCandidates.filter(c => c.pipelineAssociations.length > 0).length.toLocaleString()} in active pipelines
+              </span>
             </div>
           )}
 
@@ -840,9 +841,9 @@ const TalentPool = () => {
           {/* Candidates Table */}
           <div className="bg-card rounded-lg border border-border overflow-hidden">
             {isLoading ? (
-              <div className="flex items-center justify-center min-h-[320px] py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-sky-blue" />
-                <span className="ml-2 text-muted-foreground">Searching...</span>
+              <div className="flex flex-col items-center justify-center min-h-[320px] py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-sky-blue mb-4" />
+                <span className="text-muted-foreground">Loading candidates...</span>
               </div>
             ) : filteredCandidates.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[320px] py-12">

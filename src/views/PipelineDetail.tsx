@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
@@ -47,13 +47,20 @@ import {
   TrendingUp,
   BarChart3,
   GitBranch,
+  Search,
+  Loader2,
 } from 'lucide-react';
-import { usePipelineWithCandidates, usePipelines, useAddCandidateToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
+import { usePipelineWithCandidates, usePipelines, useAddCandidateToPipeline, useAddCandidatesToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
 import { useCandidates } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
+import { useDebounce } from '@/hooks/useDebounce';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
+import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
+import { Input } from '@/components/ui/input';
 import { useCreateNote } from '@/hooks/useCommunications';
 import type { Pipeline, PipelineStage } from '@/types/Pipeline';
+
+const CARD_LIMIT_PER_STAGE = 25;
 
 interface CandidateInStage {
   id: string;
@@ -63,6 +70,19 @@ interface CandidateInStage {
   company: string;
   stageId: string;
   movedAt: string;
+}
+
+function toSearchable(c: CandidateInStage, full?: { firstName?: string; lastName?: string; email?: string; phone?: string; company?: string; title?: string; location?: string; tags?: string[] }): SearchableCandidate {
+  return {
+    firstName: full?.firstName ?? c.name.split(' ')[0] ?? '',
+    lastName: full?.lastName ?? c.name.split(' ').slice(1).join(' ') ?? '',
+    email: full?.email ?? '',
+    phone: full?.phone ?? '',
+    company: full?.company ?? c.company ?? '',
+    title: full?.title ?? c.title ?? '',
+    location: full?.location ?? '',
+    skills: full?.tags ?? [],
+  };
 }
 
 const PipelineDetail = ({ id }: { id: string }) => {
@@ -78,35 +98,64 @@ const PipelineDetail = ({ id }: { id: string }) => {
   const [draggingCandidate, setDraggingCandidate] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteCandidate, setNoteCandidate] = useState<{ id: string; name: string } | null>(null);
-  const [candidatesInStages, setCandidatesInStages] = useState<CandidateInStage[]>([]);
   const [moveToPipelineOpen, setMoveToPipelineOpen] = useState(false);
   const [pendingNotFitMove, setPendingNotFitMove] = useState<{ candidateIds: string[]; targetStageId: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
 
-  const { data: pipeline, isLoading } = usePipelineWithCandidates(id || '');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  const { data: pipeline, isLoading: pipelineLoading } = usePipelineWithCandidates(id || '');
   const { data: allPipelines = [] } = usePipelines('active');
-  const { data: allCandidates } = useCandidates();
+  const { data: allCandidates, isLoading: candidatesLoading } = useCandidates();
+
+  // Show loading until BOTH pipeline and candidates are loaded. Prevents "0 candidates" flash.
+  const isLoading =
+    pipelineLoading ||
+    candidatesLoading ||
+    !pipeline ||
+    allCandidates === undefined;
   const addCandidateToPipeline = useAddCandidateToPipeline();
+  const addCandidatesToPipeline = useAddCandidatesToPipeline();
   const removeCandidateFromPipeline = useRemoveCandidateFromPipeline();
   const updateCandidateStage = useUpdateCandidateStage();
 
-  // Build candidates with full info when pipeline and candidates are loaded
-  useEffect(() => {
-    if (pipeline?.candidates && allCandidates) {
-      const candidatesWithInfo = pipeline.candidates.map(pc => {
-        const candidate = allCandidates.find(c => c.id === pc.candidateId);
-        return {
-          id: pc.candidateId,
-          candidateId: pc.candidateId,
-          name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
-          title: candidate?.title || '',
-          company: candidate?.company || '',
-          stageId: pc.stage,
-          movedAt: pc.addedAt.toISOString().split('T')[0],
-        };
-      });
-      setCandidatesInStages(candidatesWithInfo);
-    }
-  }, [pipeline, allCandidates]);
+  // Build candidates with full info (derived synchronously - no flash of empty state)
+  const candidatesInStages = useMemo((): CandidateInStage[] => {
+    if (!pipeline?.candidates || !allCandidates) return [];
+    return pipeline.candidates.map(pc => {
+      const candidate = allCandidates.find(c => c.id === pc.candidateId);
+      return {
+        id: pc.candidateId,
+        candidateId: pc.candidateId,
+        name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
+        title: candidate?.title || '',
+        company: candidate?.company || '',
+        stageId: pc.stage,
+        movedAt: pc.addedAt.toISOString().split('T')[0],
+      };
+    });
+  }, [pipeline?.candidates, allCandidates]);
+
+  // Filter by search (full boolean syntax)
+  const filteredCandidatesInStages = useMemo(() => {
+    if (!debouncedSearchQuery.trim()) return candidatesInStages;
+    const matcher = parseBooleanSearch(debouncedSearchQuery.trim());
+    if (!matcher) return candidatesInStages;
+    return candidatesInStages.filter(c => {
+      const full = allCandidates?.find(ac => ac.id === c.candidateId);
+      return matcher(toSearchable(c, full));
+    });
+  }, [candidatesInStages, debouncedSearchQuery, allCandidates]);
+
+  const toggleStageExpanded = (stageId: string) => {
+    setExpandedStages(prev => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
+  };
 
   if (isLoading) {
     return (
@@ -115,6 +164,11 @@ const PipelineDetail = ({ id }: { id: string }) => {
         <div className="flex-1 flex flex-col min-w-0">
           <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
           <main className="flex-1 p-6">
+            <div className="mb-6 flex flex-col items-center justify-center">
+              <Loader2 className="w-10 h-10 animate-spin text-sky-blue mb-4" />
+              <p className="text-lg font-medium text-foreground mb-1">Hold tight, we're loading your pipeline</p>
+              <p className="text-sm text-muted-foreground">Fetching candidates and stages...</p>
+            </div>
             <div className="mb-4">
               <Skeleton className="h-8 w-64 mb-2" />
               <Skeleton className="h-4 w-32" />
@@ -147,10 +201,10 @@ const PipelineDetail = ({ id }: { id: string }) => {
   const stages = [...(pipeline.stages || [])].sort((a, b) => a.order - b.order);
 
   const getCandidatesInStage = (stageId: string) => {
-    return candidatesInStages.filter(c => c.stageId === stageId);
+    return filteredCandidatesInStages.filter(c => c.stageId === stageId);
   };
 
-  const totalCandidates = candidatesInStages.length;
+  const totalCandidates = filteredCandidatesInStages.length;
   const successStages = stages.filter(s => {
     const name = s.name?.toLowerCase() || '';
     return name.includes('submitted') && !name.includes('not a fit');
@@ -209,12 +263,6 @@ const PipelineDetail = ({ id }: { id: string }) => {
           stage: targetStageId,
         });
       }
-      setCandidatesInStages(prev => prev.map(c => {
-        if (candidateIds.includes(c.id)) {
-          return { ...c, stageId: targetStageId, movedAt: new Date().toISOString().split('T')[0] };
-        }
-        return c;
-      }));
       if (candidateIds.length > 1) {
         toast({ title: 'Candidates moved', description: `Moved ${candidateIds.length} candidates to stage` });
       }
@@ -286,7 +334,6 @@ const PipelineDetail = ({ id }: { id: string }) => {
           stage: targetStageId,
         });
       }
-      setCandidatesInStages(prev => prev.filter(c => !pendingNotFitMove.candidateIds.includes(c.id)));
       setSelectedCandidates(prev => prev.filter(id => !pendingNotFitMove.candidateIds.includes(id)));
       toast({
         title: 'Candidates moved',
@@ -305,7 +352,6 @@ const PipelineDetail = ({ id }: { id: string }) => {
         pipelineId: id || '',
         candidateId,
       });
-      setCandidatesInStages(prev => prev.filter(c => c.id !== candidateId));
     } catch {
       toast({ title: 'Failed to remove candidate', variant: 'destructive' });
     }
@@ -315,33 +361,23 @@ const PipelineDetail = ({ id }: { id: string }) => {
     const firstStageId = stages[0]?.id;
     if (!firstStageId || !allCandidates) return;
 
-    try {
-      for (const candidateId of candidateIds) {
-        await addCandidateToPipeline.mutateAsync({
-          pipelineId: id || '',
-          candidateId,
-          stage: firstStageId,
-        });
-      }
-      
-      // Update local state with full candidate info
-      const candidatesToAdd: CandidateInStage[] = candidateIds.map(candidateId => {
-        const candidate = allCandidates.find(c => c.id === candidateId);
-        return {
-          id: candidateId,
-          candidateId,
-          name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
-          title: candidate?.title || '',
-          company: candidate?.company || '',
-          stageId: firstStageId,
-          movedAt: new Date().toISOString().split('T')[0],
-        };
-      });
-      setCandidatesInStages(prev => [...prev, ...candidatesToAdd]);
-      
+    // De-duplicate: skip candidates already in the pipeline (handles race conditions)
+    const existingIds = new Set(candidatesInStages.map(c => c.candidateId));
+    const toAdd = candidateIds.filter(cid => !existingIds.has(cid));
+
+    if (toAdd.length === 0) {
       toast({
-        title: 'Candidates added',
-        description: `Added ${candidateIds.length} candidate${candidateIds.length !== 1 ? 's' : ''} to ${pipeline?.name}`,
+        title: 'No new candidates to add',
+        description: 'All selected candidates are already in this pipeline.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      await addCandidatesToPipeline.mutateAsync({
+        pipelineId: id || '',
+        candidateIds: toAdd,
       });
     } catch {
       toast({ title: 'Failed to add candidates', variant: 'destructive' });
@@ -436,6 +472,18 @@ const PipelineDetail = ({ id }: { id: string }) => {
                 <p className="text-sm text-muted-foreground">
                   {totalCandidates} candidates • {stages.length} stages
                 </p>
+              </div>
+              <div className="w-64">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search candidates..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 h-9 border-border bg-card"
+                    title="Supports AND, OR, NOT and quoted phrases"
+                  />
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button 
@@ -588,7 +636,13 @@ const PipelineDetail = ({ id }: { id: string }) => {
                     {/* Candidates */}
                     {!isCollapsed && (
                       <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                        {stageCandidates.map((candidate) => (
+                        {(() => {
+                          const isExpanded = expandedStages.has(stage.id);
+                          const visible = isExpanded ? stageCandidates : stageCandidates.slice(0, CARD_LIMIT_PER_STAGE);
+                          const hiddenCount = stageCandidates.length - visible.length;
+                          return (
+                            <>
+                              {visible.map((candidate) => (
                           <Card
                             key={candidate.id}
                             draggable
@@ -653,6 +707,29 @@ const PipelineDetail = ({ id }: { id: string }) => {
                             </CardContent>
                           </Card>
                         ))}
+                        {hiddenCount > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-muted-foreground hover:text-foreground text-xs"
+                            onClick={() => toggleStageExpanded(stage.id)}
+                          >
+                            Show {hiddenCount} more
+                          </Button>
+                        )}
+                        {isExpanded && stageCandidates.length > CARD_LIMIT_PER_STAGE && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-muted-foreground hover:text-foreground text-xs"
+                            onClick={() => toggleStageExpanded(stage.id)}
+                          >
+                            Show less
+                          </Button>
+                        )}
+                            </>
+                          );
+                        })()}
                         {stageCandidates.length === 0 && (
                           <div className="flex flex-col items-center justify-center py-8 text-center">
                             <Users className="w-8 h-8 text-muted-foreground mb-2" />
