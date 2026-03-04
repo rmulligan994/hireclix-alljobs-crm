@@ -88,6 +88,7 @@ const sourceOptions = [
   'Referral',
   'Job Board',
   'Company Website',
+  'Career Site Form',
   'Recruiting Event',
   'Cold Outreach',
   'Other',

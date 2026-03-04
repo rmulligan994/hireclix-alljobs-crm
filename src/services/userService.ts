@@ -8,6 +8,25 @@ import type { User, Profile, AuthUser, SignUpData, SignInData } from '@/types/Us
  * This is the ONLY place where auth calls should exist.
  */
 
+function getEmailRedirectUrl(): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) return appUrl.replace(/\/$/, "") + "/";
+  if (typeof window !== "undefined") {
+    let base = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || "";
+    // Fallback: derive base path from current URL (e.g. /crm/auth -> /crm)
+    // Webflow Cloud sets BASE_URL at build time but it may not be in NEXT_PUBLIC_*, so client gets root
+    if (!base && window.location.pathname) {
+      const segments = window.location.pathname.split("/").filter(Boolean);
+      if (segments.length > 0 && segments[0] !== "auth") {
+        base = "/" + segments[0];
+      }
+    }
+    const path = base ? (base.startsWith("/") ? base : `/${base}`) : "";
+    return `${window.location.origin}${path}/`;
+  }
+  return "/";
+}
+
 const mapRowToProfile = (row: any): Profile => ({
   id: row.id,
   userId: row.user_id,
@@ -28,8 +47,8 @@ export const userService = {
    * Sign up a new user
    */
   signUp: async (data: SignUpData): Promise<AuthUser> => {
-    const redirectUrl = `${window.location.origin}/`;
-    
+    const redirectUrl = getEmailRedirectUrl();
+
     const { data: authData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
@@ -177,11 +196,25 @@ export const userService = {
   },
 
   /**
+   * Resend signup confirmation email
+   */
+  resendConfirmationEmail: async (email: string): Promise<void> => {
+    const redirectUrl = getEmailRedirectUrl();
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: redirectUrl },
+    });
+    if (error) throw error;
+  },
+
+  /**
    * Reset password
    */
   resetPassword: async (email: string): Promise<void> => {
+    const base = getEmailRedirectUrl().replace(/\/$/, "");
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${base}/reset-password`,
     });
     if (error) throw error;
   },

@@ -6,6 +6,7 @@ import { CandidateListProvider } from "@/contexts/CandidateListContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { AuthErrorHandler } from "@/components/auth/AuthErrorHandler";
 
 const queryClient = new QueryClient();
 
@@ -15,6 +16,7 @@ export function AppContent({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <CandidateListProvider>
           <TooltipProvider>
+            <AuthErrorHandler />
             {children}
             <Toaster />
             <Sonner />
