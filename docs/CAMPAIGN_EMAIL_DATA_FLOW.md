@@ -13,8 +13,8 @@ This document describes how campaign emails flow through the system, what data i
 **scheduled_emails** — Queue of emails to send. One row per (campaign, recipient, step). Rows have `scheduled_at` (when to send) and `status` (pending/sent/failed/cancelled). Unique on (campaign_id, campaign_recipient_id, campaign_email_id).
 
 **Cron** — Runs **hourly** (at minute 0). Calls `process-scheduled-emails` edge function, which:
-1. Fetches pending rows where `scheduled_at <= now` (limit 100 per run)
-2. For each, invokes `send-campaign-email` with `scheduledEmailId`
+1. Fetches pending `scheduled_emails` where `scheduled_at <= now` (limit 100 per run); for each, invokes `send-campaign-email` with `scheduledEmailId`
+2. Finds active campaigns with `campaign_recipients` status `pending` (step 1 not yet sent); for each, invokes `send-campaign-email` with `campaignId` to send step 1
 3. `processScheduledEmail` sends via Mailgun, updates status to sent/failed, then calls `insertNextDripStep` for multi-step campaigns
 
 **Backend flow (schedule for later)**:

@@ -33,19 +33,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!dueEmails || dueEmails.length === 0) {
-      return new Response(
-        JSON.stringify({ processed: 0, message: "No due emails to process" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const edgeUrl = `${supabaseUrl}/functions/v1/send-campaign-email`;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || supabaseKey;
     let processed = 0;
     const errors: string[] = [];
 
-    for (const row of dueEmails) {
+    // 1. Process due scheduled_emails (step 2+ of drip sequences)
+    for (const row of dueEmails || []) {
       try {
         const res = await fetch(edgeUrl, {
           method: "POST",
@@ -68,10 +62,45 @@ Deno.serve(async (req) => {
       await new Promise((r) => setTimeout(r, 300)); // Rate limit between calls
     }
 
+    // 2. Process active campaigns with pending recipients (step 1 not yet sent — e.g. launch failed or recipients added later)
+    const { data: pendingRecipients } = await supabase
+      .from("campaign_recipients")
+      .select("campaign_id")
+      .eq("status", "pending");
+
+    const campaignIdsWithPending = [...new Set((pendingRecipients || []).map((r: { campaign_id: string }) => r.campaign_id))];
+    const activeCampaigns = campaignIdsWithPending.length > 0
+      ? (await supabase.from("campaigns").select("id").eq("status", "active").in("id", campaignIdsWithPending)).data ?? []
+      : [];
+
+    for (const campaign of activeCampaigns) {
+      try {
+        const res = await fetch(edgeUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ campaignId: campaign.id }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.sent > 0) {
+          processed += data.sent;
+        } else if (!res.ok) {
+          errors.push(`campaign ${campaign.id}: ${data.error || res.statusText}`);
+        }
+      } catch (err) {
+        errors.push(`campaign ${campaign.id}: ${(err as Error).message}`);
+      }
+      await new Promise((r) => setTimeout(r, 300)); // Rate limit between calls
+    }
+
     return new Response(
       JSON.stringify({
         processed,
-        total: dueEmails.length,
+        scheduledEmails: dueEmails?.length ?? 0,
+        pendingCampaigns: activeCampaigns?.length ?? 0,
         errors: errors.length ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

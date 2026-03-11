@@ -63,6 +63,19 @@ async function processScheduledEmail(supabase: any, scheduledEmailId: string, co
     );
   }
 
+  // Skip if campaign is paused (drip sends stop until resumed)
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("status")
+    .eq("id", scheduled.campaign_id)
+    .single();
+  if (campaign?.status === "paused") {
+    return new Response(
+      JSON.stringify({ success: true, skipped: "campaign_paused" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   // Skip if recipient has unsubscribed or bounced since scheduling
   const { data: recipient } = await supabase
     .from("campaign_recipients")
@@ -145,6 +158,8 @@ async function processCampaignSend(
     );
   }
 
+  // When rescheduling, include "scheduled" recipients (they were already queued for a previous schedule)
+  const recipientStatuses = scheduledAt ? ["pending", "scheduled"] : ["pending"];
   let recipientsQuery = supabase
     .from("campaign_recipients")
     .select(`
@@ -165,7 +180,7 @@ async function processCampaignSend(
       )
     `)
     .eq("campaign_id", campaignId)
-    .in("status", ["pending"]);
+    .in("status", recipientStatuses);
 
   if (recipientId) recipientsQuery = recipientsQuery.eq("id", recipientId);
 

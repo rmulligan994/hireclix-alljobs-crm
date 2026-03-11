@@ -506,6 +506,14 @@ export const campaignService = {
   },
 
   async cancelCampaignSchedule(campaignId: string): Promise<void> {
+    // Cancel all pending scheduled_emails so cron does not send them
+    const { error: cancelError } = await supabase
+      .from('scheduled_emails')
+      .update({ status: 'cancelled' })
+      .eq('campaign_id', campaignId)
+      .eq('status', 'pending');
+    if (cancelError) throw cancelError;
+
     const { error } = await supabase
       .from('campaigns')
       .update({ status: 'draft', scheduled_at: null })
