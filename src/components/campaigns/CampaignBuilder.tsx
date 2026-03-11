@@ -39,9 +39,10 @@ interface CampaignBuilderProps {
   onOpenChange: (open: boolean) => void;
   editingCampaign?: Campaign | null;
   initialTemplate?: EmailTemplate | null;
+  isLoadingCampaign?: boolean;
 }
 
-export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTemplate }: CampaignBuilderProps) => {
+export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTemplate, isLoadingCampaign }: CampaignBuilderProps) => {
   const [currentStep, setCurrentStep] = useState<'details' | 'template' | 'editor' | 'sequence' | 'audience' | 'review'>('details');
   const [campaignName, setCampaignName] = useState('');
   const [campaignType, setCampaignType] = useState('');
@@ -55,12 +56,13 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   // Initialize from editing campaign
   useEffect(() => {
     if (editingCampaign) {
-      setCampaignName(editingCampaign.name);
-      setCampaignType(editingCampaign.type);
-      setCampaignGoal(editingCampaign.goal || '');
+      setCampaignName(editingCampaign.name ?? '');
+      setCampaignType(editingCampaign.type ?? '');
+      setCampaignGoal(editingCampaign.goal ?? '');
       setCampaignId(editingCampaign.id);
       setSelectedFolderId(editingCampaign.folder_id ?? null);
       setSelectedJobId(editingCampaign.job_id ?? null);
+      setCurrentStep('details');
       if (editingCampaign.audience_filter) {
         const filter = editingCampaign.audience_filter as AudienceFilter;
         setAudienceFilter(filter);
@@ -69,8 +71,57 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         setSelectedTags(filter.tags || []);
         setSelectedLeadStatus(filter.leadStatus || []);
       }
+      // Build sequence metadata from campaign for display
+      const rec = editingCampaign.schedule_recurrence;
+      if (rec || editingCampaign.scheduled_at) {
+        const firstDate = editingCampaign.scheduled_at
+          ? new Date(editingCampaign.scheduled_at).toISOString().slice(0, 10)
+          : undefined;
+        const scheduleTime = rec?.time ?? '09:00';
+        setSequenceMetadata({
+          sendImmediately: !editingCampaign.scheduled_at,
+          scheduleRecurrence: rec ?? null,
+          firstSendDate: firstDate,
+          scheduleTime,
+        });
+      } else {
+        setSequenceMetadata(null);
+      }
     }
   }, [editingCampaign]);
+
+  // Load campaign emails when editing (template, sequence content)
+  useEffect(() => {
+    if (!editingCampaign?.id) return;
+    let cancelled = false;
+    campaignService.getEmails(editingCampaign.id).then((emails) => {
+      if (cancelled) return;
+      if (emails.length > 0) {
+        const steps = emails.map((e) => ({
+          id: e.id,
+          step_order: e.step_order,
+          delay_days: e.delay_days,
+          delay_hours: e.delay_hours,
+          subject: e.subject,
+          bee_json: e.bee_json,
+          html_content: e.html_content,
+        }));
+        setEmailSteps(steps);
+        const first = emails[0];
+        if (first?.bee_json && typeof first.bee_json === 'object' && !Array.isArray(first.bee_json)) {
+          setTemplateBeeJson(first.bee_json as Record<string, unknown>);
+        } else {
+          setTemplateBeeJson(null);
+        }
+        setTemplateHtml(first?.html_content ?? null);
+      } else {
+        setEmailSteps([]);
+        setTemplateBeeJson(null);
+        setTemplateHtml(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [editingCampaign?.id]);
 
   // When opening with initialTemplate (from Template Library), go straight to editor
   useEffect(() => {
@@ -622,6 +673,12 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto mt-6">
+          {isLoadingCampaign ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+          <>
           {currentStep === 'details' && (
             <div className="space-y-6">
               <div className="space-y-2">
@@ -746,6 +803,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               templateBeeJson={templateBeeJson}
               templateHtml={templateHtml}
               campaignJobId={selectedJobId}
+              initialSteps={emailSteps.length > 0 ? emailSteps : undefined}
             />
           )}
 
@@ -1092,6 +1150,8 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                 </CardContent>
               </Card>
             </div>
+          )}
+          </>
           )}
         </div>
       </DialogContent>

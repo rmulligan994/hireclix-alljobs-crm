@@ -31,6 +31,8 @@ interface SequenceBuilderProps {
   templateHtml?: string | null;
   onContinue?: (steps: Partial<CampaignEmail>[], opts?: { firstSendDate?: string; metadata?: SequenceMetadata }) => void;
   campaignJobId?: string | null;
+  /** When editing, pre-populate steps from campaign_emails */
+  initialSteps?: Partial<CampaignEmail>[];
 }
 
 interface EmailStep {
@@ -54,7 +56,7 @@ const SCHEDULE_DESCRIPTIONS: Record<ScheduleType, string> = {
   specific_dates: 'Pick an exact date for each email.',
 };
 
-export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onContinue, campaignJobId }: SequenceBuilderProps) => {
+export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onContinue, campaignJobId, initialSteps }: SequenceBuilderProps) => {
   const [sendImmediately, setSendImmediately] = useState(true);
   const [scheduledFirstDate, setScheduledFirstDate] = useState<Date | undefined>();
   const [scheduledFirstTime, setScheduledFirstTime] = useState('09:00');
@@ -86,14 +88,44 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
 
   const [editingStep, setEditingStep] = useState<string | null>(null);
 
-  // Update first step when template changes
+  // Hydrate from initialSteps when editing
   useEffect(() => {
-    if (templateBeeJson || templateHtml) {
+    if (initialSteps && initialSteps.length > 0) {
+      const hydrated: EmailStep[] = initialSteps.map((e, idx) => {
+        const delayDays = e.delay_days ?? 0;
+        const delayHours = e.delay_hours ?? 0;
+        let delay = delayDays || delayHours;
+        let delayUnit: 'hours' | 'days' | 'weeks' = 'days';
+        if (delayHours > 0 && delayDays === 0) {
+          delayUnit = 'hours';
+        } else if (delayDays >= 7) {
+          delay = Math.floor(delayDays / 7);
+          delayUnit = 'weeks';
+        }
+        return {
+          id: (e as { id?: string }).id ?? `step-${idx + 1}`,
+          order: e.step_order ?? idx + 1,
+          delay,
+          delayUnit,
+          subject: e.subject ?? 'Untitled',
+          beeJson: (e.bee_json && typeof e.bee_json === 'object' && !Array.isArray(e.bee_json)) ? e.bee_json as Record<string, unknown> : null,
+          htmlContent: e.html_content ?? null,
+          expanded: idx === 0,
+          scheduledDate: undefined,
+        };
+      });
+      setSteps(hydrated);
+    }
+  }, [initialSteps]);
+
+  // Update first step when template changes (only if no initialSteps)
+  useEffect(() => {
+    if ((templateBeeJson || templateHtml) && (!initialSteps || initialSteps.length === 0)) {
       setSteps(prev => prev.map((step, idx) =>
         idx === 0 ? { ...step, beeJson: templateBeeJson || step.beeJson, htmlContent: templateHtml || step.htmlContent } : step
       ));
     }
-  }, [templateBeeJson, templateHtml]);
+  }, [templateBeeJson, templateHtml, initialSteps]);
 
   // When switching to daily/weekly/monthly: single email only (same template repeated at schedule)
   useEffect(() => {

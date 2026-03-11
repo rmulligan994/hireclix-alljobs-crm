@@ -58,7 +58,7 @@ const Campaigns = () => {
   const [addRecipientsCampaignId, setAddRecipientsCampaignId] = useState<string | null>(null);
   const [duplicatingCampaignId, setDuplicatingCampaignId] = useState<string | null>(null);
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
-  const { data: campaignForView } = useCampaign(viewCampaignId || '');
+  const { data: campaignForView, isLoading: loadingCampaignForView } = useCampaign(viewCampaignId || '');
 
   const { data: myCampaigns, isLoading: loadingMy, refetch: refetchMy } = useMyCampaigns();
   const { data: orgCampaigns, isLoading: loadingOrg, refetch: refetchOrg } = useOrgCampaigns();
@@ -720,6 +720,7 @@ const Campaigns = () => {
         onOpenChange={handleCloseBuilder}
         editingCampaign={editingCampaign || (viewCampaignId && campaignForView ? campaignForView : null)}
         initialTemplate={selectedTemplateForCampaign}
+        isLoadingCampaign={!!viewCampaignId && loadingCampaignForView}
       />
 
       <Dialog open={showTemplateLibrary} onOpenChange={setShowTemplateLibrary}>
