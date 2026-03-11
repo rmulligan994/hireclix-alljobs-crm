@@ -4,6 +4,32 @@
 
 This document describes how campaign emails flow through the system, what data is saved where, and current gaps.
 
+**See also:** [CAMPAIGN_SCHEDULING_AUDIT.md](./CAMPAIGN_SCHEDULING_AUDIT.md) for a complete scheduling system audit.
+
+---
+
+## 0. Scheduled Emails & Cron
+
+**scheduled_emails** — Queue of emails to send. One row per (campaign, recipient, step). Rows have `scheduled_at` (when to send) and `status` (pending/sent/failed/cancelled). Unique on (campaign_id, campaign_recipient_id, campaign_email_id).
+
+**Cron** — Runs **hourly** (at minute 0). Calls `process-scheduled-emails` edge function, which:
+1. Fetches pending rows where `scheduled_at <= now` (limit 100 per run)
+2. For each, invokes `send-campaign-email` with `scheduledEmailId`
+3. `processScheduledEmail` sends via Mailgun, updates status to sent/failed, then calls `insertNextDripStep` for multi-step campaigns
+
+**Backend flow (schedule for later)**:
+1. User clicks "Schedule Campaign" → CampaignBuilder invokes `send-campaign-email` with `{ campaignId, scheduledAt }`
+2. `processCampaignSend` inserts one `scheduled_emails` row per recipient (step 1) with `scheduled_at`
+3. Updates `campaign_recipients` to `status: 'scheduled'`, `campaigns` to `status: 'scheduled'`
+4. Cron picks up due rows; `processScheduledEmail` sends each, then `insertNextDripStep` queues step 2 (respects `schedule_recurrence.endOnDate`)
+
+**Backend flow (launch now)**:
+1. User clicks "Launch" → invokes `send-campaign-email` with `{ campaignId }` (no scheduledAt)
+2. `processCampaignSend` immediately sends step 1 to each recipient, calls `insertNextDripStep` for each
+3. Step 2+ are queued in `scheduled_emails`. For daily/weekly/monthly, `scheduled_at` aligns to recurrence (e.g. next Wednesday 9am). For custom, uses `delay_days`/`delay_hours`.
+
+**Upcoming Sends** — Shows pending rows with `scheduled_at >= startOfToday`, plus fallback for campaigns with `status='scheduled'` and future `scheduled_at` (in case edge function insert failed). See `campaignService.getScheduledEmails()`.
+
 ---
 
 ## 1. Campaign Send Flow
@@ -18,9 +44,9 @@ User clicks "Launch" → send-campaign-email invoked → Mailgun API → Emails 
 ### Filtering for Sending
 
 **Current behavior** (`send-campaign-email/index.ts`):
-- Fetches recipients with `status = 'pending'` only
+- Fetches recipients with `status = 'pending'` only (immediate send)
 - Skips candidates with no email address
-- **Does NOT filter**: unsubscribed users, bounced addresses, complained users
+- **Unsubscribed/Bounced/Complained**: Before sending, checks `campaign_recipients.status`; if unsubscribed, bounced, or complained, marks scheduled_email as cancelled and skips. `sendOneEmail` also checks and returns error.
 
 **Recipient selection** happens at campaign creation/scheduling:
 - `CampaignBuilder` uses `audience_filter` (talent pools, pipelines, tags, locations, sources)
@@ -95,8 +121,7 @@ If the function was previously deployed with JWT enabled, the config may not app
 | Communications logged for sends | Insert to `communications` on send | ✅ |
 | Opened/clicked tracked | Webhook updates `opened_at`, `clicked_at` | ✅ (when webhook works) |
 | Campaign stats reflect opens | `useCampaignStats` counts status in (opened, clicked, responded) | ✅ |
-| Unsubscribed filtered from sends | Not implemented | ❌ Gap |
-| Bounced filtered from sends | Not implemented | ❌ Gap |
+| Unsubscribed/bounced/complained filtered | `processScheduledEmail` + `sendOneEmail` check status | ✅ |
 
 ---
 
@@ -105,8 +130,8 @@ If the function was previously deployed with JWT enabled, the config may not app
 ### High Priority
 
 1. **Webhook 401** — Deploy `mailgun-webhook` with `--no-verify-jwt` so Mailgun can reach it.
-2. **Unsubscribe filtering** — Before sending, exclude `campaign_recipients` where `status = 'unsubscribed'`. Requires `unsubscribed_at` on candidates or filtering by status.
-3. **Bounce filtering** — Exclude `status = 'bounced'` when selecting recipients.
+2. **Unsubscribe filtering** — ✅ Implemented. `processScheduledEmail` and `sendOneEmail` check recipient status; unsubscribed are skipped/cancelled.
+3. **Bounce filtering** — ✅ Implemented. processScheduledEmail and sendOneEmail skip bounced/complained.
 
 ### Medium Priority
 

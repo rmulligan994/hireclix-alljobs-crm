@@ -7,15 +7,22 @@ import { AICopilot } from '@/components/dashboard/AICopilot';
 import { CampaignBuilder } from '@/components/campaigns/CampaignBuilder';
 import { TemplateLibrary } from '@/components/campaigns/TemplateLibrary';
 import { CampaignScheduledQueue } from '@/components/campaigns/CampaignScheduledQueue';
+import { CampaignSearchBar } from '@/components/campaigns/CampaignSearchBar';
+import { CampaignFolderSidebar } from '@/components/campaigns/CampaignFolderSidebar';
+import { UpcomingSendsTab } from '@/components/campaigns/UpcomingSendsTab';
+import { AddRecipientsModal } from '@/components/campaigns/AddRecipientsModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
-import { useCampaigns, useUpdateCampaign, useDeleteCampaign } from '@/hooks/useCampaigns';
+import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil, ChevronDown, ChevronUp, Copy, UserPlus, Archive, ArchiveRestore, MoreVertical, Folder, FolderOpen } from 'lucide-react';
+import { useMyCampaigns, useOrgCampaigns, useArchivedCampaigns, useCampaign, useUpdateCampaign, useDeleteCampaign, useDuplicateCampaign } from '@/hooks/useCampaigns';
+import { useCampaignFolders } from '@/hooks/useCampaignFolders';
 import { useAllCampaignsStats } from '@/hooks/useCampaignStats';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -23,29 +30,90 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Campaign } from '@/types/Campaign';
 import type { EmailTemplate } from '@/services/emailTemplateService';
 
+const CAMPAIGN_TYPES = ['nurture', 'event', 'job_alert', 'reengagement', 'newsletter'] as const;
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'name-az', label: 'Name A–Z' },
+  { value: 'name-za', label: 'Name Z–A' },
+  { value: 'open-rate', label: 'Open rate' },
+  { value: 'click-rate', label: 'Click rate' },
+] as const;
+
 const Campaigns = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [scopeTab, setScopeTab] = useState<'my' | 'org' | 'upcoming' | 'archived'>('my');
   const [activeTab, setActiveTab] = useState('all');
   const [sendingCampaignId, setSendingCampaignId] = useState<string | null>(null);
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [expandedQueueCampaignId, setExpandedQueueCampaignId] = useState<string | null>(null);
   const [selectedTemplateForCampaign, setSelectedTemplateForCampaign] = useState<EmailTemplate | null | undefined>(undefined);
-  
-  const { data: campaigns, isLoading, refetch } = useCampaigns();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<string>('newest');
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [addRecipientsCampaignId, setAddRecipientsCampaignId] = useState<string | null>(null);
+  const [duplicatingCampaignId, setDuplicatingCampaignId] = useState<string | null>(null);
+  const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
+  const { data: campaignForView } = useCampaign(viewCampaignId || '');
+
+  const { data: myCampaigns, isLoading: loadingMy, refetch: refetchMy } = useMyCampaigns();
+  const { data: orgCampaigns, isLoading: loadingOrg, refetch: refetchOrg } = useOrgCampaigns();
+  const { data: archivedCampaigns, isLoading: loadingArchived, refetch: refetchArchived } = useArchivedCampaigns();
+
+  const campaigns = scopeTab === 'my' ? myCampaigns : scopeTab === 'org' ? orgCampaigns : scopeTab === 'archived' ? archivedCampaigns : [];
+  const isLoading = scopeTab === 'my' ? loadingMy : scopeTab === 'org' ? loadingOrg : scopeTab === 'archived' ? loadingArchived : false;
+  const refetch = () => { refetchMy(); refetchOrg(); refetchArchived(); };
+
   const updateCampaign = useUpdateCampaign();
   const deleteCampaign = useDeleteCampaign();
+  const duplicateCampaign = useDuplicateCampaign();
+  const { data: folders } = useCampaignFolders();
   const { toast } = useToast();
+
+  const handleMoveToFolder = async (campaignId: string, folderId: string | null) => {
+    try {
+      await updateCampaign.mutateAsync({ id: campaignId, input: { folder_id: folderId } });
+      toast({ title: folderId ? 'Moved to folder' : 'Removed from folder' });
+      refetch();
+    } catch {
+      toast({ title: 'Failed to move', variant: 'destructive' });
+    }
+  };
 
   const campaignIds = useMemo(() => campaigns?.map(c => c.id) || [], [campaigns]);
   const { statsMap } = useAllCampaignsStats(campaignIds);
 
-  const filteredCampaigns = campaigns?.filter(campaign => {
-    if (activeTab === 'all') return true;
-    return campaign.status === activeTab;
+  let filteredCampaigns = campaigns?.filter(campaign => {
+    if (activeTab !== 'all' && campaign.status !== activeTab) return false;
+    if (typeFilter !== 'all' && campaign.type !== typeFilter) return false;
+    if (selectedFolderId === 'uncategorized' && campaign.folder_id) return false;
+    if (selectedFolderId && selectedFolderId !== 'uncategorized' && campaign.folder_id !== selectedFolderId) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matches = (campaign.name?.toLowerCase().includes(q)) ||
+        (campaign.type?.toLowerCase().includes(q)) ||
+        (campaign.goal?.toLowerCase().includes(q));
+      if (!matches) return false;
+    }
+    return true;
   }) || [];
+
+  const sortedCampaigns = useMemo(() => {
+    const arr = [...filteredCampaigns];
+    switch (sortBy) {
+      case 'newest': return arr.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      case 'oldest': return arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      case 'name-az': return arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      case 'name-za': return arr.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+      case 'open-rate': return arr.sort((a, b) => (statsMap[b.id]?.openRate ?? 0) - (statsMap[a.id]?.openRate ?? 0));
+      case 'click-rate': return arr.sort((a, b) => (statsMap[b.id]?.clickRate ?? 0) - (statsMap[a.id]?.clickRate ?? 0));
+      default: return arr;
+    }
+  }, [filteredCampaigns, sortBy, statsMap]);
 
   // Calculate aggregate stats
   const totalRecipients = Object.values(statsMap).reduce((sum, s) => sum + s.recipients, 0);
@@ -54,8 +122,10 @@ const Campaigns = () => {
   const overallOpenRate = totalRecipients > 0 ? Math.round((totalOpened / totalRecipients) * 100) : 0;
   const overallClickRate = totalRecipients > 0 ? Math.round((totalClicked / totalRecipients) * 100) : 0;
 
+  const displayCampaigns = scopeTab === 'upcoming' ? [] : sortedCampaigns;
   const stats = {
     active: campaigns?.filter(c => c.status === 'active').length || 0,
+    total: campaigns?.length || 0,
     totalRecipients,
     openRate: overallOpenRate,
     clickRate: overallClickRate,
@@ -80,24 +150,13 @@ const Campaigns = () => {
   };
 
   const handleLaunchCampaign = async (id: string) => {
-    console.log('[Campaign Launch] Starting launch for campaign:', id);
     setSendingCampaignId(id);
-    
     toast({ title: 'Sending emails...', description: 'Please wait while we send your campaign.' });
-    
     try {
-      console.log('[Campaign Launch] Invoking send-campaign-email edge function...');
       const { data, error } = await supabase.functions.invoke('send-campaign-email', {
         body: { campaignId: id }
       });
-
-      console.log('[Campaign Launch] Edge function response:', { data, error });
-
-      if (error) {
-        console.error('[Campaign Launch] Edge function error:', error);
-        throw error;
-      }
-
+      if (error) throw error;
       if (data?.sent === 0 && data?.message === 'No pending recipients') {
         toast({ 
           title: 'No pending recipients', 
@@ -110,10 +169,8 @@ const Campaigns = () => {
           description: `Sent ${data?.sent || 0} of ${data?.total || 0} emails successfully.${data?.errors?.length ? ` ${data.errors.length} failed.` : ''}`
         });
       }
-      
       refetch();
     } catch (err: any) {
-      console.error('[Campaign Launch] Error:', err);
       toast({ 
         title: 'Failed to launch campaign', 
         description: err.message || 'Unknown error occurred',
@@ -141,6 +198,7 @@ const Campaigns = () => {
   const handleCloseBuilder = () => {
     setShowCampaignBuilder(false);
     setEditingCampaign(null);
+    setViewCampaignId(null);
     setSelectedTemplateForCampaign(undefined);
   };
 
@@ -148,6 +206,41 @@ const Campaigns = () => {
     setSelectedTemplateForCampaign(template);
     setShowTemplateLibrary(false);
     setShowCampaignBuilder(true);
+  };
+
+  const handleDuplicateCampaign = async (campaign: Campaign) => {
+    try {
+      const newCampaign = await duplicateCampaign.mutateAsync({
+        campaignId: campaign.id,
+        newName: `${campaign.name} (Copy)`,
+      });
+      setDuplicatingCampaignId(null);
+      toast({ title: 'Campaign duplicated', description: 'Add audience and launch.' });
+      setEditingCampaign(newCampaign);
+      setShowCampaignBuilder(true);
+    } catch {
+      toast({ title: 'Failed to duplicate', variant: 'destructive' });
+    }
+  };
+
+  const handleArchiveCampaign = async (id: string) => {
+    try {
+      await updateCampaign.mutateAsync({ id, input: { archived_at: new Date().toISOString() } });
+      toast({ title: 'Campaign archived' });
+      refetch();
+    } catch {
+      toast({ title: 'Failed to archive', variant: 'destructive' });
+    }
+  };
+
+  const handleUnarchiveCampaign = async (id: string) => {
+    try {
+      await updateCampaign.mutateAsync({ id, input: { archived_at: null } });
+      toast({ title: 'Campaign restored' });
+      refetch();
+    } catch {
+      toast({ title: 'Failed to restore', variant: 'destructive' });
+    }
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -225,7 +318,7 @@ const Campaigns = () => {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-bold text-foreground">{campaigns?.length || 0}</div>
+                    <div className="text-2xl font-bold text-foreground">{stats.total}</div>
                     <div className="text-sm text-muted-foreground">Total Campaigns</div>
                   </div>
                   <Users className="w-8 h-8 text-sky-blue" />
@@ -256,18 +349,76 @@ const Campaigns = () => {
             </Card>
           </div>
 
-          {/* Campaigns List */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="bg-muted">
-              <TabsTrigger value="all">All Campaigns</TabsTrigger>
-              <TabsTrigger value="active">Active</TabsTrigger>
-              <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-              <TabsTrigger value="paused">Paused</TabsTrigger>
-              <TabsTrigger value="draft">Drafts</TabsTrigger>
-              <TabsTrigger value="completed">Completed</TabsTrigger>
+          {/* Primary scope tabs */}
+          <Tabs value={scopeTab} onValueChange={(v) => setScopeTab(v as typeof scopeTab)} className="w-full">
+            <TabsList className="bg-muted mb-4">
+              <TabsTrigger value="my">My Campaigns</TabsTrigger>
+              <TabsTrigger value="org">Organization</TabsTrigger>
+              <TabsTrigger value="upcoming">Upcoming Sends</TabsTrigger>
+              <TabsTrigger value="archived">Archived</TabsTrigger>
             </TabsList>
-            
-            <TabsContent value={activeTab} className="mt-6 space-y-4">
+
+            {scopeTab === 'upcoming' ? (
+              <div className="mt-6">
+                <UpcomingSendsTab onViewCampaign={(id) => { setViewCampaignId(id); setShowCampaignBuilder(true); }} />
+              </div>
+            ) : (
+              <>
+                {/* Search, filters, sort - only for campaign lists */}
+                <div className="flex flex-wrap items-center gap-4 mb-4">
+                  <div className="w-64">
+                    <CampaignSearchBar value={searchQuery} onChange={setSearchQuery} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Type:</span>
+                    <Select value={typeFilter} onValueChange={setTypeFilter}>
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All types</SelectItem>
+                        {CAMPAIGN_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Sort:</span>
+                    <Select value={sortBy} onValueChange={setSortBy}>
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SORT_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex gap-6">
+                  {(scopeTab === 'my' || scopeTab === 'org') && (
+                    <CampaignFolderSidebar
+                      selectedFolderId={selectedFolderId}
+                      onSelectFolder={setSelectedFolderId}
+                      isMyCampaigns={scopeTab === 'my'}
+                      campaigns={campaigns}
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <Tabs value={activeTab} onValueChange={setActiveTab}>
+                      <TabsList className="bg-muted mb-4">
+                        <TabsTrigger value="all">All</TabsTrigger>
+                        <TabsTrigger value="active">Active</TabsTrigger>
+                        <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+                        <TabsTrigger value="paused">Paused</TabsTrigger>
+                        <TabsTrigger value="draft">Drafts</TabsTrigger>
+                        <TabsTrigger value="completed">Completed</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value={activeTab} className="mt-0 space-y-4">
               {isLoading ? (
                 <>
                   {[1, 2, 3].map((i) => (
@@ -282,7 +433,7 @@ const Campaigns = () => {
                     </Card>
                   ))}
                 </>
-              ) : filteredCampaigns.length === 0 ? (
+              ) : displayCampaigns.length === 0 ? (
                 <Card>
                   <CardContent className="py-12 text-center">
                     <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
@@ -295,7 +446,7 @@ const Campaigns = () => {
                   </CardContent>
                 </Card>
               ) : (
-                filteredCampaigns.map((campaign) => (
+                displayCampaigns.map((campaign) => (
                   <Card key={campaign.id} className="hover:border-sky-blue/50 transition-colors">
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -391,6 +542,82 @@ const Campaigns = () => {
                             <Pencil className="w-4 h-4 mr-2" />
                             Edit
                           </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-card border-border">
+                              {['draft', 'paused', 'completed'].includes(campaign.status) && (
+                                <DropdownMenuItem
+                                  onClick={() => handleDuplicateCampaign(campaign)}
+                                  disabled={duplicatingCampaignId === campaign.id}
+                                  className="cursor-pointer"
+                                >
+                                {duplicatingCampaignId === campaign.id ? (
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Copy className="w-4 h-4 mr-2" />
+                                )}
+                                Duplicate
+                              </DropdownMenuItem>
+                              )}
+                              {(campaign.status === 'active' || campaign.status === 'scheduled') && (
+                                <DropdownMenuItem
+                                  onClick={() => setAddRecipientsCampaignId(campaign.id)}
+                                  className="cursor-pointer"
+                                >
+                                  <UserPlus className="w-4 h-4 mr-2" />
+                                  Add recipients
+                                </DropdownMenuItem>
+                              )}
+                              {scopeTab === 'my' && (
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger className="cursor-pointer">
+                                    <Folder className="w-4 h-4 mr-2" />
+                                    Move to folder
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem
+                                      onClick={() => handleMoveToFolder(campaign.id, null)}
+                                      className="cursor-pointer"
+                                    >
+                                      No folder
+                                    </DropdownMenuItem>
+                                    {folders?.map((f) => (
+                                      <DropdownMenuItem
+                                        key={f.id}
+                                        onClick={() => handleMoveToFolder(campaign.id, f.id)}
+                                        className="cursor-pointer"
+                                      >
+                                        <FolderOpen className="w-4 h-4 mr-2" />
+                                        {f.name}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                              )}
+                              <DropdownMenuSeparator />
+                              {scopeTab !== 'archived' ? (
+                                <DropdownMenuItem
+                                  onClick={() => handleArchiveCampaign(campaign.id)}
+                                  className="cursor-pointer"
+                                >
+                                  <Archive className="w-4 h-4 mr-2" />
+                                  Archive
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  onClick={() => handleUnarchiveCampaign(campaign.id)}
+                                  className="cursor-pointer"
+                                >
+                                  <ArchiveRestore className="w-4 h-4 mr-2" />
+                                  Restore
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           {(campaign.status === 'draft' || campaign.status === 'paused') && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -473,7 +700,12 @@ const Campaigns = () => {
                   </Card>
                 ))
               )}
-            </TabsContent>
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                </div>
+              </>
+            )}
           </Tabs>
         </main>
       </div>
@@ -486,7 +718,7 @@ const Campaigns = () => {
       <CampaignBuilder 
         open={showCampaignBuilder}
         onOpenChange={handleCloseBuilder}
-        editingCampaign={editingCampaign}
+        editingCampaign={editingCampaign || (viewCampaignId && campaignForView ? campaignForView : null)}
         initialTemplate={selectedTemplateForCampaign}
       />
 
@@ -499,6 +731,15 @@ const Campaigns = () => {
           <TemplateLibrary onSelectTemplate={handleTemplateLibrarySelect} />
         </DialogContent>
       </Dialog>
+
+      {addRecipientsCampaignId && (
+        <AddRecipientsModal
+          campaignId={addRecipientsCampaignId}
+          open={true}
+          onOpenChange={(open) => !open && setAddRecipientsCampaignId(null)}
+          onSuccess={refetch}
+        />
+      )}
     </div>
   );
 };

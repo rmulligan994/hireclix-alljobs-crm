@@ -1,3 +1,11 @@
+export interface ScheduleRecurrence {
+  type: 'daily' | 'weekly' | 'monthly' | 'custom' | 'specific_dates';
+  dayOfWeek?: number; // 0=Sun, 1=Mon, ...
+  dayOfMonth?: number; // 1-31
+  time?: string; // "09:00"
+  endOnDate?: string; // YYYY-MM-DD - automatic end date for daily/weekly/monthly
+}
+
 export interface Campaign {
   id: string;
   user_id: string;
@@ -7,9 +15,32 @@ export interface Campaign {
   goal?: string;
   audience_filter?: AudienceFilter;
   scheduled_at?: string;
+  schedule_recurrence?: ScheduleRecurrence | null;
   job_id?: string | null;
+  folder_id?: string | null;
+  is_organization_campaign?: boolean;
+  archived_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CampaignFolder {
+  id: string;
+  name: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface ScheduledEmail {
+  id: string;
+  campaign_id: string;
+  campaign_email_id: string;
+  campaign_recipient_id: string;
+  scheduled_at: string;
+  status: 'pending' | 'sent' | 'failed' | 'cancelled';
+  sent_at?: string | null;
+  error_message?: string | null;
+  created_at: string;
 }
 
 export interface CampaignEmail {
@@ -30,13 +61,15 @@ export interface CampaignRecipient {
   id: string;
   campaign_id: string;
   candidate_id: string;
-  status: 'pending' | 'sent' | 'opened' | 'clicked' | 'responded' | 'bounced' | 'complained' | 'unsubscribed' | 'failed' | 'rejected';
+  status: 'pending' | 'scheduled' | 'sent' | 'opened' | 'clicked' | 'responded' | 'bounced' | 'complained' | 'unsubscribed' | 'failed' | 'rejected';
   sent_at?: string;
   opened_at?: string;
   clicked_at?: string;
   responded_at?: string;
   created_at: string;
 }
+
+export type LeadStatus = "red" | "yellow" | "green";
 
 export interface AudienceFilter {
   talentPoolIds?: string[];
@@ -45,6 +78,7 @@ export interface AudienceFilter {
   tags?: string[];
   locations?: string[];
   sources?: string[];
+  leadStatus?: LeadStatus[];
 }
 
 export interface CreateCampaignInput {
@@ -53,7 +87,10 @@ export interface CreateCampaignInput {
   goal?: string;
   audience_filter?: AudienceFilter;
   scheduled_at?: string;
+  schedule_recurrence?: ScheduleRecurrence | null;
   job_id?: string | null;
+  folder_id?: string | null;
+  is_organization_campaign?: boolean;
 }
 
 export interface UpdateCampaignInput {
@@ -63,7 +100,11 @@ export interface UpdateCampaignInput {
   goal?: string;
   audience_filter?: AudienceFilter;
   scheduled_at?: string;
+  schedule_recurrence?: ScheduleRecurrence | null;
   job_id?: string | null;
+  folder_id?: string | null;
+  is_organization_campaign?: boolean;
+  archived_at?: string | null;
 }
 
 export interface CreateCampaignEmailInput {

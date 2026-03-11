@@ -33,6 +33,7 @@ export interface CandidateWithPipelines extends Candidate {
 export interface CandidateListEnriched extends Candidate {
   pipelineAssociations: { id: string; name: string; stage: string }[];
   lastContactAt: Date | null;
+  lastActivityAt: Date | null;
 }
 
 export interface CreateCandidateData {

@@ -10,6 +10,7 @@ export interface CampaignStats {
   clicked: number;
   responded: number;
   responseRate: number;
+  openRate: number;
   clickRate: number;
 }
 
@@ -23,6 +24,7 @@ export function useCampaignStats(campaignId: string) {
     clicked: 0,
     responded: 0,
     responseRate: 0,
+    openRate: 0,
     clickRate: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -46,9 +48,10 @@ export function useCampaignStats(campaignId: string) {
     const clicked = data.filter(r => r.status === 'clicked' || r.status === 'responded').length;
     const responded = data.filter(r => r.status === 'responded').length;
     const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
+    const openRate = recipients > 0 ? Math.round((opened / recipients) * 100) : 0;
     const clickRate = recipients > 0 ? Math.round((clicked / recipients) * 100) : 0;
 
-    setStats({ recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, clickRate });
+    setStats({ recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, openRate, clickRate });
     setIsLoading(false);
   };
 
@@ -112,9 +115,10 @@ export function useAllCampaignsStats(campaignIds: string[]) {
       const clicked = campaignData.filter(r => r.status === 'clicked' || r.status === 'responded').length;
       const responded = campaignData.filter(r => r.status === 'responded').length;
       const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
+      const openRate = recipients > 0 ? Math.round((opened / recipients) * 100) : 0;
       const clickRate = recipients > 0 ? Math.round((clicked / recipients) * 100) : 0;
 
-      newStatsMap[campaignId] = { recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, clickRate };
+      newStatsMap[campaignId] = { recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, openRate, clickRate };
     });
 
     setStatsMap(newStatsMap);

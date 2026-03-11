@@ -14,6 +14,7 @@ import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
 import { useDebounce } from '@/hooks/useDebounce';
+import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
 import { parseBooleanSearch } from '@/utils/booleanSearchParser';
 
 interface AddCandidatesToPipelineDialogProps {
@@ -207,9 +208,12 @@ export function AddCandidatesToPipelineDialog({
                       onClick={(e) => e.stopPropagation()}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground">
-                        {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground">
+                          {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
+                        </p>
+                        <LeadUsageIndicator lastActivityAt={candidate.lastActivityAt ?? null} />
+                      </div>
                       <div className="flex items-center gap-4 mt-1 flex-wrap">
                         {candidate.title && (
                           <span className="text-sm text-muted-foreground flex items-center gap-1">

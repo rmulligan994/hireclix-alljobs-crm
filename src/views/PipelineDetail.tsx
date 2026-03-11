@@ -51,13 +51,14 @@ import {
   Loader2,
 } from 'lucide-react';
 import { usePipelineWithCandidates, usePipelines, useAddCandidateToPipeline, useAddCandidatesToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
-import { useCandidates } from '@/hooks/useCandidates';
+import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/useDebounce';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
 import { Input } from '@/components/ui/input';
 import { useCreateNote } from '@/hooks/useCommunications';
+import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
 import type { Pipeline, PipelineStage } from '@/types/Pipeline';
 
 const CARD_LIMIT_PER_STAGE = 25;
@@ -70,6 +71,7 @@ interface CandidateInStage {
   company: string;
   stageId: string;
   movedAt: string;
+  lastActivityAt: Date | null;
 }
 
 function toSearchable(c: CandidateInStage, full?: { firstName?: string; lastName?: string; email?: string; phone?: string; company?: string; title?: string; location?: string; tags?: string[] }): SearchableCandidate {
@@ -107,7 +109,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
 
   const { data: pipeline, isLoading: pipelineLoading } = usePipelineWithCandidates(id || '');
   const { data: allPipelines = [] } = usePipelines('active');
-  const { data: allCandidates, isLoading: candidatesLoading } = useCandidates();
+  const { data: allCandidates, isLoading: candidatesLoading } = useCandidatesWithEnrichment();
 
   // Show loading until BOTH pipeline and candidates are loaded. Prevents "0 candidates" flash.
   const isLoading =
@@ -133,6 +135,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
         company: candidate?.company || '',
         stageId: pc.stage,
         movedAt: pc.addedAt.toISOString().split('T')[0],
+        lastActivityAt: candidate?.lastActivityAt ?? null,
       };
     });
   }, [pipeline?.candidates, allCandidates]);
@@ -661,8 +664,11 @@ const PipelineDetail = ({ id }: { id: string }) => {
                                   onClick={(e) => e.stopPropagation()}
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-medium text-foreground text-sm truncate">{candidate.name}</span>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="font-medium text-foreground text-sm truncate">{candidate.name}</span>
+                                      <LeadUsageIndicator lastActivityAt={candidate.lastActivityAt} className="shrink-0" />
+                                    </div>
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                                         <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">

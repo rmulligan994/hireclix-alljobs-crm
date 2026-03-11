@@ -7,6 +7,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { FindDuplicatesDialog } from '@/components/candidates/FindDuplicatesDialog';
+import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
 import { ImportCandidatesDialog } from '@/components/candidates/ImportCandidatesDialog';
 import { BulkAddToPipelineDialog } from '@/components/candidates/BulkAddToPipelineDialog';
 import { BulkAddToTalentPoolDialog } from '@/components/candidates/BulkAddToTalentPoolDialog';
@@ -133,6 +134,7 @@ interface FilterableCandidate {
   linkedinUrl: string;
   lastContact: string;
   lastContactAt: Date | null;
+  lastActivityAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   _searchStr: string;
@@ -411,6 +413,7 @@ const TalentPool = () => {
         linkedinUrl: c.linkedinUrl || '',
         lastContact: formatLastContact(c.lastContactAt),
         lastContactAt: c.lastContactAt,
+        lastActivityAt: c.lastActivityAt ?? null,
         createdAt: new Date(c.createdAt),
         updatedAt: new Date(c.updatedAt),
         _searchStr,
@@ -921,8 +924,11 @@ const TalentPool = () => {
                       </TableCell>
                       <TableCell className="font-medium border-b border-border">
                         <div>
-                          <div className="text-foreground hover:text-sky-blue transition-colors">
-                            {candidate.firstName} {candidate.lastName}
+                          <div className="flex items-center gap-2">
+                            <span className="text-foreground hover:text-sky-blue transition-colors">
+                              {candidate.firstName} {candidate.lastName}
+                            </span>
+                            <LeadUsageIndicator lastActivityAt={candidate.lastActivityAt} />
                           </div>
                           <div className="flex items-center text-xs text-muted-foreground mt-1">
                             <Mail className="w-3 h-3 mr-1" />

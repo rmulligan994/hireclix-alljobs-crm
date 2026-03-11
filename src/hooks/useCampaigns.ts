@@ -15,6 +15,45 @@ export const useCampaigns = () => {
   });
 };
 
+export const useMyCampaigns = () => {
+  return useQuery({
+    queryKey: ['campaigns', 'my'],
+    queryFn: () => campaignService.getMyCampaigns(),
+  });
+};
+
+export const useArchivedCampaigns = () => {
+  return useQuery({
+    queryKey: ['campaigns', 'archived'],
+    queryFn: () => campaignService.getArchivedCampaigns(),
+  });
+};
+
+export const useOrgCampaigns = () => {
+  return useQuery({
+    queryKey: ['campaigns', 'org'],
+    queryFn: () => campaignService.getOrgCampaigns(),
+  });
+};
+
+export const useScheduledEmails = () => {
+  return useQuery({
+    queryKey: ['scheduled-emails'],
+    queryFn: () => campaignService.getScheduledEmails(),
+  });
+};
+
+export const useDuplicateCampaign = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ campaignId, newName }: { campaignId: string; newName: string }) =>
+      campaignService.duplicate(campaignId, newName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+  });
+};
+
 export const useCampaign = (id: string) => {
   return useQuery({
     queryKey: ['campaigns', id],

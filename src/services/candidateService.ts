@@ -539,10 +539,12 @@ export const candidateService = {
         stage: p.stage,
       }));
       const lastContactAt = row.last_contact_at ? new Date(row.last_contact_at) : null;
+      const lastActivityAt = row.last_activity_at ? new Date(row.last_activity_at) : null;
       return {
         ...candidate,
         pipelineAssociations,
         lastContactAt,
+        lastActivityAt,
       };
     });
   },

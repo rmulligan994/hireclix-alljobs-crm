@@ -7,6 +7,12 @@ verify_jwt = false
 [functions.send-campaign-email]
 verify_jwt = false
 
+[functions.process-scheduled-emails]
+verify_jwt = false
+
+[functions.send-campaign-test-email]
+verify_jwt = false
+
 [functions.mailgun-webhook]
 verify_jwt = false
 

@@ -8,28 +8,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { SequenceBuilder } from './SequenceBuilder';
+import { SequenceBuilder, type SequenceMetadata } from './SequenceBuilder';
 import { TemplateLibrary } from './TemplateLibrary';
 import { BeefreeEmailEditor } from './BeefreeEmailEditor';
-import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Clock, Users, Loader2, Search, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Users, Loader2, Search, AlertTriangle, Mail, Folder } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
 import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients, useCreateCampaignEmail } from '@/hooks/useCampaigns';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
+import { useCampaignFolders } from '@/hooks/useCampaignFolders';
 import { useJobsForCampaign } from '@/hooks/useJobs';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
 import { useCurrentUserRole } from '@/hooks/useCurrentUserRole';
 import { isOverRecipientLimit, getRecipientLimitForRole } from '@/config/roleLimits';
 import { EmailTemplate } from '@/services/emailTemplateService';
-import { AudienceFilter, CampaignEmail, Campaign } from '@/types/Campaign';
+import { AudienceFilter, CampaignEmail, Campaign, LeadStatus } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { campaignService } from '@/services/campaignService';
 
 interface CampaignBuilderProps {
   open: boolean;
@@ -56,6 +59,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       setCampaignType(editingCampaign.type);
       setCampaignGoal(editingCampaign.goal || '');
       setCampaignId(editingCampaign.id);
+      setSelectedFolderId(editingCampaign.folder_id ?? null);
       setSelectedJobId(editingCampaign.job_id ?? null);
       if (editingCampaign.audience_filter) {
         const filter = editingCampaign.audience_filter as AudienceFilter;
@@ -63,6 +67,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         setSelectedTalentPools(filter.talentPoolIds || []);
         setSelectedPipelines(filter.pipelineIds || []);
         setSelectedTags(filter.tags || []);
+        setSelectedLeadStatus(filter.leadStatus || []);
       }
     }
   }, [editingCampaign]);
@@ -86,17 +91,24 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const [selectedTalentPools, setSelectedTalentPools] = useState<string[]>([]);
   const [selectedPipelines, setSelectedPipelines] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedLeadStatus, setSelectedLeadStatus] = useState<LeadStatus[]>([]);
   
-  // Schedule state
-  const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
-  const [scheduleTime, setScheduleTime] = useState('09:00');
-  const [isScheduled, setIsScheduled] = useState(false);
+  // Sequence metadata (from Sequence step - when to send, recurrence for display)
+  const [sequenceMetadata, setSequenceMetadata] = useState<SequenceMetadata | null>(null);
+
+  // Folder state (for organization)
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
   // Job state (for job_alert campaigns)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobSearch, setJobSearch] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
+  const [showValidationDialog, setShowValidationDialog] = useState(false);
+  const [validationData, setValidationData] = useState<{ valid: number; noEmail: number; unsubscribed: number } | null>(null);
+  const [pendingAction, setPendingAction] = useState<'launch' | 'schedule' | null>(null);
   
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { createTemplate, updateTemplate } = useEmailTemplates();
   const createCampaign = useCreateCampaign();
   const updateCampaign = useUpdateCampaign();
@@ -104,6 +116,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const createCampaignEmail = useCreateCampaignEmail();
   const { data: talentPools } = useTalentPools();
   const { data: pipelines } = usePipelines();
+  const { data: folders } = useCampaignFolders();
   const userRole = useCurrentUserRole();
   const { settings: orgSettings } = useOrganizationSettings();
   const { data: campaignJobs } = useJobsForCampaign(jobSearch);
@@ -131,8 +144,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       talentPoolIds: selectedTalentPools.length > 0 ? selectedTalentPools : undefined,
       pipelineIds: selectedPipelines.length > 0 ? selectedPipelines : undefined,
       tags: selectedTags.length > 0 ? selectedTags : undefined,
+      leadStatus: selectedLeadStatus.length > 0 ? selectedLeadStatus : undefined,
     });
-  }, [selectedTalentPools, selectedPipelines, selectedTags]);
+  }, [selectedTalentPools, selectedPipelines, selectedTags, selectedLeadStatus]);
 
   const handleTemplateSelect = (template: EmailTemplate | null) => {
     setSelectedTemplate(template);
@@ -173,9 +187,68 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setCurrentStep('template');
   };
 
-  const handleSequenceContinue = (steps: Partial<CampaignEmail>[]) => {
+  const handleSequenceContinue = (steps: Partial<CampaignEmail>[], opts?: { firstSendDate?: string; metadata?: SequenceMetadata }) => {
     setEmailSteps(steps);
+    setSequenceMetadata(opts?.metadata ?? null);
     setCurrentStep('audience');
+  };
+
+  const handleSendTest = async () => {
+    if (emailSteps.length === 0) {
+      toast({ title: 'Add at least one email to the sequence', variant: 'destructive' });
+      return;
+    }
+    setSendingTest(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        toast({ title: 'Could not get your email', variant: 'destructive' });
+        return;
+      }
+      let testCampaignId = campaignId;
+      if (!testCampaignId) {
+        const campaign = await createCampaign.mutateAsync({
+          name: campaignName || 'Test',
+          type: campaignType,
+          goal: campaignGoal,
+          audience_filter: audienceFilter,
+          job_id: campaignType === 'job_alert' ? selectedJobId : null,
+          folder_id: selectedFolderId,
+        });
+        setCampaignId(campaign.id);
+        testCampaignId = campaign.id;
+        if (emailSteps.length > 0) await saveCampaignEmails(campaign.id);
+      }
+      const { data, error } = await supabase.functions.invoke('send-campaign-test-email', {
+        body: { campaignId: testCampaignId, recipientEmail: user.email },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: 'Test email sent', description: `Check ${user.email}` });
+    } catch (err) {
+      toast({ title: 'Failed to send test', description: (err as Error)?.message, variant: 'destructive' });
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
+  const runWithValidation = (action: 'launch' | 'schedule') => {
+    if (!filteredCandidates || filteredCandidates.length === 0) {
+      if (action === 'launch') handleLaunchCampaign();
+      else handleScheduleCampaign();
+      return;
+    }
+    const candidateIds = filteredCandidates.map(c => c.id);
+    campaignService.getRecipientValidation(campaignId || '', candidateIds).then((v) => {
+      if (v.noEmail > 0 || v.unsubscribed > 0) {
+        setValidationData(v);
+        setPendingAction(action);
+        setShowValidationDialog(true);
+      } else {
+        if (action === 'launch') handleLaunchCampaign();
+        else handleScheduleCampaign();
+      }
+    });
   };
 
   const handleSaveAsDraft = async () => {
@@ -187,6 +260,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           goal: campaignGoal,
           audience_filter: audienceFilter,
           job_id: campaignType === 'job_alert' ? selectedJobId : null,
+          folder_id: selectedFolderId,
         });
         setCampaignId(campaign.id);
         
@@ -212,6 +286,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             status: 'draft',
             audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
+            folder_id: selectedFolderId,
           },
         });
       }
@@ -231,17 +306,19 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   };
 
   const handleScheduleCampaign = async () => {
-    if (!scheduleDate) {
+    const firstDate = sequenceMetadata?.firstSendDate;
+    const scheduleTime = sequenceMetadata?.scheduleTime ?? '09:00';
+    if (!firstDate) {
       toast({
         title: 'Schedule required',
-        description: 'Please select a date and time to schedule the campaign.',
+        description: 'Please set a scheduled date in the Sequence step.',
         variant: 'destructive',
       });
       return;
     }
 
     try {
-      const scheduledAt = new Date(scheduleDate);
+      const scheduledAt = new Date(firstDate);
       const [hours, minutes] = scheduleTime.split(':').map(Number);
       scheduledAt.setHours(hours, minutes);
       const scheduledAtIso = scheduledAt.toISOString();
@@ -255,7 +332,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           goal: campaignGoal,
           audience_filter: audienceFilter,
           scheduled_at: scheduledAtIso,
+          schedule_recurrence: sequenceMetadata?.scheduleRecurrence ?? null,
           job_id: campaignType === 'job_alert' ? selectedJobId : null,
+          folder_id: selectedFolderId,
         });
         setCampaignId(campaign.id);
         finalCampaignId = campaign.id;
@@ -282,7 +361,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           input: {
             status: 'scheduled',
             scheduled_at: scheduledAtIso,
+            schedule_recurrence: sequenceMetadata?.scheduleRecurrence ?? null,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
+            folder_id: selectedFolderId,
           },
         });
       }
@@ -297,6 +378,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       }
 
       const queued = data?.sent ?? 0;
+
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
+
       toast({
         title: 'Campaign scheduled',
         description: `${queued} emails queued for ${format(scheduledAt, 'PPP')} at ${scheduleTime}.`,
@@ -313,24 +398,29 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
   const handleLaunchCampaign = async () => {
     try {
+      let finalCampaignId = campaignId;
+
       if (!campaignId) {
         const campaign = await createCampaign.mutateAsync({
           name: campaignName,
           type: campaignType,
           goal: campaignGoal,
           audience_filter: audienceFilter,
+          schedule_recurrence: sequenceMetadata?.scheduleRecurrence ?? null,
           job_id: campaignType === 'job_alert' ? selectedJobId : null,
+          folder_id: selectedFolderId,
         });
         setCampaignId(campaign.id);
-        
+        finalCampaignId = campaign.id;
+
         // Save email steps
         if (emailSteps.length > 0) {
           await saveCampaignEmails(campaign.id);
         }
-        
+
         await updateCampaign.mutateAsync({
           id: campaign.id,
-          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null },
+          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null, folder_id: selectedFolderId },
         });
 
         if (filteredCandidates && filteredCandidates.length > 0) {
@@ -342,9 +432,20 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       } else {
         await updateCampaign.mutateAsync({
           id: campaignId,
-          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null },
+          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null, folder_id: selectedFolderId },
         });
       }
+
+      // Invoke edge function to send step 1 immediately and queue step 2+
+      const { data, error } = await supabase.functions.invoke('send-campaign-email', {
+        body: { campaignId: finalCampaignId },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
 
       toast({
         title: 'Campaign launched!',
@@ -354,7 +455,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     } catch (err) {
       toast({
         title: 'Launch failed',
-        description: 'Failed to launch campaign. Please try again.',
+        description: (err as Error)?.message || 'Failed to launch campaign. Please try again.',
         variant: 'destructive',
       });
     }
@@ -374,8 +475,8 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setSelectedTalentPools([]);
     setSelectedPipelines([]);
     setSelectedTags([]);
-    setScheduleDate(undefined);
-    setIsScheduled(false);
+    setSequenceMetadata(null);
+    setSelectedFolderId(null);
     setSelectedJobId(null);
     setJobSearch('');
     onOpenChange(false);
@@ -388,8 +489,14 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   };
 
   const togglePipeline = (pipelineId: string) => {
-    setSelectedPipelines(prev => 
+    setSelectedPipelines(prev =>
       prev.includes(pipelineId) ? prev.filter(id => id !== pipelineId) : [...prev, pipelineId]
+    );
+  };
+
+  const toggleLeadStatus = (status: LeadStatus) => {
+    setSelectedLeadStatus(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
     );
   };
 
@@ -433,10 +540,49 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  const steps = ['details', 'template', 'sequence', 'audience', 'review'];
-                  const currentIndex = steps.indexOf(currentStep);
-                  setCurrentStep(steps[currentIndex - 1] as typeof currentStep);
+                onClick={async () => {
+                  const stepOrder = ['details', 'template', 'sequence', 'audience', 'review'];
+                  const currentIndex = stepOrder.indexOf(currentStep);
+                  const prevStep = stepOrder[Math.max(0, currentIndex - 1)];
+                  setCurrentStep(prevStep as typeof currentStep);
+                  // Save progress when going back so user doesn't lose work
+                  try {
+                    if (!campaignId && campaignName && emailSteps.length > 0) {
+                      const campaign = await createCampaign.mutateAsync({
+                        name: campaignName,
+                        type: campaignType || 'email',
+                        goal: campaignGoal,
+                        audience_filter: audienceFilter,
+                        ...(sequenceMetadata?.scheduleRecurrence !== undefined && { schedule_recurrence: sequenceMetadata.scheduleRecurrence }),
+                        job_id: campaignType === 'job_alert' ? selectedJobId : null,
+                        folder_id: selectedFolderId,
+                      });
+                      setCampaignId(campaign.id);
+                      await saveCampaignEmails(campaign.id);
+                      if (filteredCandidates && filteredCandidates.length > 0) {
+                        await addRecipients.mutateAsync({
+                          campaignId: campaign.id,
+                          candidateIds: filteredCandidates.map(c => c.id),
+                        });
+                      }
+                      await updateCampaign.mutateAsync({ id: campaign.id, input: { status: 'draft' } });
+                    } else if (campaignId) {
+                      await updateCampaign.mutateAsync({
+                        id: campaignId,
+                        input: {
+                          name: campaignName,
+                          type: campaignType,
+                          goal: campaignGoal,
+                          audience_filter: audienceFilter,
+                          ...(sequenceMetadata?.scheduleRecurrence !== undefined && { schedule_recurrence: sequenceMetadata.scheduleRecurrence }),
+                          job_id: campaignType === 'job_alert' ? selectedJobId : null,
+                          folder_id: selectedFolderId,
+                        },
+                      });
+                    }
+                  } catch {
+                    // Don't block navigation; save is best-effort
+                  }
                 }}
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -445,17 +591,33 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             )}
           </div>
           
-          <div className="flex items-center space-x-2 mt-4">
-            {['Details', 'Template', 'Sequence', 'Audience', 'Review'].map((step, index) => (
-              <div key={step} className="flex items-center flex-1">
-                <div className={`h-2 flex-1 rounded ${
-                  ['details', 'template', 'sequence', 'audience', 'review'].indexOf(currentStep) >= index
-                    ? 'bg-sky-blue'
-                    : 'bg-muted'
-                }`} />
-                {index < 4 && <div className="w-2" />}
-              </div>
-            ))}
+          <div className="flex items-center gap-1 sm:gap-2 mt-4">
+            {(['details', 'template', 'sequence', 'audience', 'review'] as const).map((stepKey, index) => {
+              const labels = ['Details', 'Template', 'Sequence', 'Audience', 'Review'];
+              const isCurrent = currentStep === stepKey;
+              const isPast = ['details', 'template', 'sequence', 'audience', 'review'].indexOf(currentStep) > index;
+              const isClickable = !!editingCampaign;
+              return (
+                <button
+                  key={stepKey}
+                  type="button"
+                  onClick={() => isClickable && setCurrentStep(stepKey)}
+                  className={cn(
+                    'flex items-center gap-1.5 flex-1 min-w-0 py-2 px-2 rounded-md text-sm font-medium transition-colors',
+                    isCurrent && 'bg-sky-blue/20 text-sky-blue ring-1 ring-sky-blue/30',
+                    isPast && !isCurrent && 'bg-sky-blue/10 text-sky-blue',
+                    !isCurrent && !isPast && 'text-muted-foreground bg-muted/50',
+                    isClickable && 'hover:bg-muted cursor-pointer',
+                    !isClickable && 'cursor-default'
+                  )}
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-current/20 text-xs font-bold">
+                    {index + 1}
+                  </span>
+                  <span className="hidden sm:inline truncate">{labels[index]}</span>
+                </button>
+              );
+            })}
           </div>
         </DialogHeader>
 
@@ -496,6 +658,27 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                   value={campaignGoal}
                   onChange={(e) => setCampaignGoal(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Folder (optional)</Label>
+                <Select value={selectedFolderId ?? 'none'} onValueChange={(v) => setSelectedFolderId(v === 'none' ? null : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="No folder" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No folder</SelectItem>
+                    {folders?.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        <span className="flex items-center gap-2">
+                          <Folder className="w-4 h-4" />
+                          {f.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Organize campaigns into folders for easier finding.</p>
               </div>
 
               {campaignType === 'job_alert' && (
@@ -624,6 +807,52 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                     </ScrollArea>
                   </div>
 
+                  {/* Stoplight filter */}
+                  <div className="space-y-3">
+                    <Label>Filter by lead status</Label>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          id="lead-red"
+                          checked={selectedLeadStatus.includes("red")}
+                          onCheckedChange={() => toggleLeadStatus("red")}
+                          className="border-muted-foreground data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+                        />
+                        <span className="flex items-center gap-1.5 text-sm">
+                          <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
+                          Recently contacted (2 weeks)
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          id="lead-yellow"
+                          checked={selectedLeadStatus.includes("yellow")}
+                          onCheckedChange={() => toggleLeadStatus("yellow")}
+                          className="border-muted-foreground data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                        />
+                        <span className="flex items-center gap-1.5 text-sm">
+                          <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                          Contacted 2 weeks–2 months ago
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          id="lead-green"
+                          checked={selectedLeadStatus.includes("green")}
+                          onCheckedChange={() => toggleLeadStatus("green")}
+                          className="border-muted-foreground data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                        />
+                        <span className="flex items-center gap-1.5 text-sm">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                          No contact in 2+ months
+                        </span>
+                      </label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Leave all unchecked to include all leads. Select one or more to filter.
+                    </p>
+                  </div>
+
                   {/* Recipient Count */}
                   <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
                     <div className="flex items-center space-x-3">
@@ -632,7 +861,12 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                         <div className="font-semibold text-foreground">Estimated Recipients</div>
                         <div className="text-sm text-muted-foreground">
                           Based on current filters
-                          {userRole === 'recruiter' && (
+                          {(recipientCount ?? 0) === 0 && !isLoadingCandidates && (
+                            <span className="block mt-1 text-amber-600 dark:text-amber-500">
+                              Select at least one talent pool or pipeline to define your audience.
+                            </span>
+                          )}
+                          {userRole === 'recruiter' && (recipientCount ?? 0) > 0 && (
                             <span className="block mt-0.5 text-muted-foreground">
                               Recruiter limit: {getRecipientLimitForRole(userRole)?.toLocaleString()} recipients
                             </span>
@@ -668,8 +902,13 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                       <ScrollArea className="h-32 border rounded-md p-3">
                         <div className="space-y-1">
                           {filteredCandidates.slice(0, 10).map((candidate) => (
-                            <div key={candidate.id} className="text-sm">
-                              {candidate.first_name} {candidate.last_name} - {candidate.email}
+                            <div key={candidate.id} className="flex items-center gap-2 text-sm">
+                              <LeadUsageIndicator
+                                lastActivityAt={candidate.last_activity_at ? new Date(candidate.last_activity_at) : null}
+                              />
+                              <span>
+                                {candidate.first_name} {candidate.last_name} - {candidate.email}
+                              </span>
                             </div>
                           ))}
                           {filteredCandidates.length > 10 && (
@@ -715,6 +954,27 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                   <CardDescription>Review your campaign before launching</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Test email — prominent, before actions */}
+                  <div className="flex flex-col gap-3 p-4 rounded-lg border border-border bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">Preview before launching</div>
+                        <div className="text-sm text-muted-foreground">
+                          Send a test to yourself to see how your email looks.
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSendTest}
+                        disabled={sendingTest || emailSteps.length === 0}
+                      >
+                        {sendingTest ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
+                        {sendingTest ? 'Sending...' : 'Send test'}
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-sm text-muted-foreground">Campaign Name</div>
@@ -734,95 +994,101 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                     </div>
                   </div>
 
-                  {/* Schedule Option */}
-                  <div className="border-t pt-4 space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="schedule-campaign"
-                        checked={isScheduled}
-                        onCheckedChange={(checked) => setIsScheduled(checked === true)}
-                      />
-                      <label htmlFor="schedule-campaign" className="text-sm font-medium cursor-pointer">
-                        Schedule for later
-                      </label>
-                    </div>
-
-                    {isScheduled && (
-                      <div className="flex items-center space-x-4 pl-6">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("w-[200px] justify-start text-left font-normal", !scheduleDate && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {scheduleDate ? format(scheduleDate, 'PPP') : 'Pick a date'}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="single"
-                              selected={scheduleDate}
-                              onSelect={setScheduleDate}
-                              initialFocus
-                              disabled={(date) => date < new Date()}
-                            />
-                          </PopoverContent>
-                        </Popover>
-
-                        <div className="flex items-center space-x-2">
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                          <Input
-                            type="time"
-                            value={scheduleTime}
-                            onChange={(e) => setScheduleTime(e.target.value)}
-                            className="w-32"
-                          />
-                        </div>
-                      </div>
+                  {/* What happens next — reflects Sequence choices */}
+                  <div className="rounded-lg border border-border p-4 bg-muted/20">
+                    <div className="text-sm font-medium text-foreground mb-1">What happens next</div>
+                    {sequenceMetadata?.sendImmediately ? (
+                      <p className="text-sm text-muted-foreground">
+                        Emails will be sent immediately to your recipients when you launch.
+                      </p>
+                    ) : sequenceMetadata?.firstSendDate && sequenceMetadata?.scheduleTime ? (
+                      <p className="text-sm text-muted-foreground">
+                        Emails will be queued for {format(new Date(sequenceMetadata.firstSendDate), 'PPP')} at {sequenceMetadata.scheduleTime}. They will be sent on the next hourly run. View and manage in the <strong>Upcoming Sends</strong> tab.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Go back to the Sequence step to choose when the first email sends (immediately or scheduled).
+                      </p>
                     )}
                   </div>
 
                   <div className="flex space-x-3 mt-6">
-                    <Button 
-                      variant="outline" 
-                      className="flex-1"
-                      onClick={handleSaveAsDraft}
-                      disabled={createCampaign.isPending || updateCampaign.isPending}
-                    >
-                      {createCampaign.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4 mr-2" />
-                      )}
-                      Save as Draft
-                    </Button>
-                    
-                    {isScheduled ? (
                       <Button 
-                        className="flex-1 bg-gradient-primary hover:opacity-90"
-                        onClick={handleScheduleCampaign}
-                        disabled={createCampaign.isPending || updateCampaign.isPending || !scheduleDate}
-                      >
-                        {createCampaign.isPending ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <CalendarIcon className="w-4 h-4 mr-2" />
-                        )}
-                        Schedule Campaign
-                      </Button>
-                    ) : (
-                      <Button 
-                        className="flex-1 bg-gradient-primary hover:opacity-90"
-                        onClick={handleLaunchCampaign}
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={handleSaveAsDraft}
                         disabled={createCampaign.isPending || updateCampaign.isPending}
                       >
                         {createCampaign.isPending ? (
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         ) : (
-                          <Send className="w-4 h-4 mr-2" />
+                          <Save className="w-4 h-4 mr-2" />
                         )}
-                        Launch Campaign
+                        Save as Draft
                       </Button>
-                    )}
+                      
+                      {!sequenceMetadata?.sendImmediately ? (
+                        <Button 
+                          className="flex-1 bg-gradient-primary hover:opacity-90"
+                          onClick={() => runWithValidation('schedule')}
+                          disabled={createCampaign.isPending || updateCampaign.isPending || !sequenceMetadata?.firstSendDate}
+                        >
+                          {createCampaign.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <CalendarIcon className="w-4 h-4 mr-2" />
+                          )}
+                          Schedule Campaign
+                        </Button>
+                      ) : (
+                        <Button 
+                          className="flex-1 bg-gradient-primary hover:opacity-90"
+                          onClick={() => runWithValidation('launch')}
+                          disabled={createCampaign.isPending || updateCampaign.isPending}
+                        >
+                          {createCampaign.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4 mr-2" />
+                          )}
+                          Launch Campaign
+                        </Button>
+                      )}
                   </div>
+                  <AlertDialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Some recipients will be excluded</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {validationData && (
+                            <>
+                              <span className="font-medium text-foreground">{validationData.valid} recipients</span> will receive your email.
+                              {validationData.noEmail > 0 && (
+                                <span className="block mt-2">{validationData.noEmail} candidates have no email address and will be excluded.</span>
+                              )}
+                              {validationData.unsubscribed > 0 && (
+                                <span className="block mt-1">{validationData.unsubscribed} have unsubscribed and will be excluded.</span>
+                              )}
+                              <span className="block mt-2">Continue with the remaining recipients?</span>
+                            </>
+                          )}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            if (pendingAction === 'launch') handleLaunchCampaign();
+                            else if (pendingAction === 'schedule') handleScheduleCampaign();
+                            setShowValidationDialog(false);
+                            setPendingAction(null);
+                          }}
+                        >
+                          Continue
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </CardContent>
               </Card>
             </div>

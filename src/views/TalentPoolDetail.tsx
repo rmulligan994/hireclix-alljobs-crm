@@ -58,13 +58,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useCreateNote } from '@/hooks/useCommunications';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { useTalentPoolWithCandidates, useRemoveCandidateFromPool, useRemoveCandidatesFromPool, useAddCandidatesToPool, useDeleteTalentPool } from '@/hooks/useTalentPools';
-import { useCandidates } from '@/hooks/useCandidates';
+import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
 import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
 import {
   CandidateFiltersPanel,
   type CandidateFilters,
   type FilterOption,
 } from '@/components/candidates/search';
+import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
 
 interface PoolCandidate {
   id: string;
@@ -77,6 +78,7 @@ interface PoolCandidate {
   tags: string[];
   pipelines: { id: string; name: string; stage: string }[];
   dateAdded: string;
+  lastActivityAt: Date | null;
 }
 
 const TalentPoolDetail = ({ id }: { id: string }) => {
@@ -109,7 +111,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   const [poolCandidates, setPoolCandidates] = useState<PoolCandidate[]>([]);
 
   const { data: pool, isLoading } = useTalentPoolWithCandidates(id || '');
-  const { data: allCandidates } = useCandidates();
+  const { data: allCandidates } = useCandidatesWithEnrichment();
   const removeCandidateFromPool = useRemoveCandidateFromPool();
   const removeCandidatesFromPool = useRemoveCandidatesFromPool();
   const addCandidatesToPool = useAddCandidatesToPool();
@@ -131,6 +133,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
           tags: candidate?.tags || [],
           pipelines: [],
           dateAdded: pc.addedAt.toISOString().split('T')[0],
+          lastActivityAt: candidate?.lastActivityAt ?? null,
         };
       });
       setPoolCandidates(candidatesWithInfo);
@@ -601,7 +604,12 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
                           className="border-muted-foreground data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
                         />
                       </TableCell>
-                      <TableCell className="font-medium text-foreground border-b border-border">{candidate.name}</TableCell>
+                      <TableCell className="font-medium text-foreground border-b border-border">
+                        <div className="flex items-center gap-2">
+                          <span>{candidate.name}</span>
+                          <LeadUsageIndicator lastActivityAt={candidate.lastActivityAt} />
+                        </div>
+                      </TableCell>
                       <TableCell className="text-muted-foreground border-b border-border">{candidate.title}</TableCell>
                       <TableCell className="text-muted-foreground border-b border-border">{candidate.company}</TableCell>
                       <TableCell className="border-b border-border">

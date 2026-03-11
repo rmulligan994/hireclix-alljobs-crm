@@ -16,6 +16,7 @@ import { Search, UserPlus, User, Building, MapPin, Filter } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
 import { useDebounce } from '@/hooks/useDebounce';
+import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
 import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
 import {
   CandidateFiltersPanel,
@@ -354,9 +355,12 @@ export const AddCandidatesToPoolDialog = ({
                     className="border-muted-foreground data-[state=checked]:bg-sky-blue data-[state=checked]:border-sky-blue"
                   />
                   <div className="flex-1">
-                    <p className="font-medium text-foreground">
-                      {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-foreground">
+                        {`${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown'}
+                      </p>
+                      <LeadUsageIndicator lastActivityAt={candidate.lastActivityAt ?? null} />
+                    </div>
                     <div className="flex items-center gap-4 mt-1 flex-wrap">
                       {candidate.title && (
                         <span className="text-sm text-muted-foreground flex items-center gap-1">
