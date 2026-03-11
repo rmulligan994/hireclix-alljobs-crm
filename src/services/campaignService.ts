@@ -247,9 +247,9 @@ export const campaignService = {
       return [];
     }
 
-    let query = (supabase as any).from('candidates_enriched').select('id, first_name, last_name, email, last_activity_at');
+    // Collect candidate IDs from pools and/or pipelines (OR semantics: union of both)
+    const allCandidateIds = new Set<string>();
 
-    // Filter by talent pools
     if (hasPool) {
       const { data: poolCandidates } = await supabase
         .from('talent_pool_candidates')
@@ -257,14 +257,13 @@ export const campaignService = {
         .in('talent_pool_id', filter.talentPoolIds);
       
       if (poolCandidates && poolCandidates.length > 0) {
-        const candidateIds = poolCandidates.map((pc: { candidate_id: string }) => pc.candidate_id);
-        query = query.in('id', candidateIds);
+        poolCandidates.forEach((pc: { candidate_id: string }) => allCandidateIds.add(pc.candidate_id));
       } else {
-        return []; // No candidates in selected pools
+        // No candidates in selected pools
+        if (!hasPipeline) return [];
       }
     }
 
-    // Filter by pipelines
     if (hasPipeline) {
       const { data: pipelineCandidates } = await supabase
         .from('pipeline_candidates')
@@ -272,12 +271,15 @@ export const campaignService = {
         .in('pipeline_id', filter.pipelineIds);
       
       if (pipelineCandidates && pipelineCandidates.length > 0) {
-        const candidateIds = pipelineCandidates.map((pc: { candidate_id: string }) => pc.candidate_id);
-        query = query.in('id', candidateIds);
+        pipelineCandidates.forEach((pc: { candidate_id: string }) => allCandidateIds.add(pc.candidate_id));
       } else {
-        return [];
+        if (!hasPool) return [];
       }
     }
+
+    if (allCandidateIds.size === 0) return [];
+
+    let query = (supabase as any).from('candidates_enriched').select('id, first_name, last_name, email, last_activity_at').in('id', Array.from(allCandidateIds));
 
     // Filter by tags
     if (filter.tags && filter.tags.length > 0) {

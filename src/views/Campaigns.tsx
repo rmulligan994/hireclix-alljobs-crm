@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil, ChevronDown, ChevronUp, Copy, UserPlus, Archive, ArchiveRestore, MoreVertical, Folder, FolderOpen } from 'lucide-react';
+import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil, ChevronDown, ChevronUp, Copy, UserPlus, Archive, ArchiveRestore, MoreVertical, Folder, FolderOpen, RotateCcw } from 'lucide-react';
 import { useMyCampaigns, useOrgCampaigns, useArchivedCampaigns, useCampaign, useUpdateCampaign, useDeleteCampaign, useDuplicateCampaign } from '@/hooks/useCampaigns';
 import { useCampaignFolders } from '@/hooks/useCampaignFolders';
 import { useAllCampaignsStats } from '@/hooks/useCampaignStats';
@@ -437,11 +437,39 @@ const Campaigns = () => {
                 <Card>
                   <CardContent className="py-12 text-center">
                     <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-foreground mb-2">No campaigns yet</h3>
-                    <p className="text-muted-foreground mb-4">Create your first campaign to start engaging with candidates.</p>
-                    <Button onClick={() => setShowCampaignBuilder(true)} className="bg-gradient-primary">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Campaign
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                      {campaigns && campaigns.length > 0 ? 'No campaigns match your filters' : 'No campaigns yet'}
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      {campaigns && campaigns.length > 0
+                        ? 'Try adjusting your search, type filter, or folder to see more campaigns.'
+                        : 'Create your first campaign to start engaging with candidates.'}
+                    </p>
+                    <Button
+                      onClick={() => {
+                        if (campaigns && campaigns.length > 0) {
+                          setSearchQuery('');
+                          setTypeFilter('all');
+                          setSortBy('newest');
+                          setSelectedFolderId(null);
+                          setActiveTab('all');
+                        } else {
+                          setShowCampaignBuilder(true);
+                        }
+                      }}
+                      className="bg-gradient-primary"
+                    >
+                      {campaigns && campaigns.length > 0 ? (
+                        <>
+                          <RotateCcw className="w-4 h-4 mr-2" />
+                          Clear filters
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Create Campaign
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>

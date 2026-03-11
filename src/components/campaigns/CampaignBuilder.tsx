@@ -526,6 +526,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setSelectedTalentPools([]);
     setSelectedPipelines([]);
     setSelectedTags([]);
+    setSelectedLeadStatus([]);
     setSequenceMetadata(null);
     setSelectedFolderId(null);
     setSelectedJobId(null);
