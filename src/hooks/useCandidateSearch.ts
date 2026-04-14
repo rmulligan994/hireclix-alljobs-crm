@@ -1,11 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { CandidateFilters } from '@/components/candidates/search/CandidateFiltersPanel';
+import type { CandidateFilters } from '@/lib/candidateSearch';
 import type { SavedSearch } from '@/components/candidates/search/SavedSearchesDropdown';
 import type { SortOption } from '@/components/candidates/search/SortDropdown';
 import type { AdvancedSearchFields } from '@/components/candidates/search/AdvancedSearchPanel';
 
 const SAVED_SEARCHES_KEY = 'beacon_saved_searches';
 const RECENT_SEARCHES_KEY = 'beacon_recent_searches';
+
+function parseStoredDate(v: unknown): Date | undefined {
+  if (v == null || v === '') return undefined;
+  if (v instanceof Date) return v;
+  const d = new Date(typeof v === 'string' || typeof v === 'number' ? v : String(v));
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
 
 const initialFilters: CandidateFilters = {
   skills: [],
@@ -67,15 +74,24 @@ export const useCandidateSearch = () => {
           const adv = s.advancedFields;
           const parsedAdvanced: AdvancedSearchFields | undefined = adv ? {
             ...adv,
-            dateAddedFrom: adv.dateAddedFrom ? new Date(adv.dateAddedFrom as string) : undefined,
-            dateAddedTo: adv.dateAddedTo ? new Date(adv.dateAddedTo as string) : undefined,
-            lastContactedFrom: adv.lastContactedFrom ? new Date(adv.lastContactedFrom as string) : undefined,
-            lastContactedTo: adv.lastContactedTo ? new Date(adv.lastContactedTo as string) : undefined,
+            dateAddedFrom: parseStoredDate(adv.dateAddedFrom),
+            dateAddedTo: parseStoredDate(adv.dateAddedTo),
+            lastContactedFrom: parseStoredDate(adv.lastContactedFrom),
+            lastContactedTo: parseStoredDate(adv.lastContactedTo),
           } : undefined;
+          const filt = s.filters;
+          const parsedFilters: CandidateFilters = {
+            ...filt,
+            dateAddedCustomFrom: parseStoredDate(filt.dateAddedCustomFrom),
+            dateAddedCustomTo: parseStoredDate(filt.dateAddedCustomTo),
+            lastContactCustomFrom: parseStoredDate(filt.lastContactCustomFrom),
+            lastContactCustomTo: parseStoredDate(filt.lastContactCustomTo),
+          };
           return {
             ...s,
             createdAt: new Date(s.createdAt),
             advancedFields: parsedAdvanced,
+            filters: parsedFilters,
             sortOption: s.sortOption,
           };
         }));
@@ -112,10 +128,28 @@ export const useCandidateSearch = () => {
 
   // Check if any filters are active
   const hasActiveFilters = useMemo(() => {
+    const f = filters;
+    const presetFiltersActive =
+      f.skills.length > 0 ||
+      f.locations.length > 0 ||
+      f.pipelines.length > 0 ||
+      f.pipelineStages.length > 0 ||
+      f.talentPools.length > 0 ||
+      f.sources.length > 0 ||
+      f.companies.length > 0 ||
+      f.experienceLevels.length > 0;
+    const dateAddedActive =
+      !!f.dateAdded &&
+      (f.dateAdded !== 'custom' || !!(f.dateAddedCustomFrom || f.dateAddedCustomTo));
+    const lastContactActive =
+      !!f.lastContact &&
+      (f.lastContact !== 'custom' || !!(f.lastContactCustomFrom || f.lastContactCustomTo));
     return (
       searchQuery.length > 0 ||
-      Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : v !== null) ||
-      Object.values(advancedFields).some(v => 
+      presetFiltersActive ||
+      dateAddedActive ||
+      lastContactActive ||
+      Object.values(advancedFields).some((v) =>
         Array.isArray(v) ? v.length > 0 : v !== undefined && v !== ''
       )
     );
@@ -134,11 +168,27 @@ export const useCandidateSearch = () => {
   }, []);
 
   // Remove a specific filter
-  const removeFilter = useCallback((type: keyof CandidateFilters, value: string) => {
-    setFilters(prev => {
+  const removeFilter = useCallback((type: keyof CandidateFilters, _value: string) => {
+    setFilters((prev) => {
+      if (type === 'dateAdded') {
+        return {
+          ...prev,
+          dateAdded: null,
+          dateAddedCustomFrom: undefined,
+          dateAddedCustomTo: undefined,
+        };
+      }
+      if (type === 'lastContact') {
+        return {
+          ...prev,
+          lastContact: null,
+          lastContactCustomFrom: undefined,
+          lastContactCustomTo: undefined,
+        };
+      }
       const current = prev[type];
       if (Array.isArray(current)) {
-        return { ...prev, [type]: current.filter(v => v !== value) };
+        return { ...prev, [type]: current.filter((v) => v !== _value) };
       }
       return { ...prev, [type]: null };
     });

@@ -245,8 +245,15 @@ export function parseBooleanSearch(query: string): ((candidate: SearchableCandid
 }
 
 /**
- * Check if a query appears to use boolean syntax (for UI hints).
+ * Check if a query should use Postgres websearch_to_tsquery (not plainto_tsquery).
+ * Includes boolean-style AND/OR/NOT/parens/quotes, and websearch negation `-term` / `-"phrase"`.
+ * Without this, `engineer -devops` stays on the plain path: plainto_tsquery ANDs both words (wrong).
  */
 export function hasBooleanSyntax(query: string): boolean {
-  return /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b(?:AND|OR|NOT)\b|\(|\)/.test(query.trim());
+  const q = query.trim();
+  const hasBooleanOps =
+    /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b(?:AND|OR|NOT)\b|\(|\)/.test(q);
+  // Postgres websearch: `-` before a word/phrase is negation; must route to websearch_to_tsquery
+  const hasWebsearchNegation = /(?:^|\s)-(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\w+)/.test(q);
+  return hasBooleanOps || hasWebsearchNegation;
 }

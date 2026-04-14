@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import type { 
   Candidate, 
   CandidateWithPipelines, 
@@ -6,6 +7,8 @@ import type {
   CreateCandidateData, 
   UpdateCandidateData 
 } from '@/types/Candidate';
+import { formatLastContact, type AdvancedSearchFields, type CandidateFilters, type FilterableCandidate, type SortOption } from '@/lib/candidateSearch';
+import { buildSearchCandidatesRpcArgs, mapRpcRowToFilterable } from '@/lib/searchCandidatesRpc';
 
 /**
  * Candidate Service
@@ -14,22 +17,60 @@ import type {
  * This is the ONLY place where database calls for candidates should exist.
  */
 
-const mapRowToCandidate = (row: any): Candidate => ({
-  id: row.id,
-  firstName: row.first_name,
-  lastName: row.last_name,
-  email: row.email,
-  phone: row.phone,
-  company: row.company,
-  title: row.title,
-  location: row.location,
-  source: row.source,
-  tags: row.tags || [],
-  linkedinUrl: row.linkedin_url,
-  avatarUrl: row.avatar_url,
-  createdAt: new Date(row.created_at),
-  updatedAt: new Date(row.updated_at),
-  createdBy: row.created_by,
+type CandidatesEnrichedRow = Database['public']['Views']['candidates_enriched']['Row'];
+type CandidatesUpdate = Database['public']['Tables']['candidates']['Update'];
+
+type PipelineCandidateJoinRow = {
+  pipeline_id: string;
+  stage: string;
+  added_at: string;
+  pipelines: { id: string; name: string } | null;
+};
+
+type PoolCandidateJoinRow = {
+  talent_pool_id: string;
+  added_at: string;
+  talent_pools: { id: string; name: string } | null;
+};
+
+const mapEnrichedRowToList = (row: CandidatesEnrichedRow): CandidateListEnriched => {
+  if (!row.id) {
+    throw new Error('candidates_enriched row missing id');
+  }
+  const candidate = mapRowToCandidate({ ...row, id: row.id });
+  const rawAssoc = row.pipeline_associations;
+  const assocList = Array.isArray(rawAssoc) ? rawAssoc : [];
+  const pipelineAssociations = assocList.map((p: { id: string; name: string; stage: string }) => ({
+    id: p.id,
+    name: p.name,
+    stage: p.stage,
+  }));
+  const lastContactAt = row.last_contact_at ? new Date(row.last_contact_at) : null;
+  const lastActivityAt = row.last_activity_at ? new Date(row.last_activity_at) : null;
+  return {
+    ...candidate,
+    pipelineAssociations,
+    lastContactAt,
+    lastActivityAt,
+  };
+};
+
+const mapRowToCandidate = (row: Database['public']['Tables']['candidates']['Row'] | CandidatesEnrichedRow): Candidate => ({
+  id: row.id ?? '',
+  firstName: row.first_name ?? undefined,
+  lastName: row.last_name ?? undefined,
+  email: row.email ?? undefined,
+  phone: row.phone ?? undefined,
+  company: row.company ?? undefined,
+  title: row.title ?? undefined,
+  location: row.location ?? undefined,
+  source: row.source ?? undefined,
+  tags: row.tags ?? [],
+  linkedinUrl: row.linkedin_url ?? undefined,
+  avatarUrl: row.avatar_url ?? undefined,
+  createdAt: new Date(row.created_at ?? 0),
+  updatedAt: new Date(row.updated_at ?? 0),
+  createdBy: row.created_by ?? undefined,
 });
 
 export const candidateService = {
@@ -37,7 +78,10 @@ export const candidateService = {
    * Get all candidates. Paginates past Supabase's 1000-row default limit.
    */
   getAll: async (): Promise<Candidate[]> => {
-    const rows = await candidateService._fetchAllPaginated<any>('candidates', '*');
+    const rows = await candidateService._fetchAllPaginated<Database['public']['Tables']['candidates']['Row']>(
+      'candidates',
+      '*'
+    );
     return rows.map(mapRowToCandidate);
   },
 
@@ -95,15 +139,15 @@ export const candidateService = {
 
     return {
       ...mapRowToCandidate(candidate),
-      pipelines: (pipelineRes.data || []).map((p: any) => ({
+      pipelines: (pipelineRes.data || []).map((p: PipelineCandidateJoinRow) => ({
         pipelineId: p.pipeline_id,
-        pipelineName: (p.pipelines as { id: string; name: string } | null)?.name || '',
+        pipelineName: p.pipelines?.name || '',
         stage: stageNameMap.get(p.stage) || p.stage,
         addedAt: new Date(p.added_at),
       })),
-      talentPools: (poolRes.data || []).map((p: any) => ({
+      talentPools: (poolRes.data || []).map((p: PoolCandidateJoinRow) => ({
         poolId: p.talent_pool_id,
-        poolName: (p.talent_pools as { id: string; name: string } | null)?.name || '',
+        poolName: p.talent_pools?.name || '',
         addedAt: new Date(p.added_at),
       })),
     };
@@ -205,7 +249,7 @@ export const candidateService = {
    * Update a candidate
    */
   update: async (id: string, data: UpdateCandidateData): Promise<Candidate> => {
-    const updateData: any = {};
+    const updateData: CandidatesUpdate = {};
     if (data.firstName !== undefined) updateData.first_name = data.firstName;
     if (data.lastName !== undefined) updateData.last_name = data.lastName;
     if (data.email !== undefined) updateData.email = data.email;
@@ -339,7 +383,7 @@ export const candidateService = {
     }
 
     // 6. Update kept candidate with merged data
-    const updateData: Record<string, unknown> = {};
+    const updateData: CandidatesUpdate = {};
     if (mergedData.firstName !== undefined) updateData.first_name = mergedData.firstName;
     if (mergedData.lastName !== undefined) updateData.last_name = mergedData.lastName;
     if (mergedData.email !== undefined) updateData.email = mergedData.email;
@@ -366,66 +410,59 @@ export const candidateService = {
   },
 
   /**
-   * Search candidates by query
-   */
-  search: async (query: string): Promise<Candidate[]> => {
-    const searchTerm = `%${query}%`;
-    
-    const { data, error } = await supabase
-      .from('candidates')
-      .select('*')
-      .or(`first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},email.ilike.${searchTerm},company.ilike.${searchTerm},title.ilike.${searchTerm}`)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return (data || []).map(mapRowToCandidate);
-  },
-
-  /**
    * Find all duplicate pairs in the database (by email or phone).
    * Returns groups where multiple candidates share the same email or phone.
    */
   findAllDuplicates: async (): Promise<{ candidate: Candidate; duplicates: Candidate[]; matchType: 'email' | 'phone' }[]> => {
-    const rows = await candidateService._fetchAllPaginated<any>('candidates', '*');
-    const all = rows.map(mapRowToCandidate);
+    const { data, error } = await supabase.rpc('get_candidate_duplicate_groups');
+    if (error) throw error;
+    const groups = (Array.isArray(data) ? data : []) as { matchType: 'email' | 'phone'; ids: string[] }[];
+    if (groups.length === 0) return [];
+
+    const allIds = [...new Set(groups.flatMap((g) => g.ids))];
+    const byId = new Map((await candidateService.getCandidatesByIds(allIds)).map((c) => [c.id, c]));
 
     const results: { candidate: Candidate; duplicates: Candidate[]; matchType: 'email' | 'phone' }[] = [];
-    const seen = new Set<string>();
-
-    const normalizePhone = (p: string | undefined) => (p || '').replace(/\D/g, '');
-    const normalizeEmail = (e: string | undefined) => (e || '').trim().toLowerCase();
-
-    for (let i = 0; i < all.length; i++) {
-      const c = all[i];
-      if (seen.has(c.id)) continue;
-
-      const email = normalizeEmail(c.email);
-      const phone = normalizePhone(c.phone);
-
-      const dups: Candidate[] = [];
-      let matchType: 'email' | 'phone' | null = null;
-
-      for (let j = i + 1; j < all.length; j++) {
-        const other = all[j];
-        if (seen.has(other.id)) continue;
-
-        const isEmailMatch = email && email === normalizeEmail(other.email);
-        const isPhoneMatch = phone && phone.length > 6 && phone === normalizePhone(other.phone);
-
-        if (isEmailMatch || isPhoneMatch) {
-          dups.push(other);
-          seen.add(other.id);
-          if (!matchType) matchType = isEmailMatch ? 'email' : 'phone';
-        }
-      }
-
-      if (dups.length > 0) {
-        seen.add(c.id);
-        results.push({ candidate: c, duplicates: dups, matchType: matchType! });
-      }
+    for (const g of groups) {
+      const primary = byId.get(g.ids[0]);
+      if (!primary) continue;
+      const duplicates = g.ids.slice(1).map((id) => byId.get(id)).filter(Boolean) as Candidate[];
+      if (duplicates.length === 0) continue;
+      results.push({ candidate: primary, duplicates, matchType: g.matchType });
     }
-
     return results;
+  },
+
+  /**
+   * Fetch candidates by id (batches of 200). Used for duplicate resolution and bulk lookups.
+   */
+  getCandidatesByIds: async (ids: string[]): Promise<Candidate[]> => {
+    if (ids.length === 0) return [];
+    const BATCH = 200;
+    const out: Candidate[] = [];
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH);
+      const { data, error } = await supabase.from('candidates').select('*').in('id', batch);
+      if (error) throw error;
+      out.push(...(data || []).map(mapRowToCandidate));
+    }
+    return out;
+  },
+
+  /**
+   * Enriched rows from candidates_enriched for a bounded set of ids (no full-table fetch).
+   */
+  getEnrichedByIds: async (ids: string[]): Promise<CandidateListEnriched[]> => {
+    if (ids.length === 0) return [];
+    const BATCH = 200;
+    const all: CandidatesEnrichedRow[] = [];
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH);
+      const { data, error } = await supabase.from('candidates_enriched').select('*').in('id', batch);
+      if (error) throw error;
+      all.push(...((data ?? []) as CandidatesEnrichedRow[]));
+    }
+    return all.map(mapEnrichedRowToList);
   },
 
   /**
@@ -478,14 +515,25 @@ export const candidateService = {
   },
 
   /**
+   * Get count of candidates in active pipelines
+   */
+  getInPipelinesCount: async (): Promise<number> => {
+    const { count, error } = await supabase
+      .from('pipeline_candidates')
+      .select('candidate_id', { count: 'exact', head: true });
+
+    if (error) throw error;
+    return count || 0;
+  },
+
+  /**
    * Fetch all rows from a query, paginating past Supabase's 1000-row default limit.
    */
   async _fetchAllPaginated<T>(
     table: 'candidates' | 'pipeline_candidates' | 'communications' | 'campaign_recipients',
     select: string,
     orderBy = 'created_at',
-    ascending = false,
-    extraFilter?: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>
+    ascending = false
   ): Promise<T[]> {
     const PAGE_SIZE = 1000;
     const all: T[] = [];
@@ -493,8 +541,7 @@ export const candidateService = {
     let hasMore = true;
 
     while (hasMore) {
-      let query = supabase.from(table).select(select).order(orderBy, { ascending });
-      if (extraFilter) query = extraFilter(query);
+      const query = supabase.from(table).select(select).order(orderBy, { ascending });
       const { data, error } = await query.range(offset, offset + PAGE_SIZE - 1);
       if (error) throw error;
       const rows = (data || []) as T[];
@@ -506,46 +553,73 @@ export const candidateService = {
   },
 
   /**
+   * Search and filter candidates with pagination (Postgres RPC on candidates_enriched).
+   */
+  searchPaginated: async (params: {
+    searchQuery?: string;
+    advancedFields?: AdvancedSearchFields;
+    filters?: CandidateFilters;
+    sortOption?: SortOption;
+    excludeIds?: string[];
+    limit?: number;
+    offset?: number;
+    scopeCandidateIds?: string[];
+  }): Promise<{ data: FilterableCandidate[]; total: number; nextOffset: number; allFiltered?: FilterableCandidate[] }> => {
+    const { limit = 50, offset = 0 } = params;
+
+    type SearchArgs = Database['public']['Functions']['search_candidates_enriched']['Args'];
+    const rpcArgs = buildSearchCandidatesRpcArgs(params) as unknown as SearchArgs;
+    const { data, error } = await supabase.rpc('search_candidates_enriched', rpcArgs);
+
+    if (error) throw error;
+
+    const payload = data as {
+      total: number;
+      rows: Record<string, unknown>[];
+      all_rows: Record<string, unknown>[] | null;
+    };
+
+    const rows = payload?.rows ?? [];
+    const mapped = rows.map((r) => mapRpcRowToFilterable(r));
+
+    let allFiltered: FilterableCandidate[] | undefined;
+    if (offset === 0 && payload?.all_rows != null && Array.isArray(payload.all_rows)) {
+      allFiltered = payload.all_rows.map((r) => mapRpcRowToFilterable(r));
+    }
+
+    return {
+      data: mapped,
+      total: Number(payload?.total ?? 0),
+      nextOffset: offset + limit,
+      allFiltered,
+    };
+  },
+
+  /**
    * Get all candidates with pipeline associations (stage names) and last contact date.
    * Uses candidates_enriched view - single query, server-side join.
    * Paginates past Supabase's 1000-row default limit.
    */
   getListWithEnrichment: async (): Promise<CandidateListEnriched[]> => {
     const PAGE_SIZE = 5000; // Larger pages = fewer round trips (25k candidates: 5 requests vs 25)
-    const all: any[] = [];
+    const all: CandidatesEnrichedRow[] = [];
     let offset = 0;
     let hasMore = true;
 
     while (hasMore) {
-      // candidates_enriched is a DB view; use type assertion until types are regenerated
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('candidates_enriched')
         .select('*')
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
       if (error) throw error;
-      const rows = (data || []) as any[];
+      const rows = (data ?? []) as CandidatesEnrichedRow[];
       all.push(...rows);
       hasMore = rows.length === PAGE_SIZE;
       offset += PAGE_SIZE;
     }
 
-    return all.map((row) => {
-      const candidate = mapRowToCandidate(row);
-      const pipelineAssociations = (row.pipeline_associations || []).map((p: { id: string; name: string; stage: string }) => ({
-        id: p.id,
-        name: p.name,
-        stage: p.stage,
-      }));
-      const lastContactAt = row.last_contact_at ? new Date(row.last_contact_at) : null;
-      const lastActivityAt = row.last_activity_at ? new Date(row.last_activity_at) : null;
-      return {
-        ...candidate,
-        pipelineAssociations,
-        lastContactAt,
-        lastActivityAt,
-      };
-    });
+    return all.map(mapEnrichedRowToList);
   },
 };

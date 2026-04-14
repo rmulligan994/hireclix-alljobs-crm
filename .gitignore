@@ -13,6 +13,8 @@ dist-ssr
 *.local
 .next
 .env.local
+*.tsbuildinfo
+supabase/.temp/
 
 # Editor directories and files
 .vscode/*

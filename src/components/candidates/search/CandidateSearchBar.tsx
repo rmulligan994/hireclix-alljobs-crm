@@ -4,6 +4,7 @@ import { Search, X, Clock, Users, Building2, Tag, ChevronRight } from 'lucide-re
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { CANDIDATE_SEARCH_PLACEHOLDER, CANDIDATE_SEARCH_TOOLTIP } from '@/lib/candidateSearchHints';
 
 interface SearchSuggestion {
   type: 'recent' | 'candidate' | 'company' | 'skill';
@@ -116,7 +117,8 @@ export const CandidateSearchBar = ({
             setShowSuggestions(true);
           }}
           onBlur={() => setIsFocused(false)}
-          placeholder='Search candidates... Use "phrases", AND, OR, NOT, (grouping)'
+          title={CANDIDATE_SEARCH_TOOLTIP}
+          placeholder={CANDIDATE_SEARCH_PLACEHOLDER}
           className="pl-10 pr-24 border-border focus:border-sky-blue bg-background h-11"
         />
         <div className="absolute right-2 flex items-center gap-1">

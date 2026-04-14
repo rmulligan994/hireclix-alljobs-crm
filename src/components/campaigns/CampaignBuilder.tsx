@@ -184,7 +184,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         delay_hours: step.delay_hours || 0,
         subject: step.subject || 'Untitled',
         bee_json: step.bee_json,
-        html_content: step.html_content,
+        html_content: step.html_content ?? undefined,
       });
     }
   };

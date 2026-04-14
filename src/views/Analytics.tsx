@@ -134,12 +134,14 @@ const Analytics = () => {
                         <div>
                           <p className="text-sm font-medium text-foreground mb-2">Quick select</p>
                           <div className="flex flex-wrap gap-2">
-                            {[
-                              { label: 'Last 7 days', days: 7 },
-                              { label: 'Last 30 days', days: 30 },
-                              { label: 'Last 90 days', days: 90 },
-                              { label: 'This month', isMonth: true },
-                            ].map((preset) => (
+                            {(
+                              [
+                                { label: 'Last 7 days', days: 7 as const },
+                                { label: 'Last 30 days', days: 30 as const },
+                                { label: 'Last 90 days', days: 90 as const },
+                                { label: 'This month', isMonth: true as const },
+                              ] as const
+                            ).map((preset) => (
                               <Button
                                 key={preset.label}
                                 variant="outline"

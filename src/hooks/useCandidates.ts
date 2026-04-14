@@ -1,11 +1,69 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { candidateService } from '@/services';
 import type { CreateCandidateData, UpdateCandidateData } from '@/types';
+import type { AdvancedSearchFields, CandidateFilters, SortOption } from '@/lib/candidateSearch';
+import { stableStringify } from '@/lib/stableStringify';
 import { toast } from 'sonner';
 
 /**
- * React Query hooks for candidate operations
+ * Search params for candidate search - matches useCandidateSearch UI state
  */
+export interface CandidatesSearchParams {
+  searchQuery?: string;
+  advancedFields?: AdvancedSearchFields;
+  filters?: CandidateFilters;
+  sortOption?: SortOption;
+  excludeIds?: string[];
+  /** When set, search is restricted to these candidate ids (e.g. pool/pipeline scope). */
+  scopeCandidateIds?: string[];
+}
+
+/**
+ * Search and filter candidates with pagination.
+ * Use pageSize for infinite scroll (TalentPool) or large limit for single page (Add Candidates dialogs).
+ */
+export const useCandidatesSearch = (
+  params: CandidatesSearchParams,
+  options?: { pageSize?: number; limit?: number }
+) => {
+  const pageSize = options?.limit ?? options?.pageSize ?? 50;
+
+  const query = useInfiniteQuery({
+    queryKey: ['candidates', 'search', stableStringify(params)],
+    queryFn: async ({ pageParam = 0 }) => {
+      const result = await candidateService.searchPaginated({
+        ...params,
+        limit: pageSize,
+        offset: pageParam,
+      });
+      return result;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.data.length >= pageSize ? lastPage.nextOffset : undefined,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const data = useMemo(
+    () => query.data?.pages.flatMap((p) => p.data) ?? [],
+    [query.data]
+  );
+  const total = query.data?.pages[0]?.total ?? 0;
+  const allFiltered = query.data?.pages[0] && 'allFiltered' in query.data.pages[0]
+    ? (query.data.pages[0] as { allFiltered?: unknown[] }).allFiltered
+    : undefined;
+
+  return {
+    data,
+    total,
+    allFiltered: allFiltered ?? data,
+    isLoading: query.isLoading,
+    fetchNextPage: query.fetchNextPage,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+  };
+};
 
 export const useCandidates = () => {
   return useQuery({
@@ -20,6 +78,19 @@ export const useCandidatesWithEnrichment = () => {
     queryKey: ['candidates', 'enriched'],
     queryFn: candidateService.getListWithEnrichment,
     staleTime: 5 * 60 * 1000, // 5 minutes - instant back-navigation to cached data
+  });
+};
+
+/**
+ * Enriched candidate rows for a bounded id list (no full-table fetch).
+ */
+export const useCandidatesEnrichedByIds = (ids: string[]) => {
+  const sortedKey = [...ids].sort().join(',');
+  return useQuery({
+    queryKey: ['candidates', 'enriched', 'byIds', sortedKey],
+    queryFn: () => candidateService.getEnrichedByIds(ids),
+    enabled: ids.length > 0,
+    staleTime: 5 * 60 * 1000,
   });
 };
 
@@ -39,23 +110,16 @@ export const useCandidateWithAssociations = (id: string) => {
   });
 };
 
-export const useCandidateSearch = (query: string) => {
-  return useQuery({
-    queryKey: ['candidates', 'search', query],
-    queryFn: () => candidateService.search(query),
-    enabled: query.length > 0,
-  });
-};
-
 export const useCandidateStats = () => {
   return useQuery({
     queryKey: ['candidates', 'stats'],
     queryFn: async () => {
-      const [total, newThisWeek] = await Promise.all([
+      const [total, newThisWeek, inPipelines] = await Promise.all([
         candidateService.getCount(),
         candidateService.getNewThisWeek(),
+        candidateService.getInPipelinesCount(),
       ]);
-      return { total, newThisWeek };
+      return { total, newThisWeek, inPipelines };
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

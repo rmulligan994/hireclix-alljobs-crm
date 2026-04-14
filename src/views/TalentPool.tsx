@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
@@ -44,296 +44,17 @@ import {
 } from '@/components/candidates/search';
 import { useCandidateSearch } from '@/hooks/useCandidateSearch';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useCandidatesWithEnrichment, useCandidateStats } from '@/hooks/useCandidates';
+import { useCandidatesSearch, useCandidateStats } from '@/hooks/useCandidates';
+import type { FilterableCandidate } from '@/lib/candidateSearch';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
-import { parseBooleanSearch } from '@/utils/booleanSearchParser';
 import { getStageColorClass } from '@/utils/stageColors';
 import { TableVirtuoso } from 'react-virtuoso';
 
-function formatLastContact(date: Date | null): string {
-  if (!date) return 'Never';
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-  return `${Math.floor(diffDays / 365)} years ago`;
-}
-
-// Infer experience level from job title (AI-deduced, not 100% accurate)
-function inferExperienceLevels(title: string): string[] {
-  if (!title || !title.trim()) return [];
-  const t = title.toLowerCase();
-  const levels: string[] = [];
-  if (/\b(executive|ceo|cto|cfo|coo|vp|vice president|director|head of)\b/.test(t)) levels.push('executive');
-  if (/\b(lead|principal|architect)\b/.test(t)) levels.push('lead');
-  if (/\b(senior|sr\.?|staff)\b/.test(t)) levels.push('senior');
-  if (/\b(mid|middle|engineer|developer|analyst)\b/.test(t) && !/\b(senior|lead|principal)\b/.test(t)) levels.push('mid');
-  if (/\b(junior|jr\.?|entry|intern|graduate)\b/.test(t)) levels.push('entry');
-  return levels;
-}
-
-function getDateAddedBoundary(preset: string): Date | null {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  if (preset === 'today') return start;
-  if (preset === 'this_week') {
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    start.setDate(diff);
-    return start;
-  }
-  if (preset === 'this_month') {
-    start.setDate(1);
-    return start;
-  }
-  if (preset === 'last_3_months') {
-    start.setMonth(now.getMonth() - 3);
-    return start;
-  }
-  return null;
-}
-
-function getLastContactBoundary(preset: string): { from?: Date; never?: boolean } | null {
-  if (preset === 'never') return { never: true };
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  if (preset === 'today') return { from: start };
-  if (preset === 'this_week') {
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    start.setDate(diff);
-    return { from: start };
-  }
-  if (preset === 'this_month') {
-    start.setDate(1);
-    return { from: start };
-  }
-  return null;
-}
-
-interface FilterableCandidate {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  title: string;
-  company: string;
-  location: string;
-  skills: string[];
-  pipelineAssociations: { id: string; name: string; stage: string }[];
-  source: string;
-  linkedinUrl: string;
-  lastContact: string;
-  lastContactAt: Date | null;
-  lastActivityAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  _searchStr: string;
-}
-
-function applyAdvanced(
-  candidates: FilterableCandidate[],
-  advancedFields: AdvancedSearchFields
-): FilterableCandidate[] {
-  let results = [...candidates];
-  if (advancedFields.name) {
-    const nameQuery = advancedFields.name.toLowerCase();
-    results = results.filter(c =>
-      `${c.firstName} ${c.lastName}`.toLowerCase().includes(nameQuery)
-    );
-  }
-  if (advancedFields.email) {
-    const emailQuery = advancedFields.email.toLowerCase();
-    results = results.filter(c =>
-      (c.email || '').toLowerCase().includes(emailQuery)
-    );
-  }
-  if (advancedFields.phone) {
-    const phoneQuery = advancedFields.phone.replace(/\D/g, '');
-    results = results.filter(c =>
-      (c.phone || '').replace(/\D/g, '').includes(phoneQuery)
-    );
-  }
-  if (advancedFields.company) {
-    const companyQuery = advancedFields.company.toLowerCase();
-    results = results.filter(c =>
-      (c.company || '').toLowerCase().includes(companyQuery)
-    );
-  }
-  if (advancedFields.title) {
-    const titleQuery = advancedFields.title.toLowerCase();
-    results = results.filter(c =>
-      (c.title || '').toLowerCase().includes(titleQuery)
-    );
-  }
-  if (advancedFields.location) {
-    const locationQuery = advancedFields.location.toLowerCase();
-    results = results.filter(c =>
-      (c.location || '').toLowerCase().includes(locationQuery)
-    );
-  }
-  if (advancedFields.skills.length > 0) {
-    results = results.filter(c =>
-      advancedFields.skills.every(skill =>
-        c.skills.some(s => s.toLowerCase() === skill.toLowerCase())
-      )
-    );
-  }
-  if (advancedFields.dateAddedFrom) {
-    const from = new Date(advancedFields.dateAddedFrom);
-    from.setHours(0, 0, 0, 0);
-    results = results.filter(c => c.createdAt >= from);
-  }
-  if (advancedFields.dateAddedTo) {
-    const to = new Date(advancedFields.dateAddedTo);
-    to.setHours(23, 59, 59, 999);
-    results = results.filter(c => c.createdAt <= to);
-  }
-  if (advancedFields.lastContactedFrom) {
-    const from = new Date(advancedFields.lastContactedFrom);
-    results = results.filter(c =>
-      c.lastContactAt ? new Date(c.lastContactAt) >= from : false
-    );
-  }
-  if (advancedFields.lastContactedTo) {
-    const to = new Date(advancedFields.lastContactedTo);
-    to.setHours(23, 59, 59, 999);
-    results = results.filter(c =>
-      c.lastContactAt ? new Date(c.lastContactAt) <= to : false
-    );
-  }
-  return results;
-}
-
-function applySearch(
-  candidates: FilterableCandidate[],
-  query: string
-): FilterableCandidate[] {
-  if (!query.trim()) return candidates;
-  const matcher = parseBooleanSearch(query.trim());
-  if (matcher) {
-    return candidates.filter(c => matcher(c));
-  }
-  const q = query.toLowerCase();
-  return candidates.filter(c => c._searchStr.includes(q));
-}
-
-function applyFilters(
-  candidates: FilterableCandidate[],
-  filters: CandidateFilters
-): FilterableCandidate[] {
-  let results = [...candidates];
-  if (filters.skills.length > 0) {
-    results = results.filter(c =>
-      filters.skills.some(skill => c.skills.includes(skill))
-    );
-  }
-  if (filters.locations.length > 0) {
-    results = results.filter(c =>
-      filters.locations.includes(c.location || '')
-    );
-  }
-  if (filters.pipelines.length > 0) {
-    if (filters.pipelines.includes('none')) {
-      results = results.filter(c => c.pipelineAssociations.length === 0);
-    } else {
-      results = results.filter(c =>
-        c.pipelineAssociations.some(p => filters.pipelines.includes(p.name))
-      );
-    }
-  }
-  if (filters.pipelineStages.length > 0) {
-    results = results.filter(c =>
-      c.pipelineAssociations.some(p => filters.pipelineStages.includes(p.stage))
-    );
-  }
-  if (filters.sources.length > 0) {
-    results = results.filter(c =>
-      filters.sources.includes(c.source || '')
-    );
-  }
-  if (filters.companies.length > 0) {
-    results = results.filter(c =>
-      filters.companies.includes(c.company || '')
-    );
-  }
-  if (filters.experienceLevels.length > 0) {
-    results = results.filter(c => {
-      const levels = inferExperienceLevels(c.title);
-      return filters.experienceLevels.some(l => levels.includes(l));
-    });
-  }
-  if (filters.dateAdded && filters.dateAdded !== 'custom') {
-    const from = getDateAddedBoundary(filters.dateAdded);
-    if (from) {
-      results = results.filter(c => c.createdAt >= from);
-    }
-  }
-  if (filters.lastContact && filters.lastContact !== 'custom') {
-    const boundary = getLastContactBoundary(filters.lastContact);
-    if (boundary?.never) {
-      results = results.filter(c => !c.lastContactAt);
-    } else if (boundary?.from) {
-      results = results.filter(c =>
-        c.lastContactAt ? new Date(c.lastContactAt) >= boundary.from! : false
-      );
-    }
-  }
-  return results;
-}
-
-function applySort(
-  candidates: FilterableCandidate[],
-  sortOption: string
-): FilterableCandidate[] {
-  const arr = [...candidates];
-  switch (sortOption) {
-    case 'name_asc':
-      arr.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-      break;
-    case 'name_desc':
-      arr.sort((a, b) => `${b.firstName} ${b.lastName}`.localeCompare(`${a.firstName} ${a.lastName}`));
-      break;
-    case 'recently_added':
-      arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      break;
-    case 'oldest_first':
-      arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-      break;
-    case 'last_contacted_recent':
-      arr.sort((a, b) => {
-        const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
-        const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
-        return bTime - aTime;
-      });
-      break;
-    case 'last_contacted_oldest':
-      arr.sort((a, b) => {
-        const aTime = a.lastContactAt ? new Date(a.lastContactAt).getTime() : 0;
-        const bTime = b.lastContactAt ? new Date(b.lastContactAt).getTime() : 0;
-        return aTime - bTime;
-      });
-      break;
-    case 'last_updated':
-      arr.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      break;
-    default:
-      break;
-  }
-  return arr;
-}
-
 const TalentPool = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
@@ -370,74 +91,42 @@ const TalentPool = () => {
     removeFilter,
   } = useCandidateSearch();
 
+  // Deep link from top bar: /talent?q=...
+  const qParam = searchParams.get('q');
+  useEffect(() => {
+    if (!qParam) return;
+    try {
+      setSearchQuery(decodeURIComponent(qParam));
+    } catch {
+      setSearchQuery(qParam);
+    }
+  }, [qParam, setSearchQuery]);
+
   // Candidate list context for navigation
   const { setCandidateList } = useCandidateListContext();
   const queryClient = useQueryClient();
 
-  // Fetch real data from database with pipeline associations and last contact
-  const { data: dbCandidates, isLoading } = useCandidatesWithEnrichment();
+  const debouncedSearchForFetch = useDebounce(searchQuery, 300);
+
+  const {
+    data: filteredCandidates,
+    total: filteredTotal,
+    allFiltered,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useCandidatesSearch(
+    {
+      searchQuery: debouncedSearchForFetch,
+      advancedFields,
+      filters,
+      sortOption,
+    },
+    { pageSize: 50 }
+  );
+
   const { data: stats } = useCandidateStats();
-
-
-  // Pre-compute search string once when dbCandidates loads (avoids rebuilding per keystroke)
-  const candidatesWithSearchStr = useMemo((): FilterableCandidate[] => {
-    return (dbCandidates || []).map(c => {
-      const firstName = c.firstName || '';
-      const lastName = c.lastName || '';
-      const skills = c.tags || [];
-      const _searchStr = [
-        firstName,
-        lastName,
-        c.email || '',
-        c.phone || '',
-        c.company || '',
-        c.title || '',
-        c.location || '',
-        ...skills,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return {
-        id: c.id,
-        firstName,
-        lastName,
-        email: c.email || '',
-        phone: c.phone || '',
-        title: c.title || '',
-        company: c.company || '',
-        location: c.location || '',
-        skills,
-        pipelineAssociations: c.pipelineAssociations || [],
-        source: c.source || '',
-        linkedinUrl: c.linkedinUrl || '',
-        lastContact: formatLastContact(c.lastContactAt),
-        lastContactAt: c.lastContactAt,
-        lastActivityAt: c.lastActivityAt ?? null,
-        createdAt: new Date(c.createdAt),
-        updatedAt: new Date(c.updatedAt),
-        _searchStr,
-      };
-    });
-  }, [dbCandidates]);
-
-  // Chained useMemos: each stage caches independently; changing sort doesn't re-run search
-  const advancedFiltered = useMemo(
-    () => applyAdvanced(candidatesWithSearchStr, advancedFields),
-    [candidatesWithSearchStr, advancedFields]
-  );
-  const searchFiltered = useMemo(
-    () => applySearch(advancedFiltered, debouncedSearchQuery),
-    [advancedFiltered, debouncedSearchQuery]
-  );
-  const fullFiltered = useMemo(
-    () => applyFilters(searchFiltered, filters),
-    [searchFiltered, filters]
-  );
-  const filteredCandidates = useMemo(
-    () => applySort(fullFiltered, sortOption),
-    [fullFiltered, sortOption]
-  );
 
   // Update candidate list context when filtered candidates change
   useEffect(() => {
@@ -453,7 +142,7 @@ const TalentPool = () => {
     
     const query = debouncedSuggestionsQuery.toLowerCase();
     const suggestions: Array<{ type: 'candidate' | 'company' | 'skill'; value: string; subtext?: string }> = [];
-    const candidates = dbCandidates || [];
+    const candidates = (allFiltered || []) as FilterableCandidate[];
 
     // Candidate suggestions
     candidates
@@ -473,18 +162,18 @@ const TalentPool = () => {
       .forEach(c => suggestions.push({ type: 'company', value: c || '' }));
 
     // Skill suggestions from candidates' tags
-    const allSkills = [...new Set(candidates.flatMap(c => c.tags || []))];
+    const allSkills = [...new Set(candidates.flatMap(c => c.skills || []))];
     allSkills
       .filter(s => s.toLowerCase().includes(query))
       .slice(0, 3)
       .forEach(s => suggestions.push({ type: 'skill', value: s }));
 
     return suggestions;
-  }, [debouncedSuggestionsQuery, dbCandidates]);
+  }, [debouncedSuggestionsQuery, allFiltered]);
 
-  // Dynamic filter options derived from current filtered result set (updates as you filter)
+  // Dynamic filter options derived from full filtered result set (allFiltered has full list on first page)
   const filterOptions = useMemo(() => {
-    const c = filteredCandidates;
+    const c = (allFiltered || filteredCandidates) as FilterableCandidate[];
     const skillCounts = new Map<string, number>();
     const locationCounts = new Map<string, number>();
     const pipelineCounts = new Map<string, number>();
@@ -532,14 +221,14 @@ const TalentPool = () => {
         .sort((a, b) => b[1] - a[1])
         .map(([value]) => ({ value, label: value, count: companyCounts.get(value) })),
     };
-  }, [filteredCandidates]);
+  }, [allFiltered, filteredCandidates]);
 
   const availableSkills = useMemo(() => filterOptions.skills.map((s) => s.value), [filterOptions.skills]);
 
-  const totalCandidates = dbCandidates?.length || 0;
-  const totalInPipelines = (dbCandidates || []).filter(c => (c.pipelineAssociations?.length ?? 0) > 0).length;
+  const totalCandidates = stats?.total || 0;
+  const totalInPipelines = stats?.inPipelines ?? 0;
   const snapshotMetrics = [
-    { label: 'Total Candidates', value: stats?.total || totalCandidates, icon: Users },
+    { label: 'Total Candidates', value: totalCandidates, icon: Users },
     { label: 'New This Week', value: stats?.newThisWeek || 0, icon: CalendarPlus },
     { label: 'In Active Pipelines', value: totalInPipelines, icon: GitBranch },
   ];
@@ -621,14 +310,19 @@ const TalentPool = () => {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="bg-popover border-border">
                     <DropdownMenuItem
-                      onClick={() => exportCandidatesToCsv(filteredCandidates)}
+                      onClick={() => exportCandidatesToCsv(
+                        filteredCandidates.map(c => ({
+                          ...c,
+                          tags: c.skills || [],
+                        }))
+                      )}
                       className="cursor-pointer"
                     >
                       Export visible ({filteredCandidates.length})
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => exportCandidatesToCsv(
-                        (dbCandidates || []).map(c => ({
+                        (allFiltered || []).map((c: FilterableCandidate) => ({
                           id: c.id,
                           firstName: c.firstName,
                           lastName: c.lastName,
@@ -638,14 +332,14 @@ const TalentPool = () => {
                           title: c.title,
                           location: c.location,
                           source: c.source,
-                          tags: c.tags,
+                          tags: c.skills || [],
                           linkedinUrl: c.linkedinUrl,
                           createdAt: c.createdAt,
                         }))
                       )}
                       className="cursor-pointer"
                     >
-                      Export all ({dbCandidates?.length ?? 0})
+                      Export all ({allFiltered?.length ?? 0})
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -775,12 +469,12 @@ const TalentPool = () => {
             <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
               <span>
                 {hasActiveFilters
-                  ? `Showing ${filteredCandidates.length.toLocaleString()} of ${totalCandidates.toLocaleString()} candidates`
-                  : `${filteredCandidates.length.toLocaleString()} candidates`}
+                  ? `Showing ${filteredCandidates.length.toLocaleString()} of ${filteredTotal.toLocaleString()} candidates`
+                  : `${filteredTotal.toLocaleString()} candidates`}
               </span>
               <span className="text-border">•</span>
               <span>
-                {filteredCandidates.filter(c => c.pipelineAssociations.length > 0).length.toLocaleString()} in active pipelines
+                {(allFiltered || []).filter((c: FilterableCandidate) => c.pipelineAssociations?.length > 0).length.toLocaleString()} in active pipelines
               </span>
             </div>
           )}
@@ -789,7 +483,7 @@ const TalentPool = () => {
           <ActiveFiltersBar
             filters={filters}
             searchQuery={searchQuery}
-            totalResults={filteredCandidates.length}
+            totalResults={filteredTotal}
             totalCandidates={totalCandidates}
             onRemoveFilter={removeFilter}
             onClearAll={clearAllFilters}
@@ -864,6 +558,7 @@ const TalentPool = () => {
                 <TableVirtuoso
                   data={filteredCandidates}
                   className="w-full border-separate border-spacing-0 table-fixed"
+                  endReached={() => hasNextPage && !isFetchingNextPage && fetchNextPage()}
                   components={{
                     Table: ({ children, style, ...props }) => (
                       <table {...props} style={{ ...style, tableLayout: 'fixed' }} className="w-full border-separate border-spacing-0">

@@ -71,6 +71,27 @@ export type Database = {
           },
         ]
       }
+      campaign_folders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       campaign_recipients: {
         Row: {
           campaign_id: string
@@ -78,6 +99,7 @@ export type Database = {
           clicked_at: string | null
           created_at: string
           id: string
+          message_id: string | null
           opened_at: string | null
           responded_at: string | null
           sent_at: string | null
@@ -89,6 +111,7 @@ export type Database = {
           clicked_at?: string | null
           created_at?: string
           id?: string
+          message_id?: string | null
           opened_at?: string | null
           responded_at?: string | null
           sent_at?: string | null
@@ -100,6 +123,7 @@ export type Database = {
           clicked_at?: string | null
           created_at?: string
           id?: string
+          message_id?: string | null
           opened_at?: string | null
           responded_at?: string | null
           sent_at?: string | null
@@ -120,15 +144,27 @@ export type Database = {
             referencedRelation: "candidates"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "campaign_recipients_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates_enriched"
+            referencedColumns: ["id"]
+          },
         ]
       }
       campaigns: {
         Row: {
+          archived_at: string | null
           audience_filter: Json | null
           created_at: string
+          folder_id: string | null
           goal: string | null
           id: string
+          is_organization_campaign: boolean | null
+          job_id: string | null
           name: string
+          schedule_recurrence: Json | null
           scheduled_at: string | null
           status: string
           type: string
@@ -136,11 +172,16 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           audience_filter?: Json | null
           created_at?: string
+          folder_id?: string | null
           goal?: string | null
           id?: string
+          is_organization_campaign?: boolean | null
+          job_id?: string | null
           name: string
+          schedule_recurrence?: Json | null
           scheduled_at?: string | null
           status?: string
           type?: string
@@ -148,18 +189,92 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           audience_filter?: Json | null
           created_at?: string
+          folder_id?: string | null
           goal?: string | null
           id?: string
+          is_organization_campaign?: boolean | null
+          job_id?: string | null
           name?: string
+          schedule_recurrence?: Json | null
           scheduled_at?: string | null
           status?: string
           type?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      candidate_resumes: {
+        Row: {
+          candidate_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          is_primary: boolean
+          mime_type: string | null
+          uploaded_at: string
+          uploaded_by: string | null
+          version: number
+        }
+        Insert: {
+          candidate_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          is_primary?: boolean
+          mime_type?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          version?: number
+        }
+        Update: {
+          candidate_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          is_primary?: boolean
+          mime_type?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_resumes_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_resumes_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       candidates: {
         Row: {
@@ -174,6 +289,7 @@ export type Database = {
           linkedin_url: string | null
           location: string | null
           phone: string | null
+          search_vector: unknown
           source: string | null
           tags: string[] | null
           title: string | null
@@ -191,6 +307,8 @@ export type Database = {
           linkedin_url?: string | null
           location?: string | null
           phone?: string | null
+          /** Omitted on insert — maintained by DB trigger / generated column */
+          search_vector?: unknown
           source?: string | null
           tags?: string[] | null
           title?: string | null
@@ -208,6 +326,7 @@ export type Database = {
           linkedin_url?: string | null
           location?: string | null
           phone?: string | null
+          search_vector?: unknown
           source?: string | null
           tags?: string[] | null
           title?: string | null
@@ -217,33 +336,39 @@ export type Database = {
       }
       communications: {
         Row: {
+          campaign_recipient_id: string | null
           candidate_id: string
           content: string | null
           created_at: string
           created_by: string | null
           direction: string | null
+          external_message_id: string | null
           id: string
           occurred_at: string
           subject: string | null
           type: string
         }
         Insert: {
+          campaign_recipient_id?: string | null
           candidate_id: string
           content?: string | null
           created_at?: string
           created_by?: string | null
           direction?: string | null
+          external_message_id?: string | null
           id?: string
           occurred_at?: string
           subject?: string | null
           type: string
         }
         Update: {
+          campaign_recipient_id?: string | null
           candidate_id?: string
           content?: string | null
           created_at?: string
           created_by?: string | null
           direction?: string | null
+          external_message_id?: string | null
           id?: string
           occurred_at?: string
           subject?: string | null
@@ -251,10 +376,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "communications_campaign_recipient_id_fkey"
+            columns: ["campaign_recipient_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_recipients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "communications_candidate_id_fkey"
             columns: ["candidate_id"]
             isOneToOne: false
             referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates_enriched"
             referencedColumns: ["id"]
           },
         ]
@@ -304,6 +443,93 @@ export type Database = {
         }
         Relationships: []
       }
+      jobs: {
+        Row: {
+          created_at: string
+          department: string | null
+          description: string | null
+          id: string
+          last_updated: string | null
+          location: string | null
+          posted_date: string | null
+          req_id: string | null
+          slug: string | null
+          title: string
+          type: string | null
+          updated_at: string
+          url: string | null
+          view_url: string | null
+          webflow_item_id: string
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          description?: string | null
+          id?: string
+          last_updated?: string | null
+          location?: string | null
+          posted_date?: string | null
+          req_id?: string | null
+          slug?: string | null
+          title: string
+          type?: string | null
+          updated_at?: string
+          url?: string | null
+          view_url?: string | null
+          webflow_item_id: string
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          description?: string | null
+          id?: string
+          last_updated?: string | null
+          location?: string | null
+          posted_date?: string | null
+          req_id?: string | null
+          slug?: string | null
+          title?: string
+          type?: string | null
+          updated_at?: string
+          url?: string | null
+          view_url?: string | null
+          webflow_item_id?: string
+        }
+        Relationships: []
+      }
+      jobs_sync_logs: {
+        Row: {
+          completed_at: string | null
+          error_detail: string | null
+          error_message: string | null
+          id: string
+          jobs_fetched: number | null
+          jobs_upserted: number | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          error_detail?: string | null
+          error_message?: string | null
+          id?: string
+          jobs_fetched?: number | null
+          jobs_upserted?: number | null
+          started_at?: string
+          status: string
+        }
+        Update: {
+          completed_at?: string | null
+          error_detail?: string | null
+          error_message?: string | null
+          id?: string
+          jobs_fetched?: number | null
+          jobs_upserted?: number | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       notes: {
         Row: {
           candidate_id: string
@@ -337,7 +563,56 @@ export type Database = {
             referencedRelation: "candidates"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "notes_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates_enriched"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      organization_settings: {
+        Row: {
+          base_url: string | null
+          brand_name: string | null
+          career_site_base_url: string | null
+          company_name: string | null
+          created_at: string
+          id: string
+          updated_at: string
+          webflow_api_token: string | null
+          webflow_collection_id: string | null
+          webflow_job_field_mapping: Json | null
+          webflow_site_id: string | null
+        }
+        Insert: {
+          base_url?: string | null
+          brand_name?: string | null
+          career_site_base_url?: string | null
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+          webflow_api_token?: string | null
+          webflow_collection_id?: string | null
+          webflow_job_field_mapping?: Json | null
+          webflow_site_id?: string | null
+        }
+        Update: {
+          base_url?: string | null
+          brand_name?: string | null
+          career_site_base_url?: string | null
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+          webflow_api_token?: string | null
+          webflow_collection_id?: string | null
+          webflow_job_field_mapping?: Json | null
+          webflow_site_id?: string | null
+        }
+        Relationships: []
       }
       pipeline_candidates: {
         Row: {
@@ -370,6 +645,13 @@ export type Database = {
             columns: ["candidate_id"]
             isOneToOne: false
             referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_candidates_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates_enriched"
             referencedColumns: ["id"]
           },
           {
@@ -417,35 +699,111 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          company: string | null
           created_at: string
           email: string | null
           first_name: string | null
           id: string
           last_name: string | null
+          linkedin_url: string | null
+          phone: string | null
+          role: string | null
+          title: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           avatar_url?: string | null
+          company?: string | null
           created_at?: string
           email?: string | null
           first_name?: string | null
           id?: string
           last_name?: string | null
+          linkedin_url?: string | null
+          phone?: string | null
+          role?: string | null
+          title?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           avatar_url?: string | null
+          company?: string | null
           created_at?: string
           email?: string | null
           first_name?: string | null
           id?: string
           last_name?: string | null
+          linkedin_url?: string | null
+          phone?: string | null
+          role?: string | null
+          title?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      scheduled_emails: {
+        Row: {
+          campaign_email_id: string
+          campaign_id: string
+          campaign_recipient_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          recurrence: string | null
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          campaign_email_id: string
+          campaign_id: string
+          campaign_recipient_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          recurrence?: string | null
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          campaign_email_id?: string
+          campaign_id?: string
+          campaign_recipient_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          recurrence?: string | null
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_emails_campaign_email_id_fkey"
+            columns: ["campaign_email_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_emails"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_emails_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_emails_campaign_recipient_id_fkey"
+            columns: ["campaign_recipient_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_recipients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       talent_pool_candidates: {
         Row: {
@@ -472,6 +830,13 @@ export type Database = {
             columns: ["candidate_id"]
             isOneToOne: false
             referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "talent_pool_candidates_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates_enriched"
             referencedColumns: ["id"]
           },
           {
@@ -510,95 +875,127 @@ export type Database = {
         }
         Relationships: []
       }
-      jobs: {
-        Row: {
-          id: string
-          webflow_item_id: string
-          title: string
-          department: string | null
-          location: string | null
-          type: string | null
-          description: string | null
-          url: string | null
-          slug: string | null
-          req_id: string | null
-          view_url: string | null
-          posted_date: string | null
-          last_updated: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          webflow_item_id: string
-          title: string
-          department?: string | null
-          location?: string | null
-          type?: string | null
-          description?: string | null
-          url?: string | null
-          slug?: string | null
-          req_id?: string | null
-          view_url?: string | null
-          posted_date?: string | null
-          last_updated?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          webflow_item_id?: string
-          title?: string
-          department?: string | null
-          location?: string | null
-          type?: string | null
-          description?: string | null
-          url?: string | null
-          slug?: string | null
-          req_id?: string | null
-          view_url?: string | null
-          posted_date?: string | null
-          last_updated?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      jobs_sync_logs: {
-        Row: {
-          id: string
-          status: string
-          started_at: string
-          completed_at: string | null
-          jobs_fetched: number
-          jobs_upserted: number
-          error_message: string | null
-          error_detail: string | null
-        }
-        Insert: {
-          id?: string
-          status: string
-          started_at?: string
-          completed_at?: string | null
-          jobs_fetched?: number
-          jobs_upserted?: number
-          error_message?: string | null
-          error_detail?: string | null
-        }
-        Update: {
-          status?: string
-          completed_at?: string | null
-          jobs_fetched?: number
-          jobs_upserted?: number
-          error_message?: string | null
-          error_detail?: string | null
-        }
-        Relationships: []
-      }
     }
     Views: {
-      [_ in never]: never
+      candidates_enriched: {
+        Row: {
+          avatar_url: string | null
+          company: string | null
+          created_at: string | null
+          created_by: string | null
+          email: string | null
+          first_name: string | null
+          id: string | null
+          last_activity_at: string | null
+          last_contact_at: string | null
+          last_name: string | null
+          linkedin_url: string | null
+          location: string | null
+          phone: string | null
+          pipeline_associations: Json | null
+          source: string | null
+          tags: string[] | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string | null
+          last_activity_at?: never
+          last_contact_at?: never
+          last_name?: string | null
+          linkedin_url?: string | null
+          location?: string | null
+          phone?: string | null
+          pipeline_associations?: never
+          source?: string | null
+          tags?: string[] | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string | null
+          last_activity_at?: never
+          last_contact_at?: never
+          last_name?: string | null
+          linkedin_url?: string | null
+          location?: string | null
+          phone?: string | null
+          pipeline_associations?: never
+          source?: string | null
+          tags?: string[] | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      candidate_title_experience_tags: {
+        Args: { title: string }
+        Returns: string[]
+      }
+      get_candidate_duplicate_groups: { Args: never; Returns: Json }
+      search_candidates_enriched: {
+        Args: {
+          p_adv_company?: string
+          p_adv_date_added_from?: string
+          p_adv_date_added_to?: string
+          p_adv_email?: string
+          p_adv_last_contact_from?: string
+          p_adv_last_contact_to?: string
+          p_adv_location?: string
+          p_adv_name?: string
+          p_adv_phone?: string
+          p_adv_skills?: string[]
+          p_adv_title?: string
+          p_exclude_ids?: string[]
+          p_filter_companies?: string[]
+          p_filter_date_added_from?: string
+          p_filter_date_added_to?: string
+          p_filter_experience_levels?: string[]
+          p_filter_last_contact_from?: string
+          p_filter_last_contact_never?: boolean
+          p_filter_last_contact_to?: string
+          p_filter_locations?: string[]
+          p_filter_pipeline_stages?: string[]
+          p_filter_pipelines?: string[]
+          p_filter_skills?: string[]
+          p_filter_sources?: string[]
+          p_filter_talent_pool_names?: string[]
+          p_include_all_if_under?: number
+          p_limit?: number
+          p_offset?: number
+          p_scope_candidate_ids?: string[]
+          p_search?: string
+          p_sort?: string
+          p_use_websearch?: boolean
+        }
+        Returns: Json
+      }
+      search_pipelines_campaigns_fuzzy: {
+        Args: {
+          p_campaign_limit?: number
+          p_pipeline_limit?: number
+          p_query: string
+        }
+        Returns: Json
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+      trigger_jobs_sync: { Args: never; Returns: undefined }
+      trigger_process_scheduled_emails: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

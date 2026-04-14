@@ -50,15 +50,16 @@ import {
   Search,
   Loader2,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { usePipelineWithCandidates, usePipelines, useAddCandidateToPipeline, useAddCandidatesToPipeline, useRemoveCandidateFromPipeline, useUpdateCandidateStage } from '@/hooks/usePipelines';
-import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
 import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/useDebounce';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
-import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
+import { candidateService } from '@/services';
 import { Input } from '@/components/ui/input';
 import { useCreateNote } from '@/hooks/useCommunications';
 import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
+import { CANDIDATE_SEARCH_PLACEHOLDER, CANDIDATE_SEARCH_TOOLTIP } from '@/lib/candidateSearchHints';
 import type { Pipeline, PipelineStage } from '@/types/Pipeline';
 
 const CARD_LIMIT_PER_STAGE = 25;
@@ -72,19 +73,6 @@ interface CandidateInStage {
   stageId: string;
   movedAt: string;
   lastActivityAt: Date | null;
-}
-
-function toSearchable(c: CandidateInStage, full?: { firstName?: string; lastName?: string; email?: string; phone?: string; company?: string; title?: string; location?: string; tags?: string[] }): SearchableCandidate {
-  return {
-    firstName: full?.firstName ?? c.name.split(' ')[0] ?? '',
-    lastName: full?.lastName ?? c.name.split(' ').slice(1).join(' ') ?? '',
-    email: full?.email ?? '',
-    phone: full?.phone ?? '',
-    company: full?.company ?? c.company ?? '',
-    title: full?.title ?? c.title ?? '',
-    location: full?.location ?? '',
-    skills: full?.tags ?? [],
-  };
 }
 
 const PipelineDetail = ({ id }: { id: string }) => {
@@ -109,47 +97,58 @@ const PipelineDetail = ({ id }: { id: string }) => {
 
   const { data: pipeline, isLoading: pipelineLoading } = usePipelineWithCandidates(id || '');
   const { data: allPipelines = [] } = usePipelines('active');
-  const { data: allCandidates, isLoading: candidatesLoading } = useCandidatesWithEnrichment();
+  const pipelineCandidateIds = useMemo(
+    () => pipeline?.candidates?.map((pc) => pc.candidateId) ?? [],
+    [pipeline?.candidates]
+  );
+  const pipelineSearchLimit = Math.min(Math.max(pipelineCandidateIds.length, 1), 5000);
 
-  // Show loading until BOTH pipeline and candidates are loaded. Prevents "0 candidates" flash.
-  const isLoading =
-    pipelineLoading ||
-    candidatesLoading ||
-    !pipeline ||
-    allCandidates === undefined;
+  const { data: scopedSearchPage, isLoading: scopedSearchLoading } = useQuery({
+    queryKey: [
+      'candidates',
+      'search',
+      'pipeline',
+      id,
+      debouncedSearchQuery,
+      [...pipelineCandidateIds].sort().join(','),
+    ],
+    queryFn: () =>
+      candidateService.searchPaginated({
+        searchQuery: debouncedSearchQuery,
+        scopeCandidateIds: pipelineCandidateIds,
+        limit: pipelineSearchLimit,
+        offset: 0,
+      }),
+    enabled: !!pipeline,
+    staleTime: 60 * 1000,
+  });
+
+  const isLoading = pipelineLoading || scopedSearchLoading || !pipeline;
   const addCandidateToPipeline = useAddCandidateToPipeline();
   const addCandidatesToPipeline = useAddCandidatesToPipeline();
   const removeCandidateFromPipeline = useRemoveCandidateFromPipeline();
   const updateCandidateStage = useUpdateCandidateStage();
 
-  // Build candidates with full info (derived synchronously - no flash of empty state)
   const candidatesInStages = useMemo((): CandidateInStage[] => {
-    if (!pipeline?.candidates || !allCandidates) return [];
-    return pipeline.candidates.map(pc => {
-      const candidate = allCandidates.find(c => c.id === pc.candidateId);
-      return {
-        id: pc.candidateId,
-        candidateId: pc.candidateId,
-        name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
-        title: candidate?.title || '',
-        company: candidate?.company || '',
-        stageId: pc.stage,
-        movedAt: pc.addedAt.toISOString().split('T')[0],
-        lastActivityAt: candidate?.lastActivityAt ?? null,
-      };
-    });
-  }, [pipeline?.candidates, allCandidates]);
-
-  // Filter by search (full boolean syntax)
-  const filteredCandidatesInStages = useMemo(() => {
-    if (!debouncedSearchQuery.trim()) return candidatesInStages;
-    const matcher = parseBooleanSearch(debouncedSearchQuery.trim());
-    if (!matcher) return candidatesInStages;
-    return candidatesInStages.filter(c => {
-      const full = allCandidates?.find(ac => ac.id === c.candidateId);
-      return matcher(toSearchable(c, full));
-    });
-  }, [candidatesInStages, debouncedSearchQuery, allCandidates]);
+    if (!pipeline?.candidates) return [];
+    const rows = scopedSearchPage?.data ?? [];
+    const byId = new Map(rows.map((f) => [f.id, f]));
+    return pipeline.candidates
+      .filter((pc) => byId.has(pc.candidateId))
+      .map((pc) => {
+        const f = byId.get(pc.candidateId)!;
+        return {
+          id: pc.candidateId,
+          candidateId: pc.candidateId,
+          name: `${f.firstName} ${f.lastName}`.trim() || 'Unknown',
+          title: f.title || '',
+          company: f.company || '',
+          stageId: pc.stage,
+          movedAt: pc.addedAt.toISOString().split('T')[0],
+          lastActivityAt: f.lastActivityAt ?? null,
+        };
+      });
+  }, [pipeline?.candidates, scopedSearchPage?.data]);
 
   const toggleStageExpanded = (stageId: string) => {
     setExpandedStages(prev => {
@@ -204,10 +203,10 @@ const PipelineDetail = ({ id }: { id: string }) => {
   const stages = [...(pipeline.stages || [])].sort((a, b) => a.order - b.order);
 
   const getCandidatesInStage = (stageId: string) => {
-    return filteredCandidatesInStages.filter(c => c.stageId === stageId);
+    return candidatesInStages.filter(c => c.stageId === stageId);
   };
 
-  const totalCandidates = filteredCandidatesInStages.length;
+  const totalCandidates = candidatesInStages.length;
   const successStages = stages.filter(s => {
     const name = s.name?.toLowerCase() || '';
     return name.includes('submitted') && !name.includes('not a fit');
@@ -362,10 +361,10 @@ const PipelineDetail = ({ id }: { id: string }) => {
 
   const handleAddCandidates = async (candidateIds: string[]) => {
     const firstStageId = stages[0]?.id;
-    if (!firstStageId || !allCandidates) return;
+    if (!firstStageId || !pipeline?.candidates) return;
 
     // De-duplicate: skip candidates already in the pipeline (handles race conditions)
-    const existingIds = new Set(candidatesInStages.map(c => c.candidateId));
+    const existingIds = new Set(pipeline.candidates.map((pc) => pc.candidateId));
     const toAdd = candidateIds.filter(cid => !existingIds.has(cid));
 
     if (toAdd.length === 0) {
@@ -400,10 +399,14 @@ const PipelineDetail = ({ id }: { id: string }) => {
     );
   };
 
-  const handleExport = () => {
-    if (!pipeline?.candidates || !allCandidates) return;
+  const handleExport = async () => {
+    if (!pipeline?.candidates) return;
+    const enriched = await candidateService.getEnrichedByIds(
+      pipeline.candidates.map((pc) => pc.candidateId)
+    );
+    const byId = new Map(enriched.map((c) => [c.id, c]));
     const toExport = pipeline.candidates
-      .map(pc => allCandidates.find(c => c.id === pc.candidateId))
+      .map((pc) => byId.get(pc.candidateId))
       .filter((c): c is NonNullable<typeof c> => !!c)
       .map(c => ({
         id: c.id,
@@ -480,11 +483,11 @@ const PipelineDetail = ({ id }: { id: string }) => {
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search candidates..."
+                    title={CANDIDATE_SEARCH_TOOLTIP}
+                    placeholder={CANDIDATE_SEARCH_PLACEHOLDER}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-8 h-9 border-border bg-card"
-                    title="Supports AND, OR, NOT and quoted phrases"
                   />
                 </div>
               </div>
@@ -758,7 +761,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
         open={addCandidatesOpen}
         onOpenChange={setAddCandidatesOpen}
         pipelineName={pipeline.name}
-        existingCandidateIds={candidatesInStages.map(c => c.candidateId)}
+        existingCandidateIds={pipeline?.candidates?.map((pc) => pc.candidateId) ?? []}
         onAddCandidates={handleAddCandidates}
       />
 

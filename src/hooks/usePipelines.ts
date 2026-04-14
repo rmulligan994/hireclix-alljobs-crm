@@ -139,6 +139,7 @@ export const useAddCandidatesToPipeline = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pipelines'] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'search'] });
       queryClient.invalidateQueries({ queryKey: ['myActivity'] });
       toast.success(`${variables.candidateIds.length} candidate${variables.candidateIds.length !== 1 ? 's' : ''} added to pipeline`);
     },
@@ -157,6 +158,7 @@ export const useAddCandidateToPipeline = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pipelines', variables.pipelineId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'search'] });
       queryClient.invalidateQueries({ queryKey: ['myActivity'] });
       toast.success('Candidate added to pipeline');
     },
@@ -175,6 +177,7 @@ export const useRemoveCandidateFromPipeline = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pipelines', variables.pipelineId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'search'] });
       toast.success('Candidate removed from pipeline');
     },
     onError: (error: Error) => {

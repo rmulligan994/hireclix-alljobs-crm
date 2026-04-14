@@ -12,7 +12,12 @@ import type {
   ScheduleRecurrence
 } from '@/types/Campaign';
 import { getLeadUsageStatus } from '@/utils/leadUsage';
-import type { Json } from '@/integrations/supabase/types';
+import type { Database, Json } from '@/integrations/supabase/types';
+
+type CampaignsInsert = Database['public']['Tables']['campaigns']['Insert'];
+type CampaignsUpdate = Database['public']['Tables']['campaigns']['Update'];
+type CampaignRow = Database['public']['Tables']['campaigns']['Row'];
+type CampaignEmailsUpdate = Database['public']['Tables']['campaign_emails']['Update'];
 
 // Helper to convert AudienceFilter to Json
 const audienceFilterToJson = (filter?: AudienceFilter): Json => {
@@ -26,6 +31,33 @@ const jsonToAudienceFilter = (json: Json): AudienceFilter => {
   return json as unknown as AudienceFilter;
 };
 
+function scheduleRecurrenceFromJson(j: Json | null | undefined): ScheduleRecurrence | null {
+  if (j == null || typeof j !== 'object' || Array.isArray(j)) return null;
+  const o = j as Record<string, unknown>;
+  if (typeof o.type !== 'string') return null;
+  return o as unknown as ScheduleRecurrence;
+}
+
+function mapCampaignRow(c: CampaignRow): Campaign {
+  return {
+    id: c.id,
+    user_id: c.user_id,
+    name: c.name,
+    type: c.type,
+    status: c.status as Campaign['status'],
+    goal: c.goal,
+    audience_filter: jsonToAudienceFilter(c.audience_filter),
+    scheduled_at: c.scheduled_at,
+    schedule_recurrence: scheduleRecurrenceFromJson(c.schedule_recurrence),
+    job_id: c.job_id,
+    folder_id: c.folder_id,
+    is_organization_campaign: c.is_organization_campaign ?? undefined,
+    archived_at: c.archived_at,
+    created_at: c.created_at,
+    updated_at: c.updated_at,
+  };
+}
+
 export const campaignService = {
   // Campaign CRUD
   async getAll(): Promise<Campaign[]> {
@@ -35,11 +67,7 @@ export const campaignService = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(c => ({
-      ...c,
-      status: c.status as Campaign['status'],
-      audience_filter: jsonToAudienceFilter(c.audience_filter)
-    }));
+    return (data || []).map(mapCampaignRow);
   },
 
   async getById(id: string): Promise<Campaign | null> {
@@ -53,30 +81,26 @@ export const campaignService = {
       if (error.code === 'PGRST116') return null;
       throw error;
     }
-    return data ? {
-      ...data,
-      status: data.status as Campaign['status'],
-      audience_filter: jsonToAudienceFilter(data.audience_filter)
-    } : null;
+    return data ? mapCampaignRow(data) : null;
   },
 
   async create(input: CreateCampaignInput): Promise<Campaign> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
-    const insertData: Record<string, unknown> = {
+    const insertData: CampaignsInsert = {
       user_id: user.id,
       name: input.name,
       type: input.type || 'email',
-      goal: input.goal,
+      goal: input.goal ?? null,
       audience_filter: audienceFilterToJson(input.audience_filter),
-      scheduled_at: input.scheduled_at,
+      scheduled_at: input.scheduled_at ?? null,
       job_id: input.job_id ?? null,
       folder_id: input.folder_id ?? null,
       is_organization_campaign: input.is_organization_campaign ?? false,
     };
     if (input.schedule_recurrence !== undefined) {
-      insertData.schedule_recurrence = input.schedule_recurrence as import('@/integrations/supabase/types').Json;
+      insertData.schedule_recurrence = input.schedule_recurrence as Json;
     }
     const { data, error } = await supabase
       .from('campaigns')
@@ -85,22 +109,18 @@ export const campaignService = {
       .single();
 
     if (error) throw error;
-    return {
-      ...data,
-      status: data.status as Campaign['status'],
-      audience_filter: jsonToAudienceFilter(data.audience_filter)
-    };
+    return mapCampaignRow(data);
   },
 
   async update(id: string, input: UpdateCampaignInput): Promise<Campaign> {
-    const updateData: Record<string, unknown> = {};
+    const updateData: CampaignsUpdate = {};
     if (input.name !== undefined) updateData.name = input.name;
     if (input.type !== undefined) updateData.type = input.type;
     if (input.status !== undefined) updateData.status = input.status;
     if (input.goal !== undefined) updateData.goal = input.goal;
     if (input.audience_filter !== undefined) updateData.audience_filter = audienceFilterToJson(input.audience_filter);
     if (input.scheduled_at !== undefined) updateData.scheduled_at = input.scheduled_at;
-    if (input.schedule_recurrence !== undefined) updateData.schedule_recurrence = input.schedule_recurrence as import('@/integrations/supabase/types').Json ?? null;
+    if (input.schedule_recurrence !== undefined) updateData.schedule_recurrence = (input.schedule_recurrence as Json) ?? null;
     if (input.job_id !== undefined) updateData.job_id = input.job_id;
     if (input.folder_id !== undefined) updateData.folder_id = input.folder_id;
     if (input.is_organization_campaign !== undefined) updateData.is_organization_campaign = input.is_organization_campaign;
@@ -114,11 +134,7 @@ export const campaignService = {
       .single();
 
     if (error) throw error;
-    return {
-      ...data,
-      status: data.status as Campaign['status'],
-      audience_filter: jsonToAudienceFilter(data.audience_filter)
-    };
+    return mapCampaignRow(data);
   },
 
   async delete(id: string): Promise<void> {
@@ -169,7 +185,7 @@ export const campaignService = {
   },
 
   async updateEmail(id: string, input: UpdateCampaignEmailInput): Promise<CampaignEmail> {
-    const updateData: Record<string, unknown> = {};
+    const updateData: CampaignEmailsUpdate = {};
     if (input.step_order !== undefined) updateData.step_order = input.step_order;
     if (input.delay_days !== undefined) updateData.delay_days = input.delay_days;
     if (input.delay_hours !== undefined) updateData.delay_hours = input.delay_hours;
@@ -251,10 +267,11 @@ export const campaignService = {
     const allCandidateIds = new Set<string>();
 
     if (hasPool) {
+      const poolIds = filter.talentPoolIds as string[];
       const { data: poolCandidates } = await supabase
         .from('talent_pool_candidates')
         .select('candidate_id')
-        .in('talent_pool_id', filter.talentPoolIds);
+        .in('talent_pool_id', poolIds);
       
       if (poolCandidates && poolCandidates.length > 0) {
         poolCandidates.forEach((pc: { candidate_id: string }) => allCandidateIds.add(pc.candidate_id));
@@ -265,10 +282,11 @@ export const campaignService = {
     }
 
     if (hasPipeline) {
+      const pipelineIds = filter.pipelineIds as string[];
       const { data: pipelineCandidates } = await supabase
         .from('pipeline_candidates')
         .select('candidate_id')
-        .in('pipeline_id', filter.pipelineIds);
+        .in('pipeline_id', pipelineIds);
       
       if (pipelineCandidates && pipelineCandidates.length > 0) {
         pipelineCandidates.forEach((pc: { candidate_id: string }) => allCandidateIds.add(pc.candidate_id));
@@ -279,7 +297,10 @@ export const campaignService = {
 
     if (allCandidateIds.size === 0) return [];
 
-    let query = (supabase as any).from('candidates_enriched').select('id, first_name, last_name, email, last_activity_at').in('id', Array.from(allCandidateIds));
+    let query = supabase
+      .from('candidates_enriched')
+      .select('id, first_name, last_name, email, last_activity_at')
+      .in('id', Array.from(allCandidateIds));
 
     // Filter by tags
     if (filter.tags && filter.tags.length > 0) {
@@ -330,11 +351,7 @@ export const campaignService = {
       .is('archived_at', null)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map(c => ({
-      ...c,
-      status: c.status as Campaign['status'],
-      audience_filter: jsonToAudienceFilter(c.audience_filter)
-    }));
+    return (data || []).map(mapCampaignRow);
   },
 
   async getOrgCampaigns(): Promise<Campaign[]> {
@@ -345,11 +362,7 @@ export const campaignService = {
       .is('archived_at', null)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map(c => ({
-      ...c,
-      status: c.status as Campaign['status'],
-      audience_filter: jsonToAudienceFilter(c.audience_filter)
-    }));
+    return (data || []).map(mapCampaignRow);
   },
 
   async getArchivedCampaigns(): Promise<Campaign[]> {
@@ -362,27 +375,25 @@ export const campaignService = {
       .not('archived_at', 'is', null)
       .order('archived_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map(c => ({
-      ...c,
-      status: c.status as Campaign['status'],
-      audience_filter: jsonToAudienceFilter(c.audience_filter)
-    }));
+    return (data || []).map(mapCampaignRow);
   },
 
-  async getScheduledEmails(): Promise<Array<{
-    id: string;
-    campaign_id: string;
-    campaign_email_id: string;
-    campaign_name: string;
-    campaign_email_subject: string;
-    step_order: number;
-    total_steps: number;
-    schedule_label: string | null;
-    scheduled_at: string;
-    scheduled_date: string;
-    recipient_count: number;
-    source?: 'scheduled_emails' | 'campaign';
-  }>> {
+  async getScheduledEmails(): Promise<
+    Array<{
+      id: string;
+      campaign_id: string;
+      campaign_email_id: string;
+      campaign_name: string;
+      campaign_email_subject: string;
+      step_order: number;
+      total_steps: number;
+      schedule_label: string | null;
+      scheduled_at: string;
+      scheduled_date: string;
+      recipient_count: number;
+      source: 'scheduled_emails' | 'campaign';
+    }>
+  > {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
@@ -435,7 +446,9 @@ export const campaignService = {
       const datePart = (row.scheduled_at as string).slice(0, 10);
       const key = `${row.campaign_id}-${row.campaign_email_id}-${datePart}`;
       const existing = grouped.get(key);
-      const rec = (row.campaigns as { schedule_recurrence?: ScheduleRecurrence })?.schedule_recurrence ?? null;
+      const rec = scheduleRecurrenceFromJson(
+        (row.campaigns as { schedule_recurrence?: Json } | null)?.schedule_recurrence
+      );
       if (existing) {
         existing.count++;
         if (row.scheduled_at < existing.scheduled_at) existing.scheduled_at = row.scheduled_at;
@@ -454,12 +467,31 @@ export const campaignService = {
         });
       }
     }
-    let result = Array.from(grouped.values()).map(g => ({
-      ...g,
+    const result: Array<{
+      id: string;
+      campaign_id: string;
+      campaign_email_id: string;
+      campaign_name: string;
+      campaign_email_subject: string;
+      step_order: number;
+      total_steps: number;
+      schedule_label: string | null;
+      scheduled_at: string;
+      scheduled_date: string;
+      recipient_count: number;
+      source: 'scheduled_emails' | 'campaign';
+    }> = Array.from(grouped.values()).map((g) => ({
+      id: g.id,
+      campaign_id: g.campaign_id,
+      campaign_email_id: g.campaign_email_id,
+      campaign_name: g.campaign_name,
       campaign_email_subject: g.subject,
-      recipient_count: g.count,
+      step_order: g.step_order,
       total_steps: totalByCampaign.get(g.campaign_id) ?? 1,
       schedule_label: formatScheduleLabel(g.schedule_recurrence),
+      scheduled_at: g.scheduled_at,
+      scheduled_date: g.scheduled_date,
+      recipient_count: g.count,
       source: 'scheduled_emails' as const,
     }));
 
@@ -494,7 +526,7 @@ export const campaignService = {
           campaign_email_subject: firstEmail?.subject ?? 'First email',
           step_order: 1,
           total_steps: 1,
-          schedule_label: formatScheduleLabel(c.schedule_recurrence as ScheduleRecurrence),
+          schedule_label: formatScheduleLabel(scheduleRecurrenceFromJson(c.schedule_recurrence)),
           scheduled_at: c.scheduled_at!,
           scheduled_date: c.scheduled_at!.slice(0, 10),
           recipient_count: count ?? 0,

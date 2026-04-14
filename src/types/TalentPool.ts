@@ -20,7 +20,7 @@ export interface CreateTalentPoolData {
   description?: string;
 }
 
-export interface UpdateTalentPoolData extends Partial<CreateTalentPoolData> {}
+export type UpdateTalentPoolData = Partial<CreateTalentPoolData>;
 
 export interface TalentPoolCandidate {
   id: string;

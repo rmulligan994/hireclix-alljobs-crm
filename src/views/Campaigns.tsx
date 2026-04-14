@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { AICopilot } from '@/components/dashboard/AICopilot';
@@ -41,6 +42,8 @@ const SORT_OPTIONS = [
 ] as const;
 
 const Campaigns = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
@@ -59,6 +62,20 @@ const Campaigns = () => {
   const [duplicatingCampaignId, setDuplicatingCampaignId] = useState<string | null>(null);
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
   const { data: campaignForView, isLoading: loadingCampaignForView } = useCampaign(viewCampaignId || '');
+
+  const handledOpenQueryRef = useRef<string | null>(null);
+  useEffect(() => {
+    const openId = searchParams.get('open');
+    if (!openId) {
+      handledOpenQueryRef.current = null;
+      return;
+    }
+    if (handledOpenQueryRef.current === openId) return;
+    handledOpenQueryRef.current = openId;
+    setViewCampaignId(openId);
+    setShowCampaignBuilder(true);
+    router.replace('/campaigns', { scroll: false });
+  }, [searchParams, router]);
 
   const { data: myCampaigns, isLoading: loadingMy, refetch: refetchMy } = useMyCampaigns();
   const { data: orgCampaigns, isLoading: loadingOrg, refetch: refetchOrg } = useOrgCampaigns();
@@ -87,7 +104,7 @@ const Campaigns = () => {
   const campaignIds = useMemo(() => campaigns?.map(c => c.id) || [], [campaigns]);
   const { statsMap } = useAllCampaignsStats(campaignIds);
 
-  let filteredCampaigns = campaigns?.filter(campaign => {
+  const filteredCampaigns = campaigns?.filter(campaign => {
     if (activeTab !== 'all' && campaign.status !== activeTab) return false;
     if (typeFilter !== 'all' && campaign.type !== typeFilter) return false;
     if (selectedFolderId === 'uncategorized' && campaign.folder_id) return false;

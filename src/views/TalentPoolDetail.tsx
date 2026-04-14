@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
@@ -58,14 +58,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useCreateNote } from '@/hooks/useCommunications';
 import { exportCandidatesToCsv } from '@/utils/exportCandidates';
 import { useTalentPoolWithCandidates, useRemoveCandidateFromPool, useRemoveCandidatesFromPool, useAddCandidatesToPool, useDeleteTalentPool } from '@/hooks/useTalentPools';
-import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
-import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
+import { useCandidatesEnrichedByIds, useCandidatesSearch } from '@/hooks/useCandidates';
+import { useDebounce } from '@/hooks/useDebounce';
 import {
   CandidateFiltersPanel,
   type CandidateFilters,
   type FilterOption,
 } from '@/components/candidates/search';
 import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
+import { CANDIDATE_SEARCH_PLACEHOLDER, CANDIDATE_SEARCH_TOOLTIP } from '@/lib/candidateSearchHints';
 
 interface PoolCandidate {
   id: string;
@@ -111,7 +112,22 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   const [poolCandidates, setPoolCandidates] = useState<PoolCandidate[]>([]);
 
   const { data: pool, isLoading } = useTalentPoolWithCandidates(id || '');
-  const { data: allCandidates } = useCandidatesWithEnrichment();
+  const poolCandidateIds = useMemo(
+    () => pool?.candidates?.map((pc) => pc.candidateId) ?? [],
+    [pool?.candidates]
+  );
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const { data: searchRows = [], isLoading: searchLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useCandidatesSearch(
+      {
+        searchQuery: debouncedSearchQuery,
+        filters,
+        sortOption: 'recently_added',
+        scopeCandidateIds: poolCandidateIds,
+      },
+      { pageSize: 50 }
+    );
+  const { data: allCandidates = [] } = useCandidatesEnrichedByIds(poolCandidateIds);
   const removeCandidateFromPool = useRemoveCandidateFromPool();
   const removeCandidatesFromPool = useRemoveCandidatesFromPool();
   const addCandidatesToPool = useAddCandidatesToPool();
@@ -131,7 +147,11 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
           location: candidate?.location || '',
           source: candidate?.source || '',
           tags: candidate?.tags || [],
-          pipelines: [],
+          pipelines: (candidate?.pipelineAssociations || []).map(p => ({
+            id: p.id,
+            name: p.name,
+            stage: p.stage,
+          })),
           dateAdded: pc.addedAt.toISOString().split('T')[0],
           lastActivityAt: candidate?.lastActivityAt ?? null,
         };
@@ -139,6 +159,31 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
       setPoolCandidates(candidatesWithInfo);
     }
   }, [pool, allCandidates]);
+
+  const poolMetaById = useMemo(() => {
+    const m = new Map<string, PoolCandidate>();
+    poolCandidates.forEach((c) => m.set(c.id, c));
+    return m;
+  }, [poolCandidates]);
+
+  const filteredCandidates = useMemo((): PoolCandidate[] => {
+    return searchRows.map((f) => {
+      const meta = poolMetaById.get(f.id);
+      return {
+        id: f.id,
+        candidateId: f.id,
+        name: `${f.firstName} ${f.lastName}`.trim() || 'Unknown',
+        title: f.title,
+        company: f.company,
+        location: f.location,
+        source: f.source,
+        tags: f.skills,
+        pipelines: f.pipelineAssociations.map((p) => ({ id: p.id, name: p.name, stage: p.stage })),
+        dateAdded: meta?.dateAdded ?? new Date(f.createdAt).toISOString().split('T')[0],
+        lastActivityAt: f.lastActivityAt,
+      };
+    });
+  }, [searchRows, poolMetaById]);
 
   if (isLoading) {
     return (
@@ -171,64 +216,6 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
       </div>
     );
   }
-
-  // Map PoolCandidate to SearchableCandidate for boolean search
-  const toSearchable = (c: PoolCandidate): SearchableCandidate => ({
-    firstName: c.name.split(' ')[0] || '',
-    lastName: c.name.split(' ').slice(1).join(' ') || '',
-    email: '',
-    phone: '',
-    company: c.company,
-    title: c.title,
-    location: c.location,
-    skills: c.tags,
-  });
-
-  const filteredCandidates = (() => {
-    let results = [...poolCandidates];
-
-    // Apply boolean search (supports "phrases", AND, OR, NOT, (grouping))
-    if (searchQuery.trim()) {
-      const matcher = parseBooleanSearch(searchQuery.trim());
-      if (matcher) {
-        results = results.filter((c) => matcher(toSearchable(c)));
-      } else {
-        const q = searchQuery.toLowerCase();
-        results = results.filter(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            c.title.toLowerCase().includes(q) ||
-            c.company.toLowerCase().includes(q) ||
-            c.location.toLowerCase().includes(q) ||
-            c.tags.some((tag) => tag.toLowerCase().includes(q))
-        );
-      }
-    }
-
-    // Apply filters
-    if (filters.skills.length > 0) {
-      results = results.filter((c) =>
-        filters.skills.some((skill) => c.tags.includes(skill))
-      );
-    }
-    if (filters.locations.length > 0) {
-      results = results.filter((c) =>
-        filters.locations.includes(c.location || '')
-      );
-    }
-    if (filters.companies.length > 0) {
-      results = results.filter((c) =>
-        filters.companies.includes(c.company || '')
-      );
-    }
-    if (filters.sources.length > 0) {
-      results = results.filter((c) =>
-        filters.sources.includes(c.source || '')
-      );
-    }
-
-    return results;
-  })();
 
   const filterOptions = (() => {
     const skillCounts = new Map<string, number>();
@@ -277,8 +264,6 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   };
 
   const handleAddCandidates = async (candidateIds: string[]) => {
-    if (!allCandidates) return;
-    
     try {
       await addCandidatesToPool.mutateAsync({
         poolId: id || '',
@@ -297,8 +282,13 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
           location: fullCandidate?.location || '',
           source: fullCandidate?.source || '',
           tags: fullCandidate?.tags || [],
-          pipelines: [],
+          pipelines: (fullCandidate?.pipelineAssociations || []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            stage: p.stage,
+          })),
           dateAdded: new Date().toISOString().split('T')[0],
+          lastActivityAt: fullCandidate?.lastActivityAt ?? null,
         };
       });
       setPoolCandidates(prev => [...prev, ...candidatesToAdd]);
@@ -498,7 +488,8 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder='Search... Use "phrases", AND, OR, NOT, (grouping)'
+                  title={CANDIDATE_SEARCH_TOOLTIP}
+                  placeholder={CANDIDATE_SEARCH_PLACEHOLDER}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 border-border focus:border-sky-blue"
@@ -548,6 +539,9 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
               <div className="h-[calc(100vh-420px)] min-h-[400px]" style={{ borderCollapse: 'separate' }}>
                 <TableVirtuoso
                   data={filteredCandidates}
+                  endReached={() => {
+                    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+                  }}
                   className="w-full border-separate border-spacing-0 table-fixed"
                   components={{
                     Table: ({ children, style, ...props }) => (

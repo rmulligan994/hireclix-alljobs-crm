@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { CandidateFilters } from './CandidateFiltersPanel';
+import type { CandidateFilters } from '@/lib/candidateSearch';
 import type { AdvancedSearchFields } from './AdvancedSearchPanel';
 import type { SortOption } from './SortDropdown';
 

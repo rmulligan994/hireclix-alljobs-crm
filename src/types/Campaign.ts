@@ -12,9 +12,10 @@ export interface Campaign {
   name: string;
   type: string;
   status: 'draft' | 'scheduled' | 'active' | 'paused' | 'completed';
-  goal?: string;
+  /** DB uses null for empty */
+  goal?: string | null;
   audience_filter?: AudienceFilter;
-  scheduled_at?: string;
+  scheduled_at?: string | null;
   schedule_recurrence?: ScheduleRecurrence | null;
   job_id?: string | null;
   folder_id?: string | null;
@@ -51,8 +52,8 @@ export interface CampaignEmail {
   delay_hours: number;
   subject: string;
   bee_json?: Record<string, unknown>;
-  html_content?: string;
-  email_template_id?: string;
+  html_content?: string | null;
+  email_template_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,10 +63,11 @@ export interface CampaignRecipient {
   campaign_id: string;
   candidate_id: string;
   status: 'pending' | 'scheduled' | 'sent' | 'opened' | 'clicked' | 'responded' | 'bounced' | 'complained' | 'unsubscribed' | 'failed' | 'rejected';
-  sent_at?: string;
-  opened_at?: string;
-  clicked_at?: string;
-  responded_at?: string;
+  message_id?: string | null;
+  sent_at?: string | null;
+  opened_at?: string | null;
+  clicked_at?: string | null;
+  responded_at?: string | null;
   created_at: string;
 }
 

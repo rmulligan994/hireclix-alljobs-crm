@@ -50,4 +50,4 @@ export interface CreateCandidateData {
   avatarUrl?: string;
 }
 
-export interface UpdateCandidateData extends Partial<CreateCandidateData> {}
+export type UpdateCandidateData = Partial<CreateCandidateData>;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import BeefreeSDK from '@beefree.io/sdk';
+import type { IBeeConfig } from '@beefree.io/sdk/dist/types/bee';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -185,8 +186,13 @@ export const BeefreeEmailEditor = ({
         // Initialize BeeFree SDK with token in constructor
         const bee = new BeefreeSDK(data);
 
-        // Config for the editor
-        const beeConfig: Record<string, unknown> = {
+        // Extra Beefree runtime options not always present in published typings
+        type BeeConfig = IBeeConfig & {
+          showSave?: boolean;
+          disableLinkSanitize?: boolean;
+        };
+
+        const beeConfig: BeeConfig = {
           uid: 'user-' + Date.now(),
           container: 'bee-plugin-container',
           language: 'en-US',
@@ -212,11 +218,9 @@ export const BeefreeEmailEditor = ({
               setIsLoading(false);
             }
           },
+          showSave: false,
         };
-        // Hide Beefree's built-in save button - we use our own "Save Template" in the toolbar
-        (beeConfig as Record<string, unknown>).showSave = false;
 
-        // Start the editor
         await bee.start(beeConfig, initialTemplate || defaultTemplate);
         
         if (isMounted) {

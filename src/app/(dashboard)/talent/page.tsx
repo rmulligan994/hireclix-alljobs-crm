@@ -1,5 +1,10 @@
-import TalentPool from "@/views/TalentPool";
+import { Suspense } from 'react';
+import TalentPool from '@/views/TalentPool';
 
 export default function TalentPage() {
-  return <TalentPool />;
+  return (
+    <Suspense fallback={null}>
+      <TalentPool />
+    </Suspense>
+  );
 }

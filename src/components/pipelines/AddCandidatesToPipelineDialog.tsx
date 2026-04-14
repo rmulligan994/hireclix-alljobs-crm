@@ -12,10 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, UserPlus, User, Building, MapPin } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
-import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
+import { useCandidatesSearch } from '@/hooks/useCandidates';
 import { useDebounce } from '@/hooks/useDebounce';
 import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
-import { parseBooleanSearch } from '@/utils/booleanSearchParser';
+import { CANDIDATE_SEARCH_PLACEHOLDER, CANDIDATE_SEARCH_TOOLTIP } from '@/lib/candidateSearchHints';
 
 interface AddCandidatesToPipelineDialogProps {
   open: boolean;
@@ -36,45 +36,13 @@ export function AddCandidatesToPipelineDialog({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const { data: candidates, isLoading } = useCandidatesWithEnrichment();
-
-  const availableCandidates = (candidates || []).filter(
-    c => !existingCandidateIds.includes(c.id)
+  const { data: filteredCandidates, isLoading } = useCandidatesSearch(
+    {
+      searchQuery: debouncedSearchQuery,
+      excludeIds: existingCandidateIds,
+    },
+    { limit: 500 }
   );
-
-  const filteredCandidates = useMemo(() => {
-    let results = [...availableCandidates];
-
-    if (debouncedSearchQuery.trim()) {
-      const matcher = parseBooleanSearch(debouncedSearchQuery.trim());
-      if (matcher) {
-        results = results.filter(c =>
-          matcher({
-            firstName: c.firstName || '',
-            lastName: c.lastName || '',
-            email: c.email || '',
-            phone: c.phone || '',
-            company: c.company || '',
-            title: c.title || '',
-            location: c.location || '',
-            skills: c.tags || [],
-          })
-        );
-      } else {
-        const q = debouncedSearchQuery.toLowerCase();
-        results = results.filter(
-          c =>
-            `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase().includes(q) ||
-            (c.title || '').toLowerCase().includes(q) ||
-            (c.company || '').toLowerCase().includes(q) ||
-            (c.location || '').toLowerCase().includes(q) ||
-            (c.tags || []).some(s => s.toLowerCase().includes(q))
-        );
-      }
-    }
-
-    return results;
-  }, [availableCandidates, debouncedSearchQuery]);
 
   const handleToggleCandidate = (id: string) => {
     setSelectedIds(prev =>
@@ -122,7 +90,8 @@ export function AddCandidatesToPipelineDialog({
         <div className="relative shrink-0">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder='Search... Use "phrases", AND, OR, NOT, (grouping)'
+            title={CANDIDATE_SEARCH_TOOLTIP}
+            placeholder={CANDIDATE_SEARCH_PLACEHOLDER}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 border-border focus:border-sky-blue"
@@ -182,7 +151,7 @@ export function AddCandidatesToPipelineDialog({
           ) : filteredCandidates.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">
-                {availableCandidates.length === 0
+                {!searchQuery.trim()
                   ? 'All candidates are already in this pipeline'
                   : 'No candidates found matching your search'}
               </p>
@@ -234,9 +203,9 @@ export function AddCandidatesToPipelineDialog({
                           </span>
                         )}
                       </div>
-                      {candidate.tags && candidate.tags.length > 0 && (
+                      {candidate.skills && candidate.skills.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {candidate.tags.slice(0, 5).map((skill) => (
+                          {candidate.skills.slice(0, 5).map((skill) => (
                             <Badge key={skill} variant="secondary" className="text-xs">
                               {skill}
                             </Badge>

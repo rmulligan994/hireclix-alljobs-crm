@@ -12,6 +12,7 @@
  */
 
 export { candidateService } from './candidateService';
+export { searchGlobalSuggestions, SUGGESTION_MIN_CHARS, type GlobalSearchResults } from './globalSearchService';
 export { resumeService } from './resumeService';
 export { pipelineService } from './pipelineService';
 export {

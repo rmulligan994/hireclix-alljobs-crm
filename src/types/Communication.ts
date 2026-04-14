@@ -22,4 +22,4 @@ export interface CreateCommunicationData {
   occurredAt?: Date;
 }
 
-export interface UpdateCommunicationData extends Partial<Omit<CreateCommunicationData, 'candidateId'>> {}
+export type UpdateCommunicationData = Partial<Omit<CreateCommunicationData, 'candidateId'>>;

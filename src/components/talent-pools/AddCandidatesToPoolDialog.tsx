@@ -14,10 +14,10 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, UserPlus, User, Building, MapPin, Filter } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
-import { useCandidatesWithEnrichment } from '@/hooks/useCandidates';
+import { useCandidatesSearch } from '@/hooks/useCandidates';
 import { useDebounce } from '@/hooks/useDebounce';
 import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
-import { parseBooleanSearch, type SearchableCandidate } from '@/utils/booleanSearchParser';
+import { CANDIDATE_SEARCH_PLACEHOLDER, CANDIDATE_SEARCH_TOOLTIP } from '@/lib/candidateSearchHints';
 import {
   CandidateFiltersPanel,
   type CandidateFilters,
@@ -56,32 +56,29 @@ export const AddCandidatesToPoolDialog = ({
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const { data: candidates, isLoading } = useCandidatesWithEnrichment();
-
-  const availableCandidates = (candidates || []).filter(
-    (c) => !existingCandidateIds.includes(c.id)
+  const {
+    data: filteredCandidates,
+    allFiltered,
+    isLoading,
+  } = useCandidatesSearch(
+    {
+      searchQuery: debouncedSearchQuery,
+      filters,
+      excludeIds: existingCandidateIds,
+    },
+    { limit: 500 }
   );
 
-  const toSearchable = (c: (typeof availableCandidates)[0]): SearchableCandidate => ({
-    firstName: c.firstName || '',
-    lastName: c.lastName || '',
-    email: c.email || '',
-    phone: c.phone || '',
-    company: c.company || '',
-    title: c.title || '',
-    location: c.location || '',
-    skills: c.tags || [],
-  });
-
   const filterOptions = useMemo(() => {
+    const candidates = (allFiltered || filteredCandidates) as Array<{ skills?: string[]; location?: string; company?: string; source?: string; pipelineAssociations?: { name: string; stage: string }[] }>;
     const skillCounts = new Map<string, number>();
     const locationCounts = new Map<string, number>();
     const companyCounts = new Map<string, number>();
     const sourceCounts = new Map<string, number>();
     const pipelineCounts = new Map<string, number>();
     const stageCounts = new Map<string, number>();
-    availableCandidates.forEach((c) => {
-      (c.tags || []).forEach((s) => skillCounts.set(s, (skillCounts.get(s) || 0) + 1));
+    candidates.forEach((c) => {
+      (c.skills || []).forEach((s) => skillCounts.set(s, (skillCounts.get(s) || 0) + 1));
       if (c.location) locationCounts.set(c.location, (locationCounts.get(c.location) || 0) + 1);
       if (c.company) companyCounts.set(c.company, (companyCounts.get(c.company) || 0) + 1);
       if (c.source) sourceCounts.set(c.source, (sourceCounts.get(c.source) || 0) + 1);
@@ -111,65 +108,7 @@ export const AddCandidatesToPoolDialog = ({
         .sort((a, b) => b[1] - a[1])
         .map(([value]) => ({ value, label: value, count: companyCounts.get(value) } as FilterOption)),
     };
-  }, [availableCandidates]);
-
-  const filteredCandidates = useMemo(() => {
-    let results = [...availableCandidates];
-
-    if (debouncedSearchQuery.trim()) {
-      const matcher = parseBooleanSearch(debouncedSearchQuery.trim());
-      if (matcher) {
-        results = results.filter((c) => matcher(toSearchable(c)));
-      } else {
-        const q = debouncedSearchQuery.toLowerCase();
-        results = results.filter(
-          (c) =>
-            `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase().includes(q) ||
-            (c.title || '').toLowerCase().includes(q) ||
-            (c.company || '').toLowerCase().includes(q) ||
-            (c.location || '').toLowerCase().includes(q) ||
-            (c.tags || []).some((s) => s.toLowerCase().includes(q))
-        );
-      }
-    }
-
-    if (filters.skills.length > 0) {
-      results = results.filter((c) =>
-        filters.skills.some((skill) => (c.tags || []).includes(skill))
-      );
-    }
-    if (filters.locations.length > 0) {
-      results = results.filter((c) =>
-        filters.locations.includes(c.location || '')
-      );
-    }
-    if (filters.companies.length > 0) {
-      results = results.filter((c) =>
-        filters.companies.includes(c.company || '')
-      );
-    }
-    if (filters.sources.length > 0) {
-      results = results.filter((c) =>
-        filters.sources.includes(c.source || '')
-      );
-    }
-    if (filters.pipelines.length > 0) {
-      if (filters.pipelines.includes('none')) {
-        results = results.filter((c) => (c.pipelineAssociations || []).length === 0);
-      } else {
-        results = results.filter((c) =>
-          (c.pipelineAssociations || []).some((p) => filters.pipelines.includes(p.name))
-        );
-      }
-    }
-    if (filters.pipelineStages.length > 0) {
-      results = results.filter((c) =>
-        (c.pipelineAssociations || []).some((p) => filters.pipelineStages.includes(p.stage))
-      );
-    }
-
-    return results;
-  }, [availableCandidates, debouncedSearchQuery, filters]);
+  }, [allFiltered, filteredCandidates]);
 
   const handleToggleCandidate = (candidateId: string) => {
     setSelectedCandidates(prev =>
@@ -202,6 +141,10 @@ export const AddCandidatesToPoolDialog = ({
       experienceLevels: [],
       dateAdded: null,
       lastContact: null,
+      dateAddedCustomFrom: undefined,
+      dateAddedCustomTo: undefined,
+      lastContactCustomFrom: undefined,
+      lastContactCustomTo: undefined,
     });
     onOpenChange(false);
   };
@@ -220,6 +163,10 @@ export const AddCandidatesToPoolDialog = ({
       experienceLevels: [],
       dateAdded: null,
       lastContact: null,
+      dateAddedCustomFrom: undefined,
+      dateAddedCustomTo: undefined,
+      lastContactCustomFrom: undefined,
+      lastContactCustomTo: undefined,
     });
     onOpenChange(false);
   };
@@ -251,7 +198,8 @@ export const AddCandidatesToPoolDialog = ({
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder='Search... Use "phrases", AND, OR, NOT, (grouping)'
+              title={CANDIDATE_SEARCH_TOOLTIP}
+              placeholder={CANDIDATE_SEARCH_PLACEHOLDER}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 border-border focus:border-sky-blue"
@@ -331,7 +279,7 @@ export const AddCandidatesToPoolDialog = ({
             </div>
           ) : filteredCandidates.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {availableCandidates.length === 0
+              {!searchQuery.trim() && activeFilterCount === 0
                 ? 'All candidates are already in this pool'
                 : 'No candidates found matching your search'}
             </div>
@@ -383,7 +331,7 @@ export const AddCandidatesToPoolDialog = ({
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {(candidate.tags || []).slice(0, 2).map((skill) => (
+                    {(candidate.skills || []).slice(0, 2).map((skill) => (
                       <Badge key={skill} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>

@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import { X, ChevronDown, Search, Brain } from 'lucide-react';
+import { X, ChevronDown, Search, Brain, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import type { CandidateFilters } from '@/lib/candidateSearch';
 
 export interface FilterOption {
   value: string;
@@ -14,18 +18,7 @@ export interface FilterOption {
   count?: number;
 }
 
-export interface CandidateFilters {
-  skills: string[];
-  locations: string[];
-  pipelines: string[];
-  pipelineStages: string[];
-  talentPools: string[];
-  sources: string[];
-  companies: string[];
-  experienceLevels: string[];
-  dateAdded: string | null;
-  lastContact: string | null;
-}
+export type { CandidateFilters };
 
 interface CandidateFiltersPanelProps {
   isOpen: boolean;
@@ -178,6 +171,10 @@ export const CandidateFiltersPanel = ({
       experienceLevels: [],
       dateAdded: null,
       lastContact: null,
+      dateAddedCustomFrom: undefined,
+      dateAddedCustomTo: undefined,
+      lastContactCustomFrom: undefined,
+      lastContactCustomTo: undefined,
     });
   };
 
@@ -296,10 +293,9 @@ export const CandidateFiltersPanel = ({
             title={
               <span className="flex items-center gap-1.5">
                 Experience Level
-                <Brain
-                  className="w-3.5 h-3.5 text-sky-blue"
-                  title="Inferred from job titles — may not be 100% accurate"
-                />
+                <span title="Inferred from job titles — may not be 100% accurate">
+                  <Brain className="w-3.5 h-3.5 text-sky-blue" aria-hidden />
+                </span>
               </span>
             }
           >
@@ -336,12 +332,83 @@ export const CandidateFiltersPanel = ({
                   <Checkbox
                     checked={filters.dateAdded === preset.value}
                     onCheckedChange={() => {
-                      updateFilter('dateAdded', filters.dateAdded === preset.value ? null : preset.value);
+                      if (filters.dateAdded === preset.value) {
+                        onChange({
+                          ...filters,
+                          dateAdded: null,
+                          dateAddedCustomFrom: undefined,
+                          dateAddedCustomTo: undefined,
+                        });
+                      } else {
+                        onChange({
+                          ...filters,
+                          dateAdded: preset.value,
+                          ...(preset.value !== 'custom'
+                            ? { dateAddedCustomFrom: undefined, dateAddedCustomTo: undefined }
+                            : {}),
+                        });
+                      }
                     }}
                   />
                   <span className="text-sm text-foreground">{preset.label}</span>
                 </label>
               ))}
+              {filters.dateAdded === 'custom' && (
+                <div className="flex flex-col gap-2 pt-2 pl-1 border-t border-border mt-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">From</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start text-left font-normal h-8 text-xs',
+                              !filters.dateAddedCustomFrom && 'text-muted-foreground'
+                            )}
+                          >
+                            <Calendar className="mr-1 h-3 w-3" />
+                            {filters.dateAddedCustomFrom ? format(filters.dateAddedCustomFrom, 'PP') : 'Start'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={filters.dateAddedCustomFrom ?? undefined}
+                            onSelect={(d) => updateFilter('dateAddedCustomFrom', d ?? null)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">To</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start text-left font-normal h-8 text-xs',
+                              !filters.dateAddedCustomTo && 'text-muted-foreground'
+                            )}
+                          >
+                            <Calendar className="mr-1 h-3 w-3" />
+                            {filters.dateAddedCustomTo ? format(filters.dateAddedCustomTo, 'PP') : 'End'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={filters.dateAddedCustomTo ?? undefined}
+                            onSelect={(d) => updateFilter('dateAddedCustomTo', d ?? null)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </FilterSection>
 
@@ -356,12 +423,83 @@ export const CandidateFiltersPanel = ({
                   <Checkbox
                     checked={filters.lastContact === preset.value}
                     onCheckedChange={() => {
-                      updateFilter('lastContact', filters.lastContact === preset.value ? null : preset.value);
+                      if (filters.lastContact === preset.value) {
+                        onChange({
+                          ...filters,
+                          lastContact: null,
+                          lastContactCustomFrom: undefined,
+                          lastContactCustomTo: undefined,
+                        });
+                      } else {
+                        onChange({
+                          ...filters,
+                          lastContact: preset.value,
+                          ...(preset.value !== 'custom'
+                            ? { lastContactCustomFrom: undefined, lastContactCustomTo: undefined }
+                            : {}),
+                        });
+                      }
                     }}
                   />
                   <span className="text-sm text-foreground">{preset.label}</span>
                 </label>
               ))}
+              {filters.lastContact === 'custom' && (
+                <div className="flex flex-col gap-2 pt-2 pl-1 border-t border-border mt-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">From</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start text-left font-normal h-8 text-xs',
+                              !filters.lastContactCustomFrom && 'text-muted-foreground'
+                            )}
+                          >
+                            <Calendar className="mr-1 h-3 w-3" />
+                            {filters.lastContactCustomFrom ? format(filters.lastContactCustomFrom, 'PP') : 'Start'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={filters.lastContactCustomFrom ?? undefined}
+                            onSelect={(d) => updateFilter('lastContactCustomFrom', d ?? null)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">To</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start text-left font-normal h-8 text-xs',
+                              !filters.lastContactCustomTo && 'text-muted-foreground'
+                            )}
+                          >
+                            <Calendar className="mr-1 h-3 w-3" />
+                            {filters.lastContactCustomTo ? format(filters.lastContactCustomTo, 'PP') : 'End'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={filters.lastContactCustomTo ?? undefined}
+                            onSelect={(d) => updateFilter('lastContactCustomTo', d ?? null)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </FilterSection>
         </div>

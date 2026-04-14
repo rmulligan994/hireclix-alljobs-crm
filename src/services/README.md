@@ -37,7 +37,8 @@ Handles all candidate CRUD operations:
 - `create(data)` - Create a new candidate
 - `update(id, data)` - Update a candidate
 - `delete(id)` - Delete a candidate
-- `search(query)` - Search candidates
+- `searchPaginated(params)` - Server-side search/filter on `candidates_enriched` (RPC); optional `scopeCandidateIds`
+- `getEnrichedByIds(ids)` - Enriched rows for a bounded id list
 - `findDuplicates(email, phone)` - Find potential duplicates
 - `getCount()` - Get total count
 - `getNewThisWeek()` - Get count of new candidates this week

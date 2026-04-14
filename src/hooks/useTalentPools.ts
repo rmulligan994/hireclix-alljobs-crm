@@ -100,6 +100,7 @@ export const useAddCandidateToPool = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['talentPools', variables.poolId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'search'] });
       toast.success('Candidate added to pool');
     },
     onError: (error: Error) => {
@@ -117,6 +118,7 @@ export const useAddCandidatesToPool = () => {
     onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['talentPools', variables.poolId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'search'] });
       const { added, skipped } = result;
       if (skipped > 0) {
         toast.success(
@@ -143,6 +145,7 @@ export const useRemoveCandidateFromPool = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['talentPools', variables.poolId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'search'] });
       toast.success('Candidate removed from pool');
     },
     onError: (error: Error) => {
@@ -160,6 +163,7 @@ export const useRemoveCandidatesFromPool = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['talentPools', variables.poolId] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates', 'search'] });
       toast.success(`${variables.candidateIds.length} candidates removed from pool`);
     },
     onError: (error: Error) => {

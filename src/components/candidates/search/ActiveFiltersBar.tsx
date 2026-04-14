@@ -1,7 +1,8 @@
 import { X } from 'lucide-react';
+import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { CandidateFilters } from './CandidateFiltersPanel';
+import type { CandidateFilters } from '@/lib/candidateSearch';
 
 interface ActiveFiltersBarProps {
   filters: CandidateFilters;
@@ -39,9 +40,34 @@ export const ActiveFiltersBar = ({
   onClearAll,
   onClearSearch,
 }: ActiveFiltersBarProps) => {
-  const hasFilters = Object.values(filters).some(v => 
-    Array.isArray(v) ? v.length > 0 : v !== null
-  );
+  const hasFilters = (() => {
+    const f = filters;
+    if (
+      f.skills.length > 0 ||
+      f.locations.length > 0 ||
+      f.pipelines.length > 0 ||
+      f.pipelineStages.length > 0 ||
+      f.talentPools.length > 0 ||
+      f.sources.length > 0 ||
+      f.companies.length > 0 ||
+      f.experienceLevels.length > 0
+    ) {
+      return true;
+    }
+    if (
+      f.dateAdded &&
+      (f.dateAdded !== 'custom' || !!(f.dateAddedCustomFrom || f.dateAddedCustomTo))
+    ) {
+      return true;
+    }
+    if (
+      f.lastContact &&
+      (f.lastContact !== 'custom' || !!(f.lastContactCustomFrom || f.lastContactCustomTo))
+    ) {
+      return true;
+    }
+    return false;
+  })();
   const hasSearch = searchQuery.length > 0;
   
   if (!hasFilters && !hasSearch) return null;
@@ -185,30 +211,50 @@ export const ActiveFiltersBar = ({
     });
 
     // Date Added
-    if (filters.dateAdded) {
+    if (
+      filters.dateAdded &&
+      (filters.dateAdded !== 'custom' || filters.dateAddedCustomFrom || filters.dateAddedCustomTo)
+    ) {
+      let addedLabel = dateLabels[filters.dateAdded] || filters.dateAdded;
+      if (filters.dateAdded === 'custom') {
+        const parts: string[] = [];
+        if (filters.dateAddedCustomFrom) parts.push(format(filters.dateAddedCustomFrom, 'MMM d, yyyy'));
+        if (filters.dateAddedCustomTo) parts.push(format(filters.dateAddedCustomTo, 'MMM d, yyyy'));
+        addedLabel = parts.length ? `Added ${parts.join(' – ')}` : 'Added (pick dates)';
+      }
       badges.push(
         <Badge
           key="dateAdded"
           variant="secondary"
           className="bg-muted text-foreground border-border gap-1 cursor-pointer hover:bg-muted/80"
-          onClick={() => onRemoveFilter('dateAdded', filters.dateAdded!)}
+          onClick={() => onRemoveFilter('dateAdded', '')}
         >
-          Added: {dateLabels[filters.dateAdded] || filters.dateAdded}
+          {filters.dateAdded === 'custom' ? addedLabel : `Added: ${addedLabel}`}
           <X className="w-3 h-3" />
         </Badge>
       );
     }
 
     // Last Contact
-    if (filters.lastContact) {
+    if (
+      filters.lastContact &&
+      (filters.lastContact !== 'custom' || filters.lastContactCustomFrom || filters.lastContactCustomTo)
+    ) {
+      let contactLabel = dateLabels[filters.lastContact] || filters.lastContact;
+      if (filters.lastContact === 'custom') {
+        const parts: string[] = [];
+        if (filters.lastContactCustomFrom) parts.push(format(filters.lastContactCustomFrom, 'MMM d, yyyy'));
+        if (filters.lastContactCustomTo) parts.push(format(filters.lastContactCustomTo, 'MMM d, yyyy'));
+        contactLabel = parts.length ? `Contact ${parts.join(' – ')}` : 'Contact (pick dates)';
+      }
       badges.push(
         <Badge
           key="lastContact"
           variant="secondary"
           className="bg-muted text-foreground border-border gap-1 cursor-pointer hover:bg-muted/80"
-          onClick={() => onRemoveFilter('lastContact', filters.lastContact!)}
+          onClick={() => onRemoveFilter('lastContact', '')}
         >
-          Contact: {dateLabels[filters.lastContact] || filters.lastContact}
+          {filters.lastContact === 'custom' ? contactLabel : `Contact: ${contactLabel}`}
           <X className="w-3 h-3" />
         </Badge>
       );

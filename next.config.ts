@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
   basePath: process.env.BASE_URL || "",
   assetPrefix: process.env.ASSETS_PREFIX || process.env.BASE_URL || "",
   reactStrictMode: true,
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: false },
+  typescript: { ignoreBuildErrors: false },
 };
 
 export default nextConfig;
