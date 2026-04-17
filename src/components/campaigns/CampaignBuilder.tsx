@@ -283,6 +283,17 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setCurrentStep('template');
   };
 
+  const handleRenameTemplateFromEditor = (templateId: string, newName: string) => {
+    updateTemplate(
+      { id: templateId, input: { name: newName } },
+      {
+        onSuccess: (updated) => {
+          setSelectedTemplate(updated);
+        },
+      },
+    );
+  };
+
   const handleSequenceContinue = (steps: Partial<CampaignEmail>[], opts?: { firstSendDate?: string; metadata?: SequenceMetadata }) => {
     setEmailSteps(steps);
     setSequenceMetadata(opts?.metadata ?? null);
@@ -647,6 +658,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             onCancel={handleEditorCancel}
             campaignJobId={selectedJobId}
             campaignId={campaignId}
+            loadedTemplate={
+              selectedTemplate ? { id: selectedTemplate.id, name: selectedTemplate.name } : null
+            }
+            onRenameTemplate={handleRenameTemplateFromEditor}
           />
         </DialogContent>
       </Dialog>

@@ -102,19 +102,20 @@ export const emailTemplateService = {
   },
 
   async update(id: string, input: UpdateEmailTemplateInput): Promise<EmailTemplate> {
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.category !== undefined) patch.category = input.category;
+    if (input.subject !== undefined) patch.subject = input.subject;
+    if (input.preheader !== undefined) patch.preheader = input.preheader;
+    if (input.bee_json !== undefined) patch.bee_json = input.bee_json;
+    if (input.html_content !== undefined) patch.html_content = input.html_content;
+    if (input.compose_kind !== undefined) patch.compose_kind = input.compose_kind;
+    if (input.form_payload !== undefined) patch.form_payload = input.form_payload;
+    if (input.thumbnail_url !== undefined) patch.thumbnail_url = input.thumbnail_url;
+
     const { data, error } = await supabase
       .from('email_templates')
-      .update({
-        name: input.name,
-        category: input.category,
-        subject: input.subject,
-        preheader: input.preheader,
-        bee_json: input.bee_json,
-        html_content: input.html_content,
-        compose_kind: input.compose_kind,
-        form_payload: input.form_payload,
-        thumbnail_url: input.thumbnail_url,
-      })
+      .update(patch)
       .eq('id', id)
       .select()
       .single();

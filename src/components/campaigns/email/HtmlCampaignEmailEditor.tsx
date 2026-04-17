@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Info, Tags, X, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Info, Tags, X, ChevronDown, ChevronUp, Sparkles, Pencil } from 'lucide-react';
 import { EmailPreviewPane } from './EmailPreviewPane';
 import { toast } from 'sonner';
 import { EmailComposer } from './EmailComposer';
@@ -17,6 +18,14 @@ import {
   type ChatMessage,
 } from './EmailAIChatPanel';
 import { MergeTagsPanel } from '../MergeTagsPanel';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { emptyAnnouncementForm, payloadToAnnouncementForm, renderAnnouncementToHTML } from '@/lib/email/email-utils';
 import type { AIEmailAssistantResult } from '@/lib/email/email-ai-adapter';
 import { mergeAIEmailAssistantResult } from '@/lib/email/apply-ai-email-result';
@@ -46,6 +55,9 @@ export interface HtmlCampaignEmailEditorProps {
   /** When set, shows a second action that saves to the reusable template library (toast + template step in campaign flow). */
   onSaveToTemplateLibrary?: (payload: HtmlCampaignEmailSavePayload) => void;
   onCancel: () => void;
+  /** When the user opened the editor from a saved library template, enables rename in the toolbar. */
+  loadedTemplate?: { id: string; name: string } | null;
+  onRenameTemplate?: (templateId: string, newName: string) => void;
 }
 
 function emailAiChatStorageKey(campaignId: string | null | undefined): string {
@@ -119,8 +131,12 @@ export function HtmlCampaignEmailEditor({
   onContinue,
   onSaveToTemplateLibrary,
   onCancel,
+  loadedTemplate = null,
+  onRenameTemplate,
 }: HtmlCampaignEmailEditorProps) {
   const codeTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState('');
   const [workspaceTab, setWorkspaceTab] = useState<'editor' | 'ai'>('editor');
   const [subject, setSubject] = useState(initialSubject);
   const [composeKind, setComposeKind] = useState<ComposeKind>(
@@ -262,6 +278,19 @@ export function HtmlCampaignEmailEditor({
     onSaveToTemplateLibrary?.(buildPayload());
   }, [buildPayload, onSaveToTemplateLibrary]);
 
+  const openRenameDialog = useCallback(() => {
+    if (!loadedTemplate) return;
+    setRenameDraft(loadedTemplate.name);
+    setRenameOpen(true);
+  }, [loadedTemplate]);
+
+  const submitRename = useCallback(() => {
+    const trimmed = renameDraft.trim();
+    if (!trimmed || !loadedTemplate || !onRenameTemplate) return;
+    onRenameTemplate(loadedTemplate.id, trimmed);
+    setRenameOpen(false);
+  }, [loadedTemplate, onRenameTemplate, renameDraft]);
+
   const editorContextForAi = useMemo(
     () => buildEmailAIEditorContext(composeKind, formPayload, subject, htmlBody),
     [composeKind, formPayload, subject, htmlBody],
@@ -278,12 +307,67 @@ export function HtmlCampaignEmailEditor({
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename template</DialogTitle>
+            <DialogDescription>
+              This updates the name in your template library. Campaign name is separate.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameDraft}
+            onChange={(e) => setRenameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitRename();
+              }
+            }}
+            placeholder="Template name"
+            className="mt-1"
+            autoFocus
+            aria-label="Template name"
+          />
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-gradient-primary hover:opacity-90"
+              onClick={submitRename}
+              disabled={!renameDraft.trim()}
+            >
+              Save name
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2 p-4 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-2 min-w-0 order-1 sm:order-none">
+        <div className="flex items-center gap-2 min-w-0 order-1 sm:order-none flex-wrap">
           <Button variant="ghost" size="sm" onClick={onCancel} type="button">
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
+          {loadedTemplate && onRenameTemplate ? (
+            <div className="flex items-center gap-1.5 min-w-0 max-w-[min(100%,280px)] border-l border-border pl-2 ml-0.5">
+              <span className="text-sm font-medium truncate" title={loadedTemplate.name}>
+                {loadedTemplate.name}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1"
+                onClick={openRenameDialog}
+              >
+                <Pencil className="h-3.5 w-3.5" aria-hidden />
+                Rename
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex items-center justify-center sm:justify-start gap-2 order-3 sm:order-none sm:flex-1 sm:min-w-0">
