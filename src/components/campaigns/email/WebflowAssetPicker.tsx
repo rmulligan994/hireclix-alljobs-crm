@@ -7,6 +7,23 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getApiBase } from '@/lib/api';
+
+async function parseJsonResponse(res: Response): Promise<unknown> {
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+    throw new Error(
+      'The server returned a web page instead of API data. If this app runs under a path (e.g. /crm), set NEXT_PUBLIC_BASE_URL to that path and redeploy.',
+    );
+  }
+  if (!trimmed) return {};
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(`Invalid response (${res.status}). Expected JSON from /api/webflow/assets.`);
+  }
+}
 
 /** Minimal asset shape compatible with EmailComposer block image updates. */
 export type WebflowAsset = {
@@ -50,10 +67,11 @@ export function WebflowAssetPicker({ open, onOpenChange, onSelect }: WebflowAsse
           setRemoteAssets([]);
           return;
         }
-        const res = await fetch('/api/webflow/assets?limit=100', {
+        const apiRoot = getApiBase();
+        const res = await fetch(`${apiRoot}/api/webflow/assets?limit=100`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
-        const data = (await res.json()) as {
+        const data = (await parseJsonResponse(res)) as {
           assets?: WebflowAsset[];
           error?: string;
           hint?: string;
