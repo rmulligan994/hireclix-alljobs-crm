@@ -123,7 +123,9 @@ Deno.serve(async (req) => {
     const personalizedSubject = replaceMergeTags(firstEmail.subject ?? "", mergeContext);
     let rawHtml = firstEmail.html_content || `<p>Hello ${mockCandidate.first_name},</p><p>This is a test email.</p>`;
     rawHtml = fixBrokenButtonLinks(rawHtml, !!jobData);
+    rawHtml = stripDuplicateUnsubscribeBeforeComplianceFooter(rawHtml);
     let personalizedHtml = replaceMergeTags(rawHtml, mergeContext);
+    personalizedHtml = stripDuplicateUnsubscribeBeforeComplianceFooter(personalizedHtml);
 
     const mergeResolved = assertFullyResolvedMergeTags(personalizedSubject, personalizedHtml);
     if (!mergeResolved.ok) {
@@ -183,6 +185,11 @@ Deno.serve(async (req) => {
 });
 
 function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
+  const hasComplianceFooterMarker = /<!--\s*Compliance footer\s*-->/.test(html);
+  const alreadyHasUnsubscribeMerge =
+    hasComplianceFooterMarker ||
+    /\{\{\s*unsubscribeLink\s*\}\}/i.test(html) ||
+    /\{\{\s*unsubscribe_url\s*\}\}/i.test(html);
   return html.replace(/<a(\s[^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, content) => {
     const a = attrs || "";
     const hrefMatch = a.match(/href\s*=\s*["']([^"']*)["']/i);
@@ -193,11 +200,35 @@ function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
     const text = (content || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").toLowerCase().trim();
     let href = "#";
     if (/(^|\s)(email|contact|reach out|reply)(\s|$)/.test(text) || /^email$/.test(text)) href = "mailto:{{senderEmail}}";
-    else if (/linkedin|linked in|connect/.test(text)) href = "#";
-    else if (/unsubscribe/.test(text)) href = "#";
-    else if (hasJob && /(apply|view job|learn more)/.test(text)) href = "#";
-    else if (hasJob) href = "#";
+    else if (/linkedin|linked in|connect/.test(text)) href = "{{senderLinkedinUrl}}";
+    else if (!alreadyHasUnsubscribeMerge && /unsubscribe/.test(text)) href = "{{unsubscribeLink}}";
+    else if (hasJob && /(apply|view job|learn more)/.test(text)) href = "{{jobUrl}}";
+    else if (hasJob) href = "{{jobUrl}}";
     return `<a href="${href}"${a}>${content}</a>`;
   });
+}
+
+function stripDuplicateUnsubscribeBeforeComplianceFooter(html: string): string {
+  const marker = "<!-- Compliance footer -->";
+  const idx = html.indexOf(marker);
+  if (idx === -1) return html;
+  const head = html.slice(0, idx);
+  const tail = html.slice(idx);
+  const cleaned = head.replace(
+    /<a\b[^>]*\bhref\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi,
+    (full, href: string, inner: string) => {
+      const text = inner.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (text !== "unsubscribe") return full;
+      const h = (href || "").trim();
+      const isOurUnsubHref =
+        h === "#" ||
+        h === "" ||
+        /\{\{\s*unsubscribeLink\s*\}\}/i.test(h) ||
+        /\{\{\s*unsubscribe_url\s*\}\}/i.test(h) ||
+        (/^https?:\/\//i.test(h) && /\/unsubscribe\?/.test(h));
+      return isOurUnsubHref ? "" : full;
+    },
+  );
+  return cleaned + tail;
 }
 

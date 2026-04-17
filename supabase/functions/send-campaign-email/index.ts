@@ -462,7 +462,9 @@ async function sendOneEmail(
   const personalizedSubject = replaceMergeTags(campaignEmail.subject ?? "", mergeContext);
   let rawHtml = campaignEmail.html_content || `<p>Hello ${candidate.first_name || "there"},</p><p>This is a campaign email.</p>`;
   rawHtml = fixBrokenButtonLinks(rawHtml, !!jobData);
+  rawHtml = stripDuplicateUnsubscribeBeforeComplianceFooter(rawHtml);
   let personalizedHtml = replaceMergeTags(rawHtml, mergeContext);
+  personalizedHtml = stripDuplicateUnsubscribeBeforeComplianceFooter(personalizedHtml);
 
   const mergeResolved = assertFullyResolvedMergeTags(personalizedSubject, personalizedHtml);
   if (!mergeResolved.ok) {
@@ -544,7 +546,9 @@ async function sendOneEmail(
 
 function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
   /** Compliance footer already includes {{unsubscribeLink}}; skip body stubs to avoid duplicate links. */
+  const hasComplianceFooterMarker = /<!--\s*Compliance footer\s*-->/.test(html);
   const alreadyHasUnsubscribeMerge =
+    hasComplianceFooterMarker ||
     /\{\{\s*unsubscribeLink\s*\}\}/i.test(html) ||
     /\{\{\s*unsubscribe_url\s*\}\}/i.test(html);
   return html.replace(/<a(\s[^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, content) => {
@@ -563,5 +567,33 @@ function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
     else if (hasJob) href = "{{jobUrl}}";
     return `<a href="${href}"${a}>${content}</a>`;
   });
+}
+
+/**
+ * Remove extra unsubscribe anchors above the compliance footer (starter/AI often add a stub link;
+ * footer already has the canonical link). Safe for pre- and post-merge HTML.
+ */
+function stripDuplicateUnsubscribeBeforeComplianceFooter(html: string): string {
+  const marker = "<!-- Compliance footer -->";
+  const idx = html.indexOf(marker);
+  if (idx === -1) return html;
+  const head = html.slice(0, idx);
+  const tail = html.slice(idx);
+  const cleaned = head.replace(
+    /<a\b[^>]*\bhref\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi,
+    (full, href: string, inner: string) => {
+      const text = inner.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (text !== "unsubscribe") return full;
+      const h = (href || "").trim();
+      const isOurUnsubHref =
+        h === "#" ||
+        h === "" ||
+        /\{\{\s*unsubscribeLink\s*\}\}/i.test(h) ||
+        /\{\{\s*unsubscribe_url\s*\}\}/i.test(h) ||
+        (/^https?:\/\//i.test(h) && /\/unsubscribe\?/.test(h));
+      return isOurUnsubHref ? "" : full;
+    },
+  );
+  return cleaned + tail;
 }
 

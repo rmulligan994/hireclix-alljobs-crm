@@ -997,7 +997,8 @@ function legacyComplianceFooterRow(footer: ComplianceFooter, font: string): stri
   const company = escapeHtml(f.companyLine);
   const disc = escapeHtml(f.disclaimerText).replace(/\r\n|\n|\r/g, '<br/>');
   const linkLabel = escapeHtml(f.unsubscribeLinkLabel);
-  return `<tr><td style="font-size:11px;color:#a1a1aa;padding-top:24px;border-top:1px solid #e4e4e7;font-family:${font};">
+  return `<!-- Compliance footer -->
+<tr><td style="font-size:11px;color:#a1a1aa;padding-top:24px;border-top:1px solid #e4e4e7;font-family:${font};">
 <p style="margin:0 0 8px;color:#71717a;font-size:12px;">${company}</p>
 <p style="margin:0;color:#a1a1aa;">${disc}<br/>
 <a href="{{unsubscribeLink}}" style="color:#a1a1aa;text-decoration:underline;">${linkLabel}</a></p>
