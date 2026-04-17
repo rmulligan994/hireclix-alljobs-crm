@@ -294,6 +294,7 @@ export type Database = {
           last_name: string | null
           linkedin_url: string | null
           location: string | null
+          marketing_email_unsubscribed: boolean
           phone: string | null
           search_vector: unknown
           source: string | null
@@ -312,6 +313,7 @@ export type Database = {
           last_name?: string | null
           linkedin_url?: string | null
           location?: string | null
+          marketing_email_unsubscribed?: boolean
           phone?: string | null
           /** Omitted on insert — maintained by DB trigger / generated column */
           search_vector?: unknown
@@ -331,6 +333,7 @@ export type Database = {
           last_name?: string | null
           linkedin_url?: string | null
           location?: string | null
+          marketing_email_unsubscribed?: boolean
           phone?: string | null
           search_vector?: unknown
           source?: string | null
@@ -618,6 +621,8 @@ export type Database = {
           webflow_collection_id: string | null
           webflow_job_field_mapping: Json | null
           webflow_site_id: string | null
+          welcome_email_enabled: boolean
+          welcome_email_template_id: string | null
         }
         Insert: {
           base_url?: string | null
@@ -631,6 +636,8 @@ export type Database = {
           webflow_collection_id?: string | null
           webflow_job_field_mapping?: Json | null
           webflow_site_id?: string | null
+          welcome_email_enabled?: boolean
+          welcome_email_template_id?: string | null
         }
         Update: {
           base_url?: string | null
@@ -644,8 +651,18 @@ export type Database = {
           webflow_collection_id?: string | null
           webflow_job_field_mapping?: Json | null
           webflow_site_id?: string | null
+          welcome_email_enabled?: boolean
+          welcome_email_template_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "organization_settings_welcome_email_template_id_fkey"
+            columns: ["welcome_email_template_id"]
+            isOneToOne: false
+            referencedRelation: "email_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pipeline_candidates: {
         Row: {
@@ -924,6 +941,7 @@ export type Database = {
           last_name: string | null
           linkedin_url: string | null
           location: string | null
+          marketing_email_unsubscribed: boolean | null
           phone: string | null
           pipeline_associations: Json | null
           source: string | null

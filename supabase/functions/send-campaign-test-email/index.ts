@@ -4,6 +4,7 @@ import {
   replaceMergeTags,
   type MergeContext,
 } from "../_shared/campaign-merge-tags.ts";
+import { prependTopPadding } from "../_shared/email-html.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -134,12 +135,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const unsubscribeUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}/unsubscribe?r=${testRecipientId}` : "#";
-    const testFooter = `
-<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;font-size:12px;color:#6b7280;font-family:Arial,sans-serif">
-  <em>This is a test email. No unsubscribe needed.</em>
-</div>`;
-    personalizedHtml = appendUnsubscribeFooter(personalizedHtml, testFooter);
+    personalizedHtml = prependTopPadding(personalizedHtml, 24);
 
     const mailgunBaseUrl = Deno.env.get("MAILGUN_REGION") === "EU" ? "https://api.eu.mailgun.net" : "https://api.mailgun.net";
     const mailgunUrl = `${mailgunBaseUrl}/v3/${MAILGUN_DOMAIN}/messages`;
@@ -205,8 +201,3 @@ function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
   });
 }
 
-function appendUnsubscribeFooter(html: string, footer: string): string {
-  const trimmed = html.trim();
-  if (trimmed.endsWith("</body>")) return trimmed.replace(/<\/body>/i, `${footer}</body>`);
-  return trimmed + footer;
-}

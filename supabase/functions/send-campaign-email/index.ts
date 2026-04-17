@@ -4,6 +4,7 @@ import {
   replaceMergeTags,
   type MergeContext,
 } from "../_shared/campaign-merge-tags.ts";
+import { prependTopPadding } from "../_shared/email-html.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -181,7 +182,8 @@ async function processCampaignSend(
         location,
         source,
         tags,
-        linkedin_url
+        linkedin_url,
+        marketing_email_unsubscribed
       )
     `)
     .eq("campaign_id", campaignId)
@@ -404,7 +406,8 @@ async function sendOneEmail(
         location,
         source,
         tags,
-        linkedin_url
+        linkedin_url,
+        marketing_email_unsubscribed
       )
     `)
     .eq("id", params.campaignRecipientId)
@@ -417,6 +420,9 @@ async function sendOneEmail(
   const candidate = recipient.candidates as any;
   if (!candidate?.email) {
     return { error: "Candidate has no email" };
+  }
+  if (candidate.marketing_email_unsubscribed) {
+    return { error: "Candidate has unsubscribed from marketing emails" };
   }
   if (["unsubscribed", "bounced", "complained"].includes(recipient.status || "")) {
     return { error: `Recipient status: ${recipient.status}` };
@@ -465,12 +471,7 @@ async function sendOneEmail(
     };
   }
 
-  const unsubscribeUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}/unsubscribe?r=${recipient.id}` : "#";
-  const unsubscribeFooter = `
-<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;font-size:12px;color:#6b7280;font-family:Arial,sans-serif">
-  <a href="${unsubscribeUrl}" style="color:#54A3DA;text-decoration:underline">Unsubscribe</a> from future emails
-</div>`;
-  personalizedHtml = appendUnsubscribeFooter(personalizedHtml, unsubscribeFooter);
+  personalizedHtml = prependTopPadding(personalizedHtml, 24);
 
   const mailgunBaseUrl = Deno.env.get("MAILGUN_REGION") === "EU" ? "https://api.eu.mailgun.net" : "https://api.mailgun.net";
   const mailgunUrl = `${mailgunBaseUrl}/v3/${MAILGUN_DOMAIN}/messages`;
@@ -560,8 +561,3 @@ function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
   });
 }
 
-function appendUnsubscribeFooter(html: string, footer: string): string {
-  const trimmed = html.trim();
-  if (trimmed.endsWith("</body>")) return trimmed.replace(/<\/body>/i, `${footer}</body>`);
-  return trimmed + footer;
-}

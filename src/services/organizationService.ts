@@ -11,6 +11,8 @@ export interface OrganizationSettings {
   webflow_api_token: string | null;
   webflow_job_field_mapping: WebflowFieldMapping | null;
   career_site_base_url: string | null;
+  welcome_email_enabled: boolean;
+  welcome_email_template_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +26,8 @@ export interface UpdateOrganizationSettingsInput {
   webflow_api_token?: string | null;
   webflow_job_field_mapping?: WebflowFieldMapping | null;
   career_site_base_url?: string | null;
+  welcome_email_enabled?: boolean;
+  welcome_email_template_id?: string | null;
 }
 
 export const organizationService = {
@@ -59,6 +63,10 @@ export const organizationService = {
     if (input.webflow_api_token !== undefined) updateData.webflow_api_token = input.webflow_api_token;
     if (input.webflow_job_field_mapping !== undefined) updateData.webflow_job_field_mapping = input.webflow_job_field_mapping;
     if (input.career_site_base_url !== undefined) updateData.career_site_base_url = input.career_site_base_url;
+    if (input.welcome_email_enabled !== undefined) updateData.welcome_email_enabled = input.welcome_email_enabled;
+    if (input.welcome_email_template_id !== undefined) {
+      updateData.welcome_email_template_id = input.welcome_email_template_id;
+    }
 
     if (existing) {
       const { data, error } = await supabase

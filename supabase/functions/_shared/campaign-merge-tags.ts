@@ -38,17 +38,22 @@ export interface MergeContext {
   } | null;
   recipientId: string;
   baseUrl: string;
+  /** "r" = campaign_recipient id (default); "c" = candidate id for welcome / transactional links */
+  unsubscribeRecipientParam?: "r" | "c";
 }
 
 const TOKEN_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
 export function buildMergeValueMap(ctx: MergeContext): Record<string, string> {
-  const { candidate, campaign, sender, org, job, recipientId, baseUrl } = ctx;
+  const { candidate, campaign, sender, org, job, recipientId, baseUrl, unsubscribeRecipientParam } = ctx;
+  const unsubParam = unsubscribeRecipientParam ?? "r";
   const fullName = [candidate.first_name, candidate.last_name].filter(Boolean).join(" ") || "";
   const skills = Array.isArray(candidate.tags) ? candidate.tags.join(", ") : String(candidate.tags || "");
   const senderName = [sender.first_name, sender.last_name].filter(Boolean).join(" ") || "";
   const senderCompany = org.company_name || sender.company || "";
-  const unsubscribeLink = baseUrl ? `${baseUrl.replace(/\/$/, "")}/unsubscribe?r=${recipientId}` : "#";
+  const unsubscribeLink = baseUrl
+    ? `${baseUrl.replace(/\/$/, "")}/unsubscribe?${unsubParam}=${recipientId}`
+    : "#";
   const jobUrl = job?.url || job?.view_url || "";
 
   return {

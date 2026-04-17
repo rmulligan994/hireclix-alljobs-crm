@@ -6,7 +6,8 @@
  * URL: https://xvkeruwiravjnzikrtkp.supabase.co/functions/v1/webflow-career-form
  *
  * Required hidden fields on career forms:
- *   - crm_interaction: "clarity" (or WEBFLOW_CRM_INTERACTION_VALUE)
+ *   - crm_interaction: "clarity" (or WEBFLOW_CRM_INTERACTION_VALUE). Use field name "crm_interaction" OR label
+ *     "CRM Interaction" in Webflow — we match both (Webflow sends keys with spaces from labels).
  *   - pipeline_id: optional UUID
  *   - talent_pool_ids: optional comma-separated UUIDs
  *
@@ -23,6 +24,12 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  assertFullyResolvedMergeTags,
+  replaceMergeTags,
+  type MergeContext,
+} from "../_shared/campaign-merge-tags.ts";
+import { prependTopPadding } from "../_shared/email-html.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -144,17 +151,51 @@ function getResumeUrl(
 
 // Hidden fields
 function getPipelineId(data: Record<string, unknown>): string | undefined {
-  return getField(data, "pipeline_id", "pipelineid", "target_pipeline");
+  return getField(
+    data,
+    "pipeline_id",
+    "pipelineid",
+    "target_pipeline",
+    "pipeline id",
+    "pipeline-id",
+  );
 }
 
 function getTalentPoolIds(data: Record<string, unknown>): string[] {
-  const val = getField(data, "talent_pool_ids", "talentpoolids", "talent_pools");
+  const val = getField(
+    data,
+    "talent_pool_ids",
+    "talentpoolids",
+    "talent_pools",
+    "talent pool ids",
+    "talent pools",
+  );
   if (!val) return [];
   return val.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 function getCrmInteraction(data: Record<string, unknown>): string | undefined {
-  return getField(data, "crm_interaction", "crminteraction");
+  return getField(
+    data,
+    "crm_interaction",
+    "crminteraction",
+    "crm interaction",
+    "crm-interaction",
+  );
+}
+
+/** Webflow usually sends { triggerType, payload: { data, siteId, ... } }; some tools send { data } at root. */
+function extractFormData(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const inner = o.payload as Record<string, unknown> | undefined;
+  if (inner?.data && typeof inner.data === "object" && inner.data !== null && !Array.isArray(inner.data)) {
+    return inner.data as Record<string, unknown>;
+  }
+  if (o.data && typeof o.data === "object" && o.data !== null && !Array.isArray(o.data)) {
+    return o.data as Record<string, unknown>;
+  }
+  return null;
 }
 
 function mapFormDataToCandidate(data: Record<string, unknown>): {
@@ -203,6 +244,164 @@ function mapFormDataToCandidate(data: Record<string, unknown>): {
   };
 }
 
+/** Best-effort welcome email; logs errors and never throws. */
+async function sendWelcomeEmailIfConfigured(
+  supabase: ReturnType<typeof createClient>,
+  candidateId: string,
+  candidateRow: {
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    company: string | null;
+    title: string | null;
+    location: string | null;
+    source: string | null;
+    tags: string[] | null;
+    linkedin_url: string | null;
+  },
+): Promise<void> {
+  try {
+    if (!candidateRow.email?.trim()) return;
+
+    const { data: orgRow } = await supabase
+      .from("organization_settings")
+      .select(
+        "company_name, brand_name, base_url, welcome_email_enabled, welcome_email_template_id",
+      )
+      .limit(1)
+      .maybeSingle();
+
+    if (!orgRow?.welcome_email_enabled || !orgRow.welcome_email_template_id) return;
+
+    const { data: cand } = await supabase
+      .from("candidates")
+      .select("marketing_email_unsubscribed")
+      .eq("id", candidateId)
+      .maybeSingle();
+    if (cand?.marketing_email_unsubscribed) return;
+
+    const { data: template } = await supabase
+      .from("email_templates")
+      .select("subject, html_content")
+      .eq("id", orgRow.welcome_email_template_id)
+      .maybeSingle();
+
+    if (!template?.html_content?.trim()) {
+      console.warn("Welcome email: template has no html_content");
+      return;
+    }
+
+    const MAILGUN_API_KEY = Deno.env.get("MAILGUN_API_KEY");
+    const MAILGUN_DOMAIN = Deno.env.get("MAILGUN_DOMAIN");
+    const MAILGUN_FROM = Deno.env.get("MAILGUN_FROM") || `Beacon CRM <noreply@${MAILGUN_DOMAIN}>`;
+    if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
+      console.warn("Welcome email: Mailgun not configured");
+      return;
+    }
+
+    const { data: sender } = await supabase
+      .from("profiles")
+      .select("first_name, last_name, email, company, title, linkedin_url")
+      .not("email", "is", null)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const senderData = sender || {
+      first_name: "",
+      last_name: "",
+      email: "",
+      company: "",
+      title: "",
+      linkedin_url: "",
+    };
+
+    const baseUrl = orgRow.base_url || Deno.env.get("APP_URL") || "";
+    const mergeContext: MergeContext = {
+      candidate: candidateRow,
+      campaign: { name: "Talent community" },
+      sender: senderData,
+      org: {
+        company_name: orgRow.company_name,
+        brand_name: orgRow.brand_name,
+        base_url: orgRow.base_url,
+      },
+      job: null,
+      recipientId: candidateId,
+      baseUrl,
+      unsubscribeRecipientParam: "c",
+    };
+
+    const personalizedSubject = replaceMergeTags(template.subject ?? "Welcome", mergeContext);
+    let personalizedHtml = replaceMergeTags(template.html_content, mergeContext);
+    const mergeResolved = assertFullyResolvedMergeTags(personalizedSubject, personalizedHtml);
+    if (!mergeResolved.ok) {
+      console.error("Welcome email: unresolved merge tags:", mergeResolved.keys);
+      return;
+    }
+    personalizedHtml = prependTopPadding(personalizedHtml, 24);
+
+    const mailgunBaseUrl = Deno.env.get("MAILGUN_REGION") === "EU"
+      ? "https://api.eu.mailgun.net"
+      : "https://api.mailgun.net";
+    const mailgunUrl = `${mailgunBaseUrl}/v3/${MAILGUN_DOMAIN}/messages`;
+
+    const formData = new FormData();
+    formData.append("from", MAILGUN_FROM);
+    formData.append("to", candidateRow.email);
+    formData.append("subject", personalizedSubject);
+    formData.append("html", personalizedHtml);
+    formData.append("o:tracking", "yes");
+    formData.append("o:tag", "welcome-email");
+    formData.append("v:candidate_id", candidateId);
+
+    const response = await fetch(mailgunUrl, {
+      method: "POST",
+      headers: { Authorization: `Basic ${btoa(`api:${MAILGUN_API_KEY}`)}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errText = await response.text();
+      try {
+        const j = JSON.parse(errText) as { message?: string };
+        if (j.message) errText = j.message;
+      } catch {
+        /* keep raw */
+      }
+      console.error("Welcome email Mailgun error:", errText);
+      return;
+    }
+
+    let result: { id?: string };
+    try {
+      result = await response.json();
+    } catch {
+      console.error("Welcome email: invalid JSON from Mailgun");
+      return;
+    }
+    const messageId = result.id;
+    if (!messageId) {
+      console.error("Welcome email: Mailgun did not return message id");
+      return;
+    }
+
+    await supabase.from("communications").insert({
+      candidate_id: candidateId,
+      type: "email",
+      subject: personalizedSubject,
+      content: personalizedHtml.replace(/<[^>]*>/g, "").slice(0, 500),
+      direction: "outbound",
+      occurred_at: new Date().toISOString(),
+      campaign_recipient_id: null,
+      external_message_id: messageId,
+      created_by: null,
+    });
+  } catch (e) {
+    console.error("Welcome email:", (e as Error).message);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -233,12 +432,9 @@ Deno.serve(async (req) => {
     });
   }
 
-  let payload: {
-    triggerType?: string;
-    payload?: { name?: string; siteId?: string; id?: string; data?: Record<string, unknown> };
-  };
+  let payload: Record<string, unknown>;
   try {
-    payload = JSON.parse(rawBody);
+    payload = JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON" }), {
       status: 400,
@@ -246,24 +442,41 @@ Deno.serve(async (req) => {
     });
   }
 
-  const webflowPayload = payload?.payload;
-  const data = webflowPayload?.data as Record<string, unknown> | undefined;
+  const data = extractFormData(payload);
+  const webflowPayload = payload?.payload as
+    | { name?: string; siteId?: string; id?: string; data?: Record<string, unknown>; schema?: unknown }
+    | undefined;
 
   if (!data || typeof data !== "object") {
-    return new Response(JSON.stringify({ error: "Missing payload.data" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: "Missing form data",
+        hint: "Expected Webflow form_submission JSON with payload.data (or root data).",
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 
-  // 1. crm_interaction filter
+  // 1. crm_interaction filter — without a matching value we intentionally no-op (avoid importing random forms)
   const expectedCrm = Deno.env.get("WEBFLOW_CRM_INTERACTION_VALUE") || "clarity";
   const crmVal = getCrmInteraction(data);
   if (!crmVal || crmVal.toLowerCase() !== expectedCrm.toLowerCase()) {
-    return new Response(JSON.stringify({ ignored: true }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        ignored: true,
+        reason: "crm_interaction",
+        detail: crmVal
+          ? `Value "${crmVal}" does not match WEBFLOW_CRM_INTERACTION_VALUE (default: clarity).`
+          : "No crm_interaction field found. Add a hidden field named crm_interaction or labeled CRM Interaction with value clarity.",
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 
   // 2. Webflow signature (optional)
@@ -423,6 +636,20 @@ Deno.serve(async (req) => {
         { onConflict: "talent_pool_id,candidate_id", ignoreDuplicates: true }
       );
     }
+  }
+
+  if (candidateData.email) {
+    await sendWelcomeEmailIfConfigured(supabase, candidateId, {
+      first_name: candidateData.firstName || null,
+      last_name: candidateData.lastName || null,
+      email: candidateData.email || null,
+      company: candidateData.company || null,
+      title: candidateData.title || null,
+      location: candidateData.location || null,
+      source: SOURCE,
+      tags: [],
+      linkedin_url: null,
+    });
   }
 
   // Resume upload (use WEBFLOW_AUTH_TOKEN with forms:read scope - fetches file with Bearer auth)

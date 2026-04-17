@@ -19,11 +19,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Save, Plus, Trash2, Copy, GitBranch, Building2, Briefcase, CheckCircle, XCircle, Loader2, CloudDownload, ChevronDown } from 'lucide-react';
 import { useJobsSyncLogs, useTriggerJobsSync } from '@/hooks/useJobsSync';
 import { defaultTemplates, PipelineTemplate } from '@/data/pipelineStages';
 import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
+import { emailTemplateService, type EmailTemplate } from '@/services/emailTemplateService';
 import { useCurrentUser, useUpdateProfile, useAllProfiles } from '@/hooks/useAuth';
 import type { UserRole } from '@/types/User';
 
@@ -41,6 +49,9 @@ const Settings = () => {
   const [webflowApiToken, setWebflowApiToken] = useState(''); // Leave blank to keep current
   const [webflowFieldMapping, setWebflowFieldMapping] = useState('');
   const [careerSiteBaseUrl, setCareerSiteBaseUrl] = useState('');
+  const [welcomeEmailEnabled, setWelcomeEmailEnabled] = useState(false);
+  const [welcomeEmailTemplateId, setWelcomeEmailTemplateId] = useState('');
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const { data: syncLogs } = useJobsSyncLogs();
   const triggerSync = useTriggerJobsSync();
 
@@ -82,9 +93,15 @@ const Settings = () => {
           : ''
       );
       setCareerSiteBaseUrl(orgSettings.career_site_base_url || '');
+      setWelcomeEmailEnabled(orgSettings.welcome_email_enabled ?? false);
+      setWelcomeEmailTemplateId(orgSettings.welcome_email_template_id || '');
       // Don't load token into state (security); user enters new one to update
     }
   }, [orgSettings]);
+
+  useEffect(() => {
+    emailTemplateService.getAll().then(setEmailTemplates).catch(() => {});
+  }, []);
 
   const handleSaveProfile = async () => {
     if (!userId) {
@@ -132,12 +149,23 @@ const Settings = () => {
           return;
         }
       }
+      if (welcomeEmailEnabled && !welcomeEmailTemplateId) {
+        toast({
+          title: 'Choose a welcome email template',
+          description: 'Or turn off “Send welcome email”.',
+          variant: 'destructive',
+        });
+        return;
+      }
       await updateOrgSettings({
         webflow_site_id: webflowSiteId || null,
         webflow_collection_id: webflowCollectionId || null,
         webflow_api_token: webflowApiToken && webflowApiToken.trim() ? webflowApiToken.trim() : undefined,
         webflow_job_field_mapping: mapping,
         career_site_base_url: careerSiteBaseUrl.trim() || null,
+        welcome_email_enabled: welcomeEmailEnabled,
+        welcome_email_template_id:
+          welcomeEmailEnabled && welcomeEmailTemplateId ? welcomeEmailTemplateId : null,
       });
       toast({ title: 'Career site settings saved' });
     } catch {
@@ -421,6 +449,54 @@ const Settings = () => {
                     <p className="text-sm text-muted-foreground">
                       Map career site field slugs to standard names. Use arrays for composite fields: {`{"location": ["city", "state", "country"]}`}. Leave empty to use defaults.
                     </p>
+                  </div>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-base">Welcome email (talent community)</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        When someone new submits your Webflow career form (with CRM Interaction matching your webhook), send a welcome message. Uses the same merge tags as campaign emails. Set Base URL on the Organization tab so{' '}
+                        <span className="font-mono text-xs">{'{{unsubscribeLink}}'}</span> works.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="welcomeEmailEnabled">Send welcome email</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Only when a new candidate is created (not when the email already exists).
+                        </p>
+                      </div>
+                      <Switch
+                        id="welcomeEmailEnabled"
+                        checked={welcomeEmailEnabled}
+                        onCheckedChange={setWelcomeEmailEnabled}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="welcomeTemplate">Template</Label>
+                      <Select
+                        value={welcomeEmailTemplateId || '__none__'}
+                        onValueChange={(v) => setWelcomeEmailTemplateId(v === '__none__' ? '' : v)}
+                        disabled={!welcomeEmailEnabled}
+                      >
+                        <SelectTrigger id="welcomeTemplate">
+                          <SelectValue placeholder="Select a saved template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {emailTemplates
+                            .filter((t) => t.html_content?.trim())
+                            .map((t) => (
+                              <SelectItem key={t.id} value={t.id}>
+                                {t.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-sm text-muted-foreground">
+                        Pick a template that has HTML body content (saved from the email composer).
+                      </p>
+                    </div>
                   </div>
                   <Separator />
                   <div className="space-y-2">

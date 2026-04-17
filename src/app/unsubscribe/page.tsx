@@ -11,14 +11,15 @@ function UnsubscribeContent() {
 
   useEffect(() => {
     const r = searchParams.get("r");
-    if (!r) {
+    const c = searchParams.get("c");
+    if (!r && !c) {
       setStatus("error");
       setMessage("Invalid unsubscribe link.");
       return;
     }
 
     supabase.functions
-      .invoke("unsubscribe", { body: { r } })
+      .invoke("unsubscribe", { body: r ? { r } : { c } })
       .then(({ data, error }) => {
         if (error) {
           setStatus("error");
