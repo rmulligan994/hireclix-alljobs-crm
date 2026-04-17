@@ -244,6 +244,28 @@ function mapFormDataToCandidate(data: Record<string, unknown>): {
   };
 }
 
+function candidateRowForWelcomeFromForm(candidateData: {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  title?: string;
+  location?: string;
+}) {
+  return {
+    first_name: candidateData.firstName || null,
+    last_name: candidateData.lastName || null,
+    email: candidateData.email || null,
+    company: candidateData.company || null,
+    title: candidateData.title || null,
+    location: candidateData.location || null,
+    source: SOURCE,
+    tags: [] as string[] | null,
+    linkedin_url: null as string | null,
+  };
+}
+
 /** Best-effort welcome email; logs errors and never throws. */
 async function sendWelcomeEmailIfConfigured(
   supabase: ReturnType<typeof createClient>,
@@ -579,6 +601,10 @@ Deno.serve(async (req) => {
         );
       }
     }
+    // Welcome email on every successful webhook (including duplicate email), when configured
+    if (candidateData.email) {
+      await sendWelcomeEmailIfConfigured(supabase, candidateId, candidateRowForWelcomeFromForm(candidateData));
+    }
     return new Response(JSON.stringify({ success: true, duplicate: true, candidateId }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -639,17 +665,7 @@ Deno.serve(async (req) => {
   }
 
   if (candidateData.email) {
-    await sendWelcomeEmailIfConfigured(supabase, candidateId, {
-      first_name: candidateData.firstName || null,
-      last_name: candidateData.lastName || null,
-      email: candidateData.email || null,
-      company: candidateData.company || null,
-      title: candidateData.title || null,
-      location: candidateData.location || null,
-      source: SOURCE,
-      tags: [],
-      linkedin_url: null,
-    });
+    await sendWelcomeEmailIfConfigured(supabase, candidateId, candidateRowForWelcomeFromForm(candidateData));
   }
 
   // Resume upload (use WEBFLOW_AUTH_TOKEN with forms:read scope - fetches file with Bearer auth)

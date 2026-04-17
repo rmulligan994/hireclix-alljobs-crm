@@ -463,7 +463,7 @@ const Settings = () => {
                       <div className="space-y-0.5">
                         <Label htmlFor="welcomeEmailEnabled">Send welcome email</Label>
                         <p className="text-sm text-muted-foreground">
-                          Only when a new candidate is created (not when the email already exists).
+                          Sends on every successful career form submission (including when the email already exists).
                         </p>
                       </div>
                       <Switch
