@@ -775,11 +775,15 @@ export function classicAnnouncementFieldsToBlocks(form: AnnouncementForm): Conte
     blocks.push({ type: 'text', id: genBlockId(), content: form.message });
   }
   if (form.buttonLabel?.trim() || form.buttonUrl?.trim()) {
+    const rawBg = form.buttonBgColor?.trim();
+    const rawTc = form.buttonTextColor?.trim();
     blocks.push({
       type: 'button',
       id: genBlockId(),
       label: form.buttonLabel?.trim() || 'Learn more',
       url: form.buttonUrl?.trim() || '#',
+      ...(normalizeEmailHexColor(rawBg) ? { bgColor: normalizeEmailHexColor(rawBg)! } : {}),
+      ...(normalizeEmailHexColor(rawTc) ? { textColor: normalizeEmailHexColor(rawTc)! } : {}),
     });
   }
   if (form.signOff?.trim()) {
@@ -857,10 +861,14 @@ export function blocksToClassicAnnouncementFields(
 
   let buttonLabel = prev.buttonLabel;
   let buttonUrl = prev.buttonUrl;
+  let buttonBgColor = prev.buttonBgColor;
+  let buttonTextColor = prev.buttonTextColor;
   if (i < blocks.length && blocks[i].type === 'button') {
     const b = blocks[i] as ButtonBlock;
     buttonLabel = b.label;
     buttonUrl = b.url;
+    buttonBgColor = b.bgColor;
+    buttonTextColor = b.textColor;
     i++;
   }
   i = skipDecorativeBlocks(blocks, i);
@@ -889,6 +897,8 @@ export function blocksToClassicAnnouncementFields(
     useMessageRichHtml,
     buttonLabel,
     buttonUrl,
+    buttonBgColor,
+    buttonTextColor,
     signOff,
   };
 }
@@ -930,6 +940,8 @@ export function payloadToAnnouncementForm(payload: unknown): AnnouncementForm {
     previewText: p?.previewText ?? '',
     buttonLabel: p?.buttonLabel ?? '',
     buttonUrl: p?.buttonUrl ?? '',
+    buttonBgColor: p?.buttonBgColor,
+    buttonTextColor: p?.buttonTextColor,
     signOff: p?.signOff ?? '',
     blocks: p?.blocks ?? [],
     useBlocks: p?.useBlocks ?? false,
@@ -1035,6 +1047,38 @@ ${complianceFooterHtml ?? ''}
 </html>`;
 }
 
+/** Normalize hex for email CTAs; returns #rrggbb or null. */
+export function normalizeEmailHexColor(input: string | undefined | null): string | null {
+  if (input == null) return null;
+  const s = input.trim();
+  if (!s) return null;
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+    return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`.toLowerCase();
+  }
+  return null;
+}
+
+export function resolveButtonBlockColors(block: ButtonBlock, brand?: BrandSettings): { bg: string; text: string } {
+  const primary =
+    brand?.useBrandColors === true ? (brand?.primaryColor || '#2563eb') : '#2563eb';
+  const bg = normalizeEmailHexColor(block.bgColor) ?? primary;
+  const text = normalizeEmailHexColor(block.textColor) ?? '#ffffff';
+  return { bg, text };
+}
+
+/** Legacy simple form CTA (differs from block default when brand colors are off). */
+export function resolveSimpleFormCtaColors(
+  form: Pick<AnnouncementForm, 'buttonBgColor' | 'buttonTextColor'>,
+  brand?: BrandSettings,
+): { bg: string; text: string } {
+  const useBrand = brand?.useBrandColors === true;
+  const ctaBg = useBrand ? (brand?.primaryColor || '#2563eb') : '#18181b';
+  const bg = normalizeEmailHexColor(form.buttonBgColor) ?? ctaBg;
+  const text = normalizeEmailHexColor(form.buttonTextColor) ?? '#ffffff';
+  return { bg, text };
+}
+
 export function ctaButton(label: string, url: string, bgColor = '#2563eb', textColor = '#ffffff'): string {
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:auto;">
 <tr>
@@ -1058,6 +1102,30 @@ export function ctaButton(label: string, url: string, bgColor = '#2563eb', textC
 }
 
 // ========== HTML to Blocks Parser ==========
+
+function parseHexFromCssValue(value: string): string | null {
+  const m = value.match(/#[0-9a-fA-F]{3,8}\b/);
+  return m ? normalizeEmailHexColor(m[0]) : null;
+}
+
+function extractCtaColorsFromAnchorStyle(style: string): { bg?: string; text?: string } {
+  const out: { bg?: string; text?: string } = {};
+  const parts = style.split(';').map(s => s.trim()).filter(Boolean);
+  for (const part of parts) {
+    const colon = part.indexOf(':');
+    if (colon < 0) continue;
+    const key = part.slice(0, colon).trim().toLowerCase();
+    const val = part.slice(colon + 1);
+    if (key === 'color') {
+      const h = parseHexFromCssValue(val);
+      if (h) out.text = h;
+    } else if (key === 'background' || key === 'background-color') {
+      const h = parseHexFromCssValue(val);
+      if (h) out.bg = h;
+    }
+  }
+  return out;
+}
 
 export function parseHtmlToBlocks(html: string): ContentBlock[] {
   const parser = new DOMParser();
@@ -1122,11 +1190,14 @@ export function parseHtmlToBlocks(html: string): ContentBlock[] {
                        (style.includes('line-height:44px'));
       if (isButton && text && !seenTexts.has('btn:' + text)) {
         seenTexts.add('btn:' + text);
+        const cols = extractCtaColorsFromAnchorStyle(style);
         blocks.push({
           type: 'button',
           id: genBlockId(),
           label: text,
           url: anchor.getAttribute('href') || '#',
+          ...(cols.bg ? { bgColor: cols.bg } : {}),
+          ...(cols.text ? { textColor: cols.text } : {}),
         });
       }
     } else if (tag === 'hr') {
@@ -1168,8 +1239,6 @@ export function parseHtmlToBlocks(html: string): ContentBlock[] {
 
 function renderBlockRow(block: ContentBlock, brand?: BrandSettings): string {
   const font = brand?.fontFamily || 'Arial,Helvetica,sans-serif';
-  const primary =
-    brand?.useBrandColors === true ? (brand?.primaryColor || '#2563eb') : '#2563eb';
 
   switch (block.type) {
     case 'heading': {
@@ -1202,12 +1271,14 @@ function renderBlockRow(block: ContentBlock, brand?: BrandSettings): string {
 <img src="${block.url}" alt="${block.alt}" width="${block.width || 520}" style="display:block;max-width:100%;height:auto;border:0;border-radius:6px;" class="fluid" />
 </td>
 </tr>`;
-    case 'button':
+    case 'button': {
+      const { bg, text } = resolveButtonBlockColors(block, brand);
       return `<tr>
 <td style="padding:10px 40px 20px;background-color:#ffffff;" class="padding-mobile">
-${ctaButton(block.label, block.url, primary)}
+${ctaButton(block.label, block.url, bg, text)}
 </td>
 </tr>`;
+    }
     case 'divider':
       return `<tr>
 <td style="padding:0 40px;background-color:#ffffff;" class="padding-mobile">
@@ -1273,8 +1344,7 @@ export function renderAnnouncementToHTML(
 
   const { headline, subhead, message, messageRichHtml, useMessageRichHtml, previewText, buttonLabel, buttonUrl, signOff } = form;
   const font = brand?.fontFamily || 'Arial, Helvetica, sans-serif';
-  const useBrand = brand?.useBrandColors === true;
-  const ctaBg = useBrand ? (brand?.primaryColor || '#2563eb') : '#18181b';
+  const { bg: ctaBgResolved, text: ctaTextResolved } = resolveSimpleFormCtaColors(form, brand);
   const preheader = (previewText || siteConfig.siteName).replace(/</g, '&lt;');
 
   const logoRow =
@@ -1309,8 +1379,8 @@ ${siteConfig.memberName ? `<tr><td style="font-size:14px;color:#3f3f46;padding-b
 ${subhead ? `<tr><td style="font-size:16px;color:#52525b;padding-bottom:16px;font-family:${font};">${subhead}</td></tr>` : ''}
 ${useMessageRichHtml && (messageRichHtml ?? '').trim() ? `<tr><td style="font-size:14px;color:#3f3f46;line-height:1.6;padding-bottom:24px;font-family:${font};">${messageRichHtml}</td></tr>` : message ? `<tr><td style="font-size:14px;color:#3f3f46;line-height:1.6;padding-bottom:24px;white-space:pre-wrap;font-family:${font};">${message}</td></tr>` : ''}
 ${buttonLabel && buttonUrl ? `<tr><td style="padding-bottom:24px;">
-<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${buttonUrl}" style="height:40px;v-text-anchor:middle;width:200px;" arcsize="10%" strokecolor="${ctaBg}" fillcolor="${ctaBg}"><center style="color:#ffffff;font-family:${font};font-size:14px;font-weight:bold;">${buttonLabel}</center></v:roundrect><![endif]-->
-<!--[if !mso]><!--><a href="${buttonUrl}" style="display:inline-block;background:${ctaBg};color:#ffffff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;font-family:${font};">${buttonLabel}</a><!--<![endif]-->
+<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${buttonUrl}" style="height:40px;v-text-anchor:middle;width:200px;" arcsize="10%" strokecolor="${ctaBgResolved}" fillcolor="${ctaBgResolved}"><center style="color:${ctaTextResolved};font-family:${font};font-size:14px;font-weight:bold;">${buttonLabel}</center></v:roundrect><![endif]-->
+<!--[if !mso]><!--><a href="${buttonUrl}" style="display:inline-block;background:${ctaBgResolved};color:${ctaTextResolved};padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;font-family:${font};">${buttonLabel}</a><!--<![endif]-->
 </td></tr>` : ''}
 ${signOff ? `<tr><td style="font-size:14px;color:#71717a;padding-top:8px;font-family:${font};">${signOff}</td></tr>` : ''}
 ${legacyComplianceFooterRow(form.complianceFooter, font)}

@@ -55,6 +55,10 @@ export interface ButtonBlock {
   id: string;
   label: string;
   url: string;
+  /** Overrides default CTA background when set (hex). */
+  bgColor?: string;
+  /** Overrides default CTA text color when set (hex). */
+  textColor?: string;
 }
 
 export interface DividerBlock {
@@ -96,6 +100,9 @@ export interface AnnouncementForm {
   previewText: string;
   buttonLabel: string;
   buttonUrl: string;
+  /** Simple-layout CTA only; hex. Unset = template default (brand or dark). */
+  buttonBgColor?: string;
+  buttonTextColor?: string;
   signOff: string;
   // Dynamic block system
   blocks: ContentBlock[];

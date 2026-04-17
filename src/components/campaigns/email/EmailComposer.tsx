@@ -22,6 +22,9 @@ import {
   blocksToClassicAnnouncementFields,
   payloadToAnnouncementForm,
   normalizeComplianceFooter,
+  normalizeEmailHexColor,
+  resolveButtonBlockColors,
+  resolveSimpleFormCtaColors,
 } from '@/lib/email/email-utils';
 import {
   buildFormPayloadFromImportedHtml,
@@ -271,24 +274,124 @@ function SortableBlockRow({ id, children }: { id: string; children: React.ReactN
   );
 }
 
-/** Default CTA look in sent mail (`ctaButton` in email-utils); editor-only preview. */
-function EmailButtonStylePreview({ label, placeholder = 'Button label' }: { label: string; placeholder?: string }) {
-  const text = label.trim() || placeholder;
+/** Editor-only preview; colors match resolved CTA (`ctaButton` / simple form). */
+function EmailButtonStylePreview({
+  label,
+  placeholder = 'Button label',
+  bg,
+  text,
+}: {
+  label: string;
+  placeholder?: string;
+  bg: string;
+  text: string;
+}) {
+  const display = label.trim() || placeholder;
   return (
     <div className="mt-2 space-y-1.5">
       <p className="text-[10px] text-muted-foreground">How it looks in the email</p>
       <div className="flex justify-center rounded-md border border-border/60 bg-muted/25 py-3 px-2">
         <span
-          className="inline-block w-[220px] max-w-full truncate rounded-md text-center text-base font-bold leading-[44px] text-white shadow-sm"
+          className="inline-block w-[220px] max-w-full truncate rounded-md text-center text-base font-bold leading-[44px] shadow-sm"
           style={{
-            backgroundColor: '#2563eb',
-            border: '1px solid #2563eb',
+            backgroundColor: bg,
+            border: `1px solid ${bg}`,
+            color: text,
           }}
-          title={text}
+          title={display}
         >
-          {text}
+          {display}
         </span>
       </div>
+    </div>
+  );
+}
+
+function ButtonCtaStyleFields({
+  bgColor,
+  textColor,
+  onPatch,
+  fallbackBg,
+  fallbackText,
+  labelForPreview,
+  previewPlaceholder,
+  hint,
+}: {
+  bgColor?: string;
+  textColor?: string;
+  onPatch: (patch: { bgColor?: string; textColor?: string }) => void;
+  fallbackBg: string;
+  fallbackText: string;
+  labelForPreview: string;
+  previewPlaceholder?: string;
+  hint?: string;
+}) {
+  const bgForPicker = normalizeEmailHexColor(bgColor) ?? fallbackBg;
+  const textForPicker = normalizeEmailHexColor(textColor) ?? fallbackText;
+
+  return (
+    <div className="space-y-2 pt-1 border-t border-border/50 mt-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <Label className="text-xs text-muted-foreground">Button colors</Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 text-[10px] px-2"
+          onClick={() => onPatch({ bgColor: undefined, textColor: undefined })}
+        >
+          Use defaults
+        </Button>
+      </div>
+      {hint ? <p className="text-[10px] text-muted-foreground leading-snug">{hint}</p> : null}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Label className="text-[10px] text-muted-foreground w-16 shrink-0">Background</Label>
+          <input
+            type="color"
+            className="h-8 w-9 cursor-pointer rounded border border-border bg-background p-0 shrink-0"
+            value={bgForPicker}
+            onChange={(e) => onPatch({ bgColor: e.target.value })}
+            title="Background"
+            aria-label="Background color"
+          />
+          <Input
+            className="h-8 text-xs font-mono flex-1 min-w-0"
+            placeholder="Auto"
+            value={bgColor ?? ''}
+            onChange={(e) => {
+              const v = e.target.value.trim();
+              onPatch({ bgColor: v === '' ? undefined : v });
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-2 min-w-0">
+          <Label className="text-[10px] text-muted-foreground w-16 shrink-0">Text</Label>
+          <input
+            type="color"
+            className="h-8 w-9 cursor-pointer rounded border border-border bg-background p-0 shrink-0"
+            value={textForPicker}
+            onChange={(e) => onPatch({ textColor: e.target.value })}
+            title="Text"
+            aria-label="Text color"
+          />
+          <Input
+            className="h-8 text-xs font-mono flex-1 min-w-0"
+            placeholder="Auto"
+            value={textColor ?? ''}
+            onChange={(e) => {
+              const v = e.target.value.trim();
+              onPatch({ textColor: v === '' ? undefined : v });
+            }}
+          />
+        </div>
+      </div>
+      <EmailButtonStylePreview
+        label={labelForPreview}
+        placeholder={previewPlaceholder}
+        bg={bgForPicker}
+        text={textForPicker}
+      />
     </div>
   );
 }
@@ -387,7 +490,8 @@ function BlockEditor({ block, onChange, onDelete, onOpenAssetPicker }: {
           {controls}
         </div>
       );
-    case 'button':
+    case 'button': {
+      const fb = resolveButtonBlockColors(block, undefined);
       return (
         <div className="flex items-start gap-2 p-2 border rounded-md bg-muted/20">
           <div className="flex-1 space-y-1">
@@ -396,11 +500,27 @@ function BlockEditor({ block, onChange, onDelete, onOpenAssetPicker }: {
               <Input value={block.label} onChange={e => onChange({ ...block, label: e.target.value })} placeholder="Button label" className="h-8 text-sm" />
               <Input value={block.url} onChange={e => onChange({ ...block, url: e.target.value })} placeholder="Button URL" className="h-8 text-sm" />
             </div>
-            <EmailButtonStylePreview label={block.label} placeholder="Button label" />
+            <ButtonCtaStyleFields
+              bgColor={block.bgColor}
+              textColor={block.textColor}
+              onPatch={(patch) =>
+                onChange({
+                  ...block,
+                  ...('bgColor' in patch ? { bgColor: patch.bgColor } : {}),
+                  ...('textColor' in patch ? { textColor: patch.textColor } : {}),
+                })
+              }
+              fallbackBg={fb.bg}
+              fallbackText={fb.text}
+              labelForPreview={block.label}
+              previewPlaceholder="Button label"
+              hint="When colors are Auto, sent mail uses your brand primary (when enabled) or the template blue. Brand guidelines can plug in here later."
+            />
           </div>
           {controls}
         </div>
       );
+    }
     case 'divider':
       return (
         <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/20">
@@ -615,6 +735,7 @@ export function EmailComposer({
   };
 
   const previewHtml = getEmailEditorPreviewHtml(composeKind, formPayload, htmlBody, siteLabel);
+  const simpleFormCtaFallback = resolveSimpleFormCtaColors(formPayload, undefined);
 
   const applyLoadedTemplate = (template: EmailTemplate | null) => {
     if (template === null) {
@@ -828,7 +949,22 @@ export function EmailComposer({
                   <Input value={formPayload.buttonUrl} onChange={e => onFormPayloadChange({ ...formPayload, buttonUrl: e.target.value })} placeholder="https://..." />
                 </div>
               </div>
-              <EmailButtonStylePreview label={formPayload.buttonLabel} placeholder="e.g. Apply Now" />
+              <ButtonCtaStyleFields
+                bgColor={formPayload.buttonBgColor}
+                textColor={formPayload.buttonTextColor}
+                onPatch={(patch) =>
+                  onFormPayloadChange({
+                    ...formPayload,
+                    ...('bgColor' in patch ? { buttonBgColor: patch.bgColor } : {}),
+                    ...('textColor' in patch ? { buttonTextColor: patch.textColor } : {}),
+                  })
+                }
+                fallbackBg={simpleFormCtaFallback.bg}
+                fallbackText={simpleFormCtaFallback.text}
+                labelForPreview={formPayload.buttonLabel}
+                previewPlaceholder="e.g. Apply Now"
+                hint="When Auto, this layout uses a dark CTA without brand colors, or your brand primary when brand colors are on. Override with hex or the picker."
+              />
               <div className="space-y-2">
                 <Label>Sign-off</Label>
                 <Input value={formPayload.signOff} onChange={e => onFormPayloadChange({ ...formPayload, signOff: e.target.value })} placeholder="e.g. Best regards, The Team" />
