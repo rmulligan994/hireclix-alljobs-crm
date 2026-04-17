@@ -271,6 +271,28 @@ function SortableBlockRow({ id, children }: { id: string; children: React.ReactN
   );
 }
 
+/** Default CTA look in sent mail (`ctaButton` in email-utils); editor-only preview. */
+function EmailButtonStylePreview({ label, placeholder = 'Button label' }: { label: string; placeholder?: string }) {
+  const text = label.trim() || placeholder;
+  return (
+    <div className="mt-2 space-y-1.5">
+      <p className="text-[10px] text-muted-foreground">How it looks in the email</p>
+      <div className="flex justify-center rounded-md border border-border/60 bg-muted/25 py-3 px-2">
+        <span
+          className="inline-block w-[220px] max-w-full truncate rounded-md text-center text-base font-bold leading-[44px] text-white shadow-sm"
+          style={{
+            backgroundColor: '#2563eb',
+            border: '1px solid #2563eb',
+          }}
+          title={text}
+        >
+          {text}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function BlockEditor({ block, onChange, onDelete, onOpenAssetPicker }: {
   block: ContentBlock;
   onChange: (b: ContentBlock) => void;
@@ -374,6 +396,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenAssetPicker }: {
               <Input value={block.label} onChange={e => onChange({ ...block, label: e.target.value })} placeholder="Button label" className="h-8 text-sm" />
               <Input value={block.url} onChange={e => onChange({ ...block, url: e.target.value })} placeholder="Button URL" className="h-8 text-sm" />
             </div>
+            <EmailButtonStylePreview label={block.label} placeholder="Button label" />
           </div>
           {controls}
         </div>
@@ -805,6 +828,7 @@ export function EmailComposer({
                   <Input value={formPayload.buttonUrl} onChange={e => onFormPayloadChange({ ...formPayload, buttonUrl: e.target.value })} placeholder="https://..." />
                 </div>
               </div>
+              <EmailButtonStylePreview label={formPayload.buttonLabel} placeholder="e.g. Apply Now" />
               <div className="space-y-2">
                 <Label>Sign-off</Label>
                 <Input value={formPayload.signOff} onChange={e => onFormPayloadChange({ ...formPayload, signOff: e.target.value })} placeholder="e.g. Best regards, The Team" />
