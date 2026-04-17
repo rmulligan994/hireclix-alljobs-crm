@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Plus, Trash2, Mail, Clock, Edit, Copy, ChevronDown, ChevronUp, CalendarDays, Send, Calendar as CalendarIcon } from 'lucide-react';
@@ -34,6 +34,8 @@ interface SequenceBuilderProps {
   templateHtml?: string | null;
   onContinue?: (steps: Partial<CampaignEmail>[], opts?: { firstSendDate?: string; metadata?: SequenceMetadata }) => void;
   campaignJobId?: string | null;
+  /** Scopes AI chat persistence in the email editor to this campaign. */
+  campaignId?: string | null;
   /** When editing, pre-populate steps from campaign_emails */
   initialSteps?: Partial<CampaignEmail>[];
 }
@@ -68,6 +70,7 @@ export const SequenceBuilder = ({
   templateHtml,
   onContinue,
   campaignJobId,
+  campaignId,
   initialSteps,
 }: SequenceBuilderProps) => {
   const [sendImmediately, setSendImmediately] = useState(true);
@@ -440,15 +443,17 @@ export const SequenceBuilder = ({
     <>
       <Dialog open={!!editingStep} onOpenChange={() => setEditingStep(null)}>
         <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0">
+          <DialogTitle className="sr-only">Edit sequence email</DialogTitle>
           <HtmlCampaignEmailEditor
             key={editingStep ?? 'closed'}
             initialSubject={editingStepData?.subject ?? ''}
             initialHtmlContent={editingStepData?.htmlContent}
             initialComposeKind={editingStepData?.composeKind ?? 'announcement_form'}
             initialFormPayload={editingStepData?.formPayload ?? undefined}
-            onSave={handleEditorSave}
+            onContinue={handleEditorSave}
             onCancel={() => setEditingStep(null)}
             campaignJobId={campaignJobId}
+            campaignId={campaignId}
           />
         </DialogContent>
       </Dialog>

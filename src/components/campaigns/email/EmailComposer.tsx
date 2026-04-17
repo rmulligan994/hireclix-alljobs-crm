@@ -1,16 +1,27 @@
-import { useState, useRef } from 'react';
+import { Fragment, useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Sparkles, Upload, Clipboard, BookOpen, Globe, ChevronDown, Monitor, Smartphone, Plus, X, ArrowUp, ArrowDown, Image, Type, Heading, MousePointerClick, Minus, FolderOpen, Info, ArrowDownToLine, LayoutList } from 'lucide-react';
+import { Upload, Clipboard, BookOpen, Globe, ChevronDown, Monitor, Smartphone, Plus, X, Image, Type, Heading, MousePointerClick, Minus, FolderOpen, Info, ArrowDownToLine, LayoutList, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AnnouncementForm, ComposeKind, ContentBlock } from '@/types/email-types';
-import { emptyAnnouncementForm, stripEmailScripts, renderAnnouncementToHTML, parseHtmlToBlocks, genBlockId, getEmailEditorPreviewHtml } from '@/lib/email/email-utils';
+import {
+  emptyAnnouncementForm,
+  stripEmailScripts,
+  renderAnnouncementToHTML,
+  parseHtmlToBlocks,
+  genBlockId,
+  getEmailEditorPreviewHtml,
+  classicAnnouncementFieldsToBlocks,
+  blocksToClassicAnnouncementFields,
+  payloadToAnnouncementForm,
+} from '@/lib/email/email-utils';
 import {
   buildFormPayloadFromImportedHtml,
   planScratchEmailHtmlImport,
@@ -23,7 +34,12 @@ import type { StarterTemplate } from '@/data/email-starter-data';
 import { WebflowAssetPicker } from './WebflowAssetPicker';
 import { RegionMappingReviewDialog } from './RegionMappingReviewDialog';
 import { EmailImagesPanel } from './EmailImagesPanel';
-import { emailAiRequest } from '@/lib/email/email-ai-api-client';
+import { DndContext, DragEndEvent, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { RichTextInlineEditor } from './RichTextInlineEditor';
+import { EmailTemplatePickerDialog } from './EmailTemplatePickerDialog';
+import type { EmailTemplate } from '@/services/emailTemplateService';
 
 interface EmailComposerProps {
   /** Shown in previews and in rendered HTML (brand / site label). */
@@ -43,20 +59,226 @@ interface EmailComposerProps {
 
 // ========== Block Editor Components ==========
 
-function BlockEditor({ block, onChange, onDelete, onMoveUp, onMoveDown, isFirst, isLast, onOpenAssetPicker }: {
+/** Height in px; local empty allowed while typing; on blur empty → defaultHeight. */
+function SpacerBlockHeightField({
+  height,
+  defaultHeight,
+  onCommit,
+}: {
+  height: number;
+  defaultHeight: number;
+  onCommit: (h: number) => void;
+}) {
+  const [text, setText] = useState(() => String(height));
+  useEffect(() => {
+    setText(String(height));
+  }, [height]);
+
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      value={text}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === '' || /^\d{1,3}$/.test(v)) {
+          setText(v);
+        }
+      }}
+      onBlur={() => {
+        const t = text.trim();
+        if (t === '') {
+          onCommit(defaultHeight);
+          setText(String(defaultHeight));
+          return;
+        }
+        const n = parseInt(t, 10);
+        if (Number.isNaN(n)) {
+          setText(String(height));
+          return;
+        }
+        const clamped = Math.min(120, Math.max(8, n));
+        onCommit(clamped);
+        setText(String(clamped));
+      }}
+      placeholder={String(defaultHeight)}
+      className="h-8 text-sm w-20 tabular-nums"
+      title="Height in pixels (8–120)."
+    />
+  );
+}
+
+/** Optional width (px); empty = automatic in sent HTML / preview. */
+function ImageBlockWidthField({
+  width,
+  onCommit,
+}: {
+  width?: number;
+  onCommit: (w: number | undefined) => void;
+}) {
+  const [text, setText] = useState(() => (width === undefined ? '' : String(width)));
+  useEffect(() => {
+    setText(width === undefined ? '' : String(width));
+  }, [width]);
+
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      value={text}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === '' || /^\d{0,4}$/.test(v)) {
+          setText(v);
+        }
+      }}
+      onBlur={() => {
+        const t = text.trim();
+        if (t === '') {
+          onCommit(undefined);
+          return;
+        }
+        const n = parseInt(t, 10);
+        if (Number.isNaN(n)) {
+          setText(width === undefined ? '' : String(width));
+          return;
+        }
+        const clamped = Math.min(600, Math.max(50, n));
+        onCommit(clamped);
+        setText(String(clamped));
+      }}
+      placeholder="Auto"
+      className="h-8 text-sm w-[4.5rem] tabular-nums"
+      title="Optional width in pixels. Leave empty for automatic sizing."
+    />
+  );
+}
+
+/** Explains blocks vs simple form vs templates vs toolbar imports — one place so users aren’t lost. */
+function VisualLayoutHelpPanel({
+  mode,
+  onLoadSavedTemplate,
+  onSwitchToBlocks,
+  onSwitchToSimple,
+}: {
+  mode: 'blocks' | 'simple';
+  onLoadSavedTemplate: () => void;
+  onSwitchToBlocks: () => void;
+  onSwitchToSimple: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/25 px-3 py-3 space-y-3">
+      <div className="space-y-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-foreground">Body format</span>
+          <Badge variant={mode === 'blocks' ? 'default' : 'secondary'} className="text-[10px] font-normal tabular-nums">
+            {mode === 'blocks' ? 'Blocks' : 'Simple form'}
+          </Badge>
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          {mode === 'blocks'
+            ? 'Sections you can reorder and add to. Use when you want images, spacing, or a custom order.'
+            : 'One field per part of the email (headline, message, button…). Use when you want a quick, linear layout.'}
+        </p>
+      </div>
+      <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto justify-center" onClick={onLoadSavedTemplate}>
+          <LayoutList className="h-4 w-4 mr-2 shrink-0" />
+          Load from your templates
+        </Button>
+        {mode === 'blocks' ? (
+          <Button type="button" variant="ghost" size="sm" className="w-full sm:w-auto justify-center text-muted-foreground" onClick={onSwitchToSimple}>
+            Switch to simple form
+          </Button>
+        ) : (
+          <Button type="button" variant="ghost" size="sm" className="w-full sm:w-auto justify-center text-muted-foreground" onClick={onSwitchToBlocks}>
+            Switch to blocks
+          </Button>
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground border-t border-border/70 pt-2.5 leading-relaxed">
+        <span className="font-medium text-foreground/90">Saved templates</span> are emails you stored in Clarity — loading one replaces this draft’s
+        subject and body.
+        <span className="block mt-1.5">
+          <span className="font-medium text-foreground/90">Starters</span> (book icon in the toolbar) are built-in layouts.{' '}
+          <span className="font-medium text-foreground/90">Import / Paste</span> bring your own HTML. Switching between blocks and simple form keeps
+          your text — it is copied, not deleted.
+        </span>
+      </p>
+    </div>
+  );
+}
+
+function AddBlockMenuItems({ onPick }: { onPick: (t: ContentBlock['type']) => void }) {
+  return (
+    <>
+      <DropdownMenuItem onClick={() => onPick('heading')}><Heading className="h-4 w-4 mr-2" /> Heading</DropdownMenuItem>
+      <DropdownMenuItem onClick={() => onPick('text')}><Type className="h-4 w-4 mr-2" /> Text</DropdownMenuItem>
+      <DropdownMenuItem onClick={() => onPick('image')}><Image className="h-4 w-4 mr-2" /> Image</DropdownMenuItem>
+      <DropdownMenuItem onClick={() => onPick('button')}><MousePointerClick className="h-4 w-4 mr-2" /> Button</DropdownMenuItem>
+      <DropdownMenuItem onClick={() => onPick('divider')}><Minus className="h-4 w-4 mr-2" /> Divider</DropdownMenuItem>
+      <DropdownMenuItem onClick={() => onPick('spacer')}><ArrowDownToLine className="h-4 w-4 mr-2" /> Spacer</DropdownMenuItem>
+    </>
+  );
+}
+
+function BlockInsertRow({ onInsert }: { onInsert: (type: ContentBlock['type']) => void }) {
+  return (
+    <div className="group relative flex items-center justify-center py-1.5 min-h-[32px] -my-0.5">
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border/60 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100 transition-all z-10 bg-background shadow-sm border-dashed"
+            aria-label="Add block here"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="center" className="max-h-72 overflow-y-auto">
+          <AddBlockMenuItems onPick={onInsert} />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function SortableBlockRow({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.55 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="flex gap-2 items-start">
+      <button
+        type="button"
+        className="mt-2 p-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground rounded shrink-0 touch-none"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function BlockEditor({ block, onChange, onDelete, onOpenAssetPicker }: {
   block: ContentBlock;
   onChange: (b: ContentBlock) => void;
   onDelete: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  isFirst: boolean;
-  isLast: boolean;
   onOpenAssetPicker?: () => void;
 }) {
   const controls = (
     <div className="flex items-center gap-0.5 shrink-0">
-      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveUp} disabled={isFirst}><ArrowUp className="h-3 w-3" /></Button>
-      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onMoveDown} disabled={isLast}><ArrowDown className="h-3 w-3" /></Button>
       <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={onDelete}><X className="h-3 w-3" /></Button>
     </div>
   );
@@ -78,7 +300,15 @@ function BlockEditor({ block, onChange, onDelete, onMoveUp, onMoveDown, isFirst,
                 <option value={3}>H3</option>
               </select>
             </div>
-            <Input value={block.text} onChange={e => onChange({ ...block, text: e.target.value })} placeholder="Heading text" className="h-8 text-sm" />
+            <RichTextInlineEditor
+              editorKey={block.id}
+              valuePlain={block.text}
+              valueHtml={block.textHtml ?? null}
+              onChange={(plain, html) => onChange({ ...block, text: plain, textHtml: html })}
+              placeholder="Heading text"
+              singleLine
+              minHeightClass="min-h-[40px]"
+            />
           </div>
           {controls}
         </div>
@@ -88,7 +318,15 @@ function BlockEditor({ block, onChange, onDelete, onMoveUp, onMoveDown, isFirst,
         <div className="flex items-start gap-2 p-2 border rounded-md bg-muted/20">
           <div className="flex-1 space-y-1">
             <Label className="text-xs text-muted-foreground">Text</Label>
-            <Textarea value={block.content} onChange={e => onChange({ ...block, content: e.target.value })} placeholder="Paragraph text..." rows={3} className="text-sm" />
+            <p className="text-[10px] text-muted-foreground mb-1">Toolbar: bold, italic, underline, color.</p>
+            <RichTextInlineEditor
+              editorKey={block.id}
+              valuePlain={block.content}
+              valueHtml={block.contentHtml ?? null}
+              onChange={(plain, html) => onChange({ ...block, content: plain, contentHtml: html })}
+              placeholder="Paragraph text…"
+              minHeightClass="min-h-[96px]"
+            />
           </div>
           {controls}
         </div>
@@ -107,21 +345,16 @@ function BlockEditor({ block, onChange, onDelete, onMoveUp, onMoveDown, isFirst,
             <div className="flex gap-1.5">
               <Input value={block.alt} onChange={e => onChange({ ...block, alt: e.target.value })} placeholder="Alt text" className="h-8 text-sm flex-1" />
               <div className="flex items-center gap-1 shrink-0">
-                <Input
-                  type="number"
-                  value={block.width ?? 600}
-                  onChange={e => onChange({ ...block, width: parseInt(e.target.value) || 600 })}
-                  className="h-8 text-sm w-20"
-                  min={50}
-                  max={600}
-                  title="Display width in pixels"
+                <ImageBlockWidthField
+                  width={block.width}
+                  onCommit={(w) => onChange({ ...block, width: w })}
                 />
-                <span className="text-[10px] text-muted-foreground">px</span>
+                <span className="text-[10px] text-muted-foreground w-5">px</span>
               </div>
             </div>
             <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground">
               <Info className="h-3 w-3 mt-0.5 shrink-0" />
-              <span>Recommended: 600px wide, JPG/PNG. Images scale to fit the email.</span>
+              <span>600px wide images work well; width is optional (Auto = responsive in the email).</span>
             </div>
             {block.url && (
               <div className="mt-1 border rounded overflow-hidden bg-muted/30 max-h-24">
@@ -160,7 +393,11 @@ function BlockEditor({ block, onChange, onDelete, onMoveUp, onMoveDown, isFirst,
         <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/20">
           <div className="flex-1 flex items-center gap-2">
             <Label className="text-xs text-muted-foreground">Spacer</Label>
-            <Input type="number" value={block.height} onChange={e => onChange({ ...block, height: parseInt(e.target.value) || 16 })} className="h-8 text-sm w-20" min={8} max={120} />
+            <SpacerBlockHeightField
+              height={block.height}
+              defaultHeight={24}
+              onCommit={(h) => onChange({ ...block, height: h })}
+            />
             <span className="text-xs text-muted-foreground">px</span>
           </div>
           {controls}
@@ -184,7 +421,6 @@ export function EmailComposer({
 }: EmailComposerProps) {
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop');
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [suggestBusy, setSuggestBusy] = useState(false);
   const [pasteHtml, setPasteHtml] = useState('');
   const [pasteOpen, setPasteOpen] = useState(false);
   const [starterOpen, setStarterOpen] = useState(false);
@@ -193,6 +429,7 @@ export function EmailComposer({
   const [assetPickerBlockId, setAssetPickerBlockId] = useState<string | null>(null);
   const [regionReviewOpen, setRegionReviewOpen] = useState(false);
   const [regionReviewPrepare, setRegionReviewPrepare] = useState<PrepareRegionMappingResult | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
 
   const SIGN_OFF_IMPORT_DEFAULT = 'Best,\nYour Team';
 
@@ -234,23 +471,6 @@ export function EmailComposer({
       toast.success(`Extracted ${blocks.length} content blocks from HTML`);
     } else {
       onComposeKindChange('raw_html');
-    }
-  };
-
-  const handleAISuggestSubject = async () => {
-    setSuggestBusy(true);
-    try {
-      const r = await emailAiRequest({ mode: 'subject_suggestions', prompt: subject });
-      if ('suggestions' in r && r.suggestions?.length) {
-        onSubjectChange(r.suggestions[0]);
-        toast.success('Applied a suggested subject line — edit as needed');
-      } else {
-        toast.info('No suggestions returned — try adding a few words to the subject first.');
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Subject suggestion failed');
-    } finally {
-      setSuggestBusy(false);
     }
   };
 
@@ -320,188 +540,237 @@ export function EmailComposer({
     });
   };
 
-  const moveBlock = (id: string, direction: -1 | 1) => {
-    const blocks = [...formPayload.blocks];
-    const idx = blocks.findIndex(b => b.id === id);
-    if (idx < 0) return;
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= blocks.length) return;
-    [blocks[idx], blocks[newIdx]] = [blocks[newIdx], blocks[idx]];
-    onFormPayloadChange({ ...formPayload, blocks });
-  };
-
-  const addBlock = (type: ContentBlock['type']) => {
-    let block: ContentBlock;
+  const createBlock = (type: ContentBlock['type']): ContentBlock => {
     const id = genBlockId();
     switch (type) {
-      case 'heading': block = { type: 'heading', id, text: '', level: 2 }; break;
-      case 'text': block = { type: 'text', id, content: '' }; break;
-      case 'image': block = { type: 'image', id, url: '', alt: '' }; break;
-      case 'button': block = { type: 'button', id, label: '', url: '' }; break;
-      case 'divider': block = { type: 'divider', id }; break;
-      case 'spacer': block = { type: 'spacer', id, height: 24 }; break;
-      default: return;
+      case 'heading': return { type: 'heading', id, text: '', level: 2 };
+      case 'text': return { type: 'text', id, content: '' };
+      case 'image': return { type: 'image', id, url: '', alt: '' };
+      case 'button': return { type: 'button', id, label: '', url: '' };
+      case 'divider': return { type: 'divider', id };
+      case 'spacer': return { type: 'spacer', id, height: 24 };
+      default: {
+        const _n: never = type;
+        throw new Error(`Unknown block type: ${String(_n)}`);
+      }
     }
+  };
+
+  const insertBlockAt = (index: number, type: ContentBlock['type']) => {
+    const block = createBlock(type);
+    const blocks = [...formPayload.blocks];
+    const i = Math.max(0, Math.min(index, blocks.length));
+    blocks.splice(i, 0, block);
+    onFormPayloadChange({ ...formPayload, blocks, useBlocks: true });
+  };
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleBlocksDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = formPayload.blocks.findIndex(b => b.id === active.id);
+    const newIndex = formPayload.blocks.findIndex(b => b.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
     onFormPayloadChange({
       ...formPayload,
-      blocks: [...formPayload.blocks, block],
-      useBlocks: true,
+      blocks: arrayMove(formPayload.blocks, oldIndex, newIndex),
     });
   };
 
   const previewHtml = getEmailEditorPreviewHtml(composeKind, formPayload, htmlBody, siteLabel);
 
+  const applyLoadedTemplate = (template: EmailTemplate | null) => {
+    if (template === null) {
+      onSubjectChange('');
+      onHtmlBodyChange('');
+      onComposeKindChange('announcement_form');
+      onFormPayloadChange(emptyAnnouncementForm());
+      toast.success('Starting from a blank email');
+      return;
+    }
+    const ck = template.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form';
+    onComposeKindChange(ck);
+    onSubjectChange(template.subject ?? '');
+    onHtmlBodyChange(template.html_content ?? '');
+    onFormPayloadChange(
+      template.form_payload != null ? payloadToAnnouncementForm(template.form_payload) : emptyAnnouncementForm(),
+    );
+    toast.success(`Loaded “${template.name}”`);
+  };
+
   return (
-    <div className="space-y-4">
-      {/* Subject */}
-      <div className="space-y-2">
-        <Label>Subject Line</Label>
-        <div className="flex gap-2">
-          <Input value={subject} onChange={e => onSubjectChange(e.target.value)} placeholder="Enter email subject..." className="flex-1" />
-          <Button variant="outline" size="sm" onClick={() => void handleAISuggestSubject()} type="button" disabled={suggestBusy}>
-            <Sparkles className="h-4 w-4 mr-1" />
-            {suggestBusy ? '…' : 'Suggest'}
-          </Button>
+    <div className="space-y-5">
+      {/* Inbox: subject + preheader */}
+      <div className="rounded-xl border border-border bg-card/60 p-4 space-y-4 shadow-sm">
+        <div>
+          <Label className="text-sm font-medium mb-1.5 block">Subject line</Label>
+          <Input
+            value={subject}
+            onChange={(e) => onSubjectChange(e.target.value)}
+            placeholder="What recipients see in their inbox"
+            className="text-[15px] font-medium"
+          />
         </div>
+
+        {composeKind === 'announcement_form' && (
+          <div className="space-y-1.5 pt-1 border-t border-border/80">
+            <Label className="text-sm text-muted-foreground">Preview text (preheader)</Label>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Shown after the subject in many clients — optional second line.
+            </p>
+            <Input
+              value={formPayload.previewText}
+              onChange={(e) => onFormPayloadChange({ ...formPayload, previewText: e.target.value })}
+              placeholder="e.g. New roles this week · apply in one click"
+              className="text-sm"
+            />
+          </div>
+        )}
       </div>
 
       {/* Compose mode tabs */}
       <Tabs value={composeKind} onValueChange={handleTabChange}>
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="announcement_form">Visual</TabsTrigger>
-            <TabsTrigger value="raw_html">Code</TabsTrigger>
-          </TabsList>
-          <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} title="Import HTML">
-              <Upload className="h-4 w-4" />
-            </Button>
-            <input ref={fileInputRef} type="file" accept=".html" className="hidden" onChange={handleImportFile} />
-            <Button variant="ghost" size="icon" onClick={() => setPasteOpen(!pasteOpen)} title="Paste HTML">
-              <Clipboard className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => setStarterOpen(true)} title="Starter Library">
-              <BookOpen className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              type="button"
-              title="Webflow assets"
-              onClick={() =>
-                toast.info('Add an Image block in Visual mode, then use Assets on that block to pick from Webflow or paste a URL.')
-              }
-            >
-              <Globe className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Paste HTML collapsible */}
-        {pasteOpen && (
-          <Card className="mt-2">
-            <CardContent className="pt-4 space-y-2">
-              <Textarea value={pasteHtml} onChange={e => setPasteHtml(e.target.value)} placeholder="Paste your HTML here..." rows={6} />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handlePasteApply}>Apply</Button>
-                <Button size="sm" variant="ghost" onClick={() => setPasteOpen(false)}>Cancel</Button>
+        <div className="rounded-lg border border-border bg-card/40 p-3 sm:p-4 space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="space-y-0.5 min-w-0">
+              <p className="text-sm font-medium text-foreground">Body</p>
+              <p className="text-[11px] text-muted-foreground">
+                Visual: blocks or simple form · Code: full HTML
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 justify-between sm:justify-end">
+              <TabsList className="h-9">
+                <TabsTrigger value="announcement_form" className="text-xs sm:text-sm">
+                  Visual
+                </TabsTrigger>
+                <TabsTrigger value="raw_html" className="text-xs sm:text-sm">
+                  Code
+                </TabsTrigger>
+              </TabsList>
+              <div className="flex items-center gap-0.5 border rounded-md bg-background/80 p-0.5">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()} title="Import HTML file">
+                  <Upload className="h-4 w-4" />
+                </Button>
+                <input ref={fileInputRef} type="file" accept=".html" className="hidden" onChange={handleImportFile} />
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPasteOpen(!pasteOpen)} title="Paste HTML">
+                  <Clipboard className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setStarterOpen(true)}
+                  title="Built-in starter layouts (not your saved templates)"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  type="button"
+                  title="Webflow assets (use on an Image block)"
+                  onClick={() =>
+                    toast.info('Add an Image block in Visual mode, then use Assets on that block to pick from Webflow or paste a URL.')
+                  }
+                >
+                  <Globe className="h-4 w-4" />
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </div>
 
-        {/* Visual mode — Dynamic Block Editor */}
+          {/* Paste HTML collapsible */}
+          {pasteOpen && (
+            <Card className="border-dashed">
+              <CardContent className="pt-4 space-y-2">
+                <Label className="text-xs text-muted-foreground">Paste HTML</Label>
+                <Textarea value={pasteHtml} onChange={e => setPasteHtml(e.target.value)} placeholder="Paste HTML here…" rows={6} />
+                <div className="flex gap-2">
+                  <Button size="sm" type="button" onClick={handlePasteApply}>
+                    Apply
+                  </Button>
+                  <Button size="sm" variant="ghost" type="button" onClick={() => setPasteOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+        {/* Visual mode — format explainer + block editor or simple form */}
         <TabsContent value="announcement_form" className="space-y-3">
+          <VisualLayoutHelpPanel
+            mode={formPayload.useBlocks ? 'blocks' : 'simple'}
+            onLoadSavedTemplate={() => setTemplatePickerOpen(true)}
+            onSwitchToBlocks={() =>
+              onFormPayloadChange({
+                ...formPayload,
+                useBlocks: true,
+                blocks: classicAnnouncementFieldsToBlocks(formPayload),
+              })
+            }
+            onSwitchToSimple={() =>
+              onFormPayloadChange(blocksToClassicAnnouncementFields(formPayload.blocks, formPayload))
+            }
+          />
           {formPayload.useBlocks ? (
             <>
               {formPayload.blocks.length === 0 && (
                 <p className="text-xs text-muted-foreground border border-dashed rounded-md p-3">
-                  No blocks yet. Add a heading, text, image, or button below. You can reorder blocks or remove any block.
+                  Hover a line to add a block, or use Add block at the bottom. Drag the grip to reorder.
                 </p>
               )}
-              <div className="space-y-2">
-                {formPayload.blocks.map((block, idx) => (
-                  <BlockEditor
-                    key={block.id}
-                    block={block}
-                    onChange={(b) => updateBlock(block.id, b)}
-                    onDelete={() => deleteBlock(block.id)}
-                    onMoveUp={() => moveBlock(block.id, -1)}
-                    onMoveDown={() => moveBlock(block.id, 1)}
-                    isFirst={idx === 0}
-                    isLast={idx === formPayload.blocks.length - 1}
-                    onOpenAssetPicker={() => {
-                      setAssetPickerBlockId(block.id);
-                      setAssetPickerOpen(true);
-                    }}
-                  />
-                ))}
-              </div>
+              {formPayload.blocks.length === 0 ? (
+                <BlockInsertRow onInsert={(t) => insertBlockAt(0, t)} />
+              ) : (
+                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleBlocksDragEnd}>
+                  <SortableContext items={formPayload.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
+                    {formPayload.blocks.map((block, idx) => (
+                      <Fragment key={block.id}>
+                        <BlockInsertRow onInsert={(t) => insertBlockAt(idx, t)} />
+                        <SortableBlockRow id={block.id}>
+                          <BlockEditor
+                            block={block}
+                            onChange={(b) => updateBlock(block.id, b)}
+                            onDelete={() => deleteBlock(block.id)}
+                            onOpenAssetPicker={() => {
+                              setAssetPickerBlockId(block.id);
+                              setAssetPickerOpen(true);
+                            }}
+                          />
+                        </SortableBlockRow>
+                      </Fragment>
+                    ))}
+                    <BlockInsertRow onInsert={(t) => insertBlockAt(formPayload.blocks.length, t)} />
+                  </SortableContext>
+                </DndContext>
+              )}
               {/* Add block */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="w-full">
-                    <Plus className="h-4 w-4 mr-1" /> Add Block
+                    <Plus className="h-4 w-4 mr-1" /> Add block at end
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => addBlock('heading')}><Heading className="h-4 w-4 mr-2" /> Heading</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => addBlock('text')}><Type className="h-4 w-4 mr-2" /> Text</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => addBlock('image')}><Image className="h-4 w-4 mr-2" /> Image</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => addBlock('button')}><MousePointerClick className="h-4 w-4 mr-2" /> Button</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => addBlock('divider')}><Minus className="h-4 w-4 mr-2" /> Divider</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => addBlock('spacer')}><ArrowDownToLine className="h-4 w-4 mr-2" /> Spacer</DropdownMenuItem>
+                <DropdownMenuContent className="max-h-72 overflow-y-auto">
+                  <AddBlockMenuItems onPick={(t) => insertBlockAt(formPayload.blocks.length, t)} />
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="w-full text-muted-foreground"
-                onClick={() =>
-                  onFormPayloadChange({
-                    ...formPayload,
-                    useBlocks: false,
-                  })
-                }
-              >
-                <LayoutList className="h-4 w-4 mr-2" />
-                Use classic fields instead
-              </Button>
             </>
           ) : (
             /* Legacy flat-field form */
             <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() =>
-                  onFormPayloadChange({
-                    ...formPayload,
-                    useBlocks: true,
-                    blocks: [],
-                  })
-                }
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Use block layout
-              </Button>
               <div className="space-y-2">
                 <Label>Eyebrow</Label>
                 <Input
                   value={formPayload.eyebrow}
                   onChange={e => onFormPayloadChange({ ...formPayload, eyebrow: e.target.value })}
                   placeholder="Short label above the headline (optional)"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Preview text (inbox)</Label>
-                <Input
-                  value={formPayload.previewText}
-                  onChange={e => onFormPayloadChange({ ...formPayload, previewText: e.target.value })}
-                  placeholder="Hidden preheader line shown after subject in some clients"
                 />
               </div>
               <div className="space-y-2">
@@ -532,19 +801,25 @@ export function EmailComposer({
               </div>
             </>
           )}
-        </TabsContent>
-
-        {/* Code mode */}
-        <TabsContent value="raw_html" className="space-y-2">
-          <Textarea
-            ref={codeTextareaRef}
-            value={htmlBody}
-            onChange={e => onHtmlBodyChange(e.target.value)}
-            placeholder="<html>...</html>"
-            rows={12}
-            className="font-mono text-sm"
+          <EmailTemplatePickerDialog
+            open={templatePickerOpen}
+            onOpenChange={setTemplatePickerOpen}
+            onSelect={applyLoadedTemplate}
           />
         </TabsContent>
+
+          {/* Code mode */}
+          <TabsContent value="raw_html" className="space-y-2 mt-0">
+            <Textarea
+              ref={codeTextareaRef}
+              value={htmlBody}
+              onChange={e => onHtmlBodyChange(e.target.value)}
+              placeholder="<!DOCTYPE html>…"
+              rows={14}
+              className="font-mono text-sm min-h-[280px]"
+            />
+          </TabsContent>
+        </div>
       </Tabs>
 
       {composeKind === 'raw_html' && <EmailImagesPanel htmlBody={htmlBody} onHtmlBodyChange={onHtmlBodyChange} />}

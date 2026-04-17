@@ -3,33 +3,49 @@ import { NextResponse } from 'next/server';
 import type { Database } from '@/integrations/supabase/types';
 import { fetchWebflowSiteAssetsPage } from '@/lib/webflowAssets';
 
+/** Public URL + anon key only. Uses the caller's JWT so RLS applies (no service role on the host). */
+function getSupabasePublicEnv() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  return { supabaseUrl, anonKey };
+}
+
 export async function GET(request: Request) {
   const token = request.headers.get('Authorization')?.replace('Bearer ', '');
   if (!token) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  const { supabaseUrl, anonKey } = getSupabasePublicEnv();
+  if (!supabaseUrl || !anonKey) {
+    const missing: string[] = [];
+    if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
+    if (!anonKey) missing.push('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    return NextResponse.json(
+      {
+        error: 'Server configuration error',
+        detail: `Missing environment variables: ${missing.join(', ')}. Add them to your hosting env (same values the app already uses for Supabase).`,
+      },
+      { status: 500 },
+    );
   }
 
-  const authClient = createClient<Database>(supabaseUrl, anonKey, {
-    auth: { persistSession: false },
+  const supabase = createClient<Database>(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      headers: { Authorization: `Bearer ${token}` },
+    },
   });
+
   const {
     data: { user },
     error: authError,
-  } = await authClient.auth.getUser(token);
+  } = await supabase.auth.getUser(token);
   if (authError || !user) {
     return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
   }
-
-  const supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
 
   const { data: orgSettings, error: settingsError } = await supabase
     .from('organization_settings')

@@ -34,6 +34,10 @@ import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { campaignService } from '@/services/campaignService';
+import {
+  findUnknownMergeTagsInCampaignSteps,
+  formatUnknownMergeTagsMessage,
+} from '@/lib/email/merge-tags-validation';
 
 interface CampaignBuilderProps {
   open: boolean;
@@ -215,7 +219,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setCurrentStep('editor');
   };
 
-  const handleEditorSave = (payload: {
+  const applyEditorPayloadToTemplateState = (payload: {
     html: string;
     subject: string;
     compose_kind: ComposeKind;
@@ -225,6 +229,25 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setTemplateComposeKind(payload.compose_kind);
     setTemplateFormPayload(payload.form_payload);
     setTemplateEditorSubject(payload.subject);
+  };
+
+  const handleEditorContinue = (payload: {
+    html: string;
+    subject: string;
+    compose_kind: ComposeKind;
+    form_payload: AnnouncementForm | null;
+  }) => {
+    applyEditorPayloadToTemplateState(payload);
+    setCurrentStep('sequence');
+  };
+
+  const handleEditorSaveTemplate = (payload: {
+    html: string;
+    subject: string;
+    compose_kind: ComposeKind;
+    form_payload: AnnouncementForm | null;
+  }) => {
+    applyEditorPayloadToTemplateState(payload);
 
     if (selectedTemplate) {
       updateTemplate({
@@ -249,7 +272,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       });
     }
 
-    setCurrentStep('sequence');
+    toast({
+      title: 'Template saved',
+      description: 'You can reuse it anytime from your template library.',
+    });
+    setCurrentStep('template');
   };
 
   const handleEditorCancel = () => {
@@ -265,6 +292,15 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const handleSendTest = async () => {
     if (emailSteps.length === 0) {
       toast({ title: 'Add at least one email to the sequence', variant: 'destructive' });
+      return;
+    }
+    const unknownMerge = findUnknownMergeTagsInCampaignSteps(emailSteps);
+    if (unknownMerge.length > 0) {
+      toast({
+        title: 'Invalid merge tags',
+        description: formatUnknownMergeTagsMessage(unknownMerge),
+        variant: 'destructive',
+      });
       return;
     }
     setSendingTest(true);
@@ -386,6 +422,18 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       return;
     }
 
+    if (emailSteps.length > 0) {
+      const unknownMerge = findUnknownMergeTagsInCampaignSteps(emailSteps);
+      if (unknownMerge.length > 0) {
+        toast({
+          title: 'Invalid merge tags',
+          description: formatUnknownMergeTagsMessage(unknownMerge),
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     try {
       const scheduledAt = new Date(firstDate);
       const [hours, minutes] = scheduleTime.split(':').map(Number);
@@ -466,6 +514,18 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   };
 
   const handleLaunchCampaign = async () => {
+    if (emailSteps.length > 0) {
+      const unknownMerge = findUnknownMergeTagsInCampaignSteps(emailSteps);
+      if (unknownMerge.length > 0) {
+        toast({
+          title: 'Invalid merge tags',
+          description: formatUnknownMergeTagsMessage(unknownMerge),
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     try {
       let finalCampaignId = campaignId;
 
@@ -576,14 +636,17 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     return (
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0">
+          <DialogTitle className="sr-only">Edit campaign email</DialogTitle>
           <HtmlCampaignEmailEditor
             initialSubject={templateEditorSubject}
             initialHtmlContent={templateHtml}
             initialComposeKind={templateComposeKind}
             initialFormPayload={templateFormPayload ?? undefined}
-            onSave={handleEditorSave}
+            onContinue={handleEditorContinue}
+            onSaveToTemplateLibrary={handleEditorSaveTemplate}
             onCancel={handleEditorCancel}
             campaignJobId={selectedJobId}
+            campaignId={campaignId}
           />
         </DialogContent>
       </Dialog>
@@ -829,6 +892,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               templateEditorSubject={templateEditorSubject}
               templateHtml={templateHtml}
               campaignJobId={selectedJobId}
+              campaignId={campaignId}
               initialSteps={emailSteps.length > 0 ? emailSteps : undefined}
             />
           )}

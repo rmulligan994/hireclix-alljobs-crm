@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AnnouncementForm, ContentBlock } from '@/types/email-types';
+import { sanitizeEmailInlineHtml } from '@/lib/email/sanitize-email-inline-html';
 
 interface AnnouncementLayoutPreviewProps {
   form: AnnouncementForm;
@@ -9,11 +10,29 @@ interface AnnouncementLayoutPreviewProps {
 
 function BlockPreview({ block }: { block: ContentBlock }) {
   switch (block.type) {
-    case 'heading':
+    case 'heading': {
+      const cls = block.level === 1 ? 'text-xl' : block.level === 2 ? 'text-lg' : 'text-base';
+      if (block.textHtml?.trim()) {
+        return (
+          <div
+            className={`${cls} text-foreground mb-1 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_a]:underline [&_a]:text-primary`}
+            dangerouslySetInnerHTML={{ __html: sanitizeEmailInlineHtml(block.textHtml) }}
+          />
+        );
+      }
       if (block.level === 1) return <h1 className="text-xl font-bold text-foreground mb-1">{block.text}</h1>;
       if (block.level === 2) return <h2 className="text-lg font-semibold text-foreground mb-1">{block.text}</h2>;
       return <h3 className="text-base font-semibold text-foreground mb-1">{block.text}</h3>;
+    }
     case 'text':
+      if (block.contentHtml?.trim()) {
+        return (
+          <div
+            className="text-sm text-foreground leading-relaxed mb-3 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_a]:underline [&_a]:text-primary"
+            dangerouslySetInnerHTML={{ __html: sanitizeEmailInlineHtml(block.contentHtml) }}
+          />
+        );
+      }
       return <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mb-3">{block.content}</p>;
     case 'image':
       return (
@@ -50,10 +69,13 @@ export function AnnouncementLayoutPreview({ form, viewport, siteLabel = 'Your Co
   const frame = (children: ReactNode) => (
     <div className="flex justify-center w-full">
       <div
-        className="border rounded-md overflow-auto bg-muted/30 shadow-sm w-full"
+        className="border rounded-md overflow-auto bg-muted/30 shadow-sm w-full relative"
         style={{ maxWidth: frameW }}
       >
-        <div className="p-6 mx-auto bg-background rounded min-h-[120px]" style={{ fontFamily: 'Arial, sans-serif' }}>
+        <span className="absolute left-2 top-2 z-10 rounded bg-muted/90 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground border border-border/60">
+          {viewport === 'mobile' ? '390 px' : '600 px'} · approx
+        </span>
+        <div className="p-6 mx-auto bg-background rounded min-h-[120px] pt-10" style={{ fontFamily: 'Arial, sans-serif' }}>
           {children}
         </div>
       </div>

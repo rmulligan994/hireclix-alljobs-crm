@@ -24,3 +24,9 @@ verify_jwt = false
 
 [functions.webflow-career-form]
 verify_jwt = false
+
+# Campaign email AI — auth is validated inside the function (auth.getUser).
+# Gateway verify_jwt must stay false: Supabase Auth ES256 session tokens trigger
+# UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM at the edge when verify_jwt = true.
+[functions.email-ai]
+verify_jwt = false

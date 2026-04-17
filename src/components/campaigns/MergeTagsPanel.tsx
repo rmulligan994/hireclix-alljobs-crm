@@ -2,7 +2,6 @@
 
 import { useState, useCallback, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, User, Building2, Briefcase, Check, Copy, Link2 } from 'lucide-react';
 import { useJobById } from '@/hooks/useJobs';
 
@@ -106,8 +105,8 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
           </div>
         </div>
       ) : (
-        <ScrollArea className="h-20">
-          <div className="space-y-1">
+        <div className="h-20 overflow-y-auto overscroll-contain rounded-md border border-border/40">
+          <div className="space-y-1 p-0.5">
             {filterTags(tags, search).map((tag) => (
               <button
                 key={tag.value}
@@ -124,7 +123,7 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
               </button>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       )}
     </div>
   );
@@ -230,7 +229,11 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
         </p>
       </div>
 
-      {inPopover ? categorySections : <ScrollArea className="min-h-0 max-h-[50vh] flex-1 pr-2">{categorySections}</ScrollArea>}
+      {inPopover ? (
+        categorySections
+      ) : (
+        <div className="min-h-0 max-h-[50vh] flex-1 overflow-y-auto overscroll-contain pr-2 -mr-1">{categorySections}</div>
+      )}
     </div>
   );
 };

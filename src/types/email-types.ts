@@ -29,12 +29,16 @@ export interface HeadingBlock {
   id: string;
   text: string;
   level: 1 | 2 | 3;
+  /** Optional inline HTML (bold, italic, color). Plain `text` is kept for search / fallback. */
+  textHtml?: string | null;
 }
 
 export interface TextBlock {
   type: 'text';
   id: string;
   content: string;
+  /** Optional sanitized inline HTML for rich text in sent email. */
+  contentHtml?: string | null;
 }
 
 export interface ImageBlock {

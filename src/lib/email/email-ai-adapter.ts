@@ -70,6 +70,79 @@ export function getAIAdapter(provider?: string): AIAdapter {
 export type AICampaignTone = 'Professional' | 'Friendly' | 'Casual' | 'Urgent';
 export type AICampaignLength = 'Short' | 'Medium' | 'Detailed';
 
+function roleLikePhrase(s: string): boolean {
+  return /\b(role|roles|position|positions|opening|openings|opportunity|opportunities)\b/i.test(s);
+}
+
+function normalizeJobTitleForTemplates(raw: string): string {
+  let t = raw.trim().replace(/^\s*(a|an|the)\s+/i, '');
+  if (!t) return 'this opportunity';
+  if (t.length > 72) {
+    const cut = t.slice(0, 69).trim();
+    const sp = cut.lastIndexOf(' ');
+    t = sp > 36 ? `${cut.slice(0, sp)}…` : `${cut}…`;
+  }
+  return t;
+}
+
+function openingLineForFallback(tone: AICampaignTone, jobTitle: string, company: string): string {
+  const j = normalizeJobTitleForTemplates(jobTitle);
+  const co = company;
+  const hasRoleWord = roleLikePhrase(j);
+  if (tone === 'Casual') {
+    return hasRoleWord
+      ? `Hey there — quick note about ${j} at ${co}.`
+      : `Hey there — quick note about a ${j} opportunity at ${co}.`;
+  }
+  if (tone === 'Urgent') {
+    return `Time-sensitive: we're actively hiring for ${j} at ${co}.`;
+  }
+  if (tone === 'Friendly') {
+    return hasRoleWord
+      ? `We wanted to reach out about ${j} at ${co}.`
+      : `We wanted to reach out about an exciting ${j} role at ${co}.`;
+  }
+  return hasRoleWord
+    ? `We're reaching out regarding ${j} at ${co}.`
+    : `We're reaching out regarding the ${j} position at ${co}.`;
+}
+
+function fallbackHeadlineFromJobTitle(jobTitle: string, company: string): string {
+  const j = normalizeJobTitleForTemplates(jobTitle);
+  if (j.length <= 46 && !j.endsWith('…')) return j;
+  const cut = j.slice(0, 44).trim();
+  const sp = cut.lastIndexOf(' ');
+  if (sp > 24) return `${cut.slice(0, sp)}…`;
+  return `Opportunity at ${company}`;
+}
+
+function fixDuplicateRoleInClassicMessage(s: string): string {
+  return s
+    .replace(/\bexciting\s+([\s\S]+?)\s+role\s+at\b/gi, (full, inner: string) => {
+      const t = inner.replace(/\s+/g, ' ').trim();
+      if (/\brole\b/i.test(t)) return `exciting ${t} at`;
+      return full;
+    })
+    .replace(/\bregarding\s+the\s+([\s\S]+?)\s+position\s+at\b/gi, (full, inner: string) => {
+      const t = inner.replace(/\s+/g, ' ').trim();
+      if (/\b(position|role)\b/i.test(t)) return `regarding ${t} at`;
+      return full;
+    });
+}
+
+function extractJobTitleGuessFromUserMessage(lastUser: string): string {
+  const t = lastUser.trim();
+  const labeled = t.match(/\b(?:for|role|title)\s*[:\s]+\s*([^.\n!?]{2,80})/i)?.[1]?.trim();
+  if (labeled) return labeled;
+  const about = t.match(/\b(?:about|for)\s+(?:a|an|the)\s+([^.\n!?]{3,90})/i)?.[1]?.trim();
+  if (about) return about;
+  const jobWord = t.match(
+    /\b(?:engineer|manager|designer|nurse|nursing|developer|coordinator|specialist)\b[^.\n!?]{0,55}/i,
+  )?.[0]?.trim();
+  if (jobWord) return jobWord;
+  return '';
+}
+
 export interface AICampaignFormFields {
   subject: string;
   previewText: string;
@@ -81,6 +154,23 @@ export interface AICampaignFormFields {
   signOff: string;
 }
 
+/** How the assistant materializes the email in the editor. */
+export type AIEmailDeliveryMode = 'visual_blocks' | 'classic_fields' | 'raw_html';
+
+/**
+ * Full assistant output: subject/preheader plus either block HTML, classic fields, or full HTML.
+ * `classic_*` fields are always present for schema strictness; use `delivery_mode` to choose what to apply.
+ */
+export interface AIEmailAssistantResult extends AICampaignFormFields {
+  delivery_mode: AIEmailDeliveryMode;
+  /** For `visual_blocks`: body-only HTML (h1–h3, p, a with button-like styles, img, hr). Parsed into blocks. */
+  body_html_fragment: string;
+  /** For `raw_html`: full document for Code mode. Scripts stripped client-side. */
+  html_body_full: string;
+  /** 2–4 short, actionable next prompts for the chat UI (from the model after each reply). */
+  suggested_followups: string[];
+}
+
 export async function generateCampaignFormFields(params: {
   goal: string;
   jobTitle: string;
@@ -89,18 +179,12 @@ export async function generateCampaignFormFields(params: {
   companyName: string;
 }): Promise<AICampaignFormFields> {
   await new Promise(r => setTimeout(r, 500));
-  const jt = params.jobTitle.trim() || '{{job_title}}';
   const co = params.companyName.trim() || 'Our team';
+  const jtRaw = params.jobTitle.trim() || '{{job_title}}';
+  const jt = jtRaw.startsWith('{{') ? jtRaw : normalizeJobTitleForTemplates(jtRaw);
   const tone = params.tone;
   const len = params.length;
-  const open =
-    tone === 'Casual'
-      ? `Hey there — quick note about a ${jt} opportunity at ${co}.`
-      : tone === 'Urgent'
-        ? `Time-sensitive: we're actively hiring for ${jt} at ${co}.`
-        : tone === 'Friendly'
-          ? `We wanted to reach out about an exciting ${jt} role at ${co}.`
-          : `We're reaching out regarding the ${jt} position at ${co}.`;
+  const open = openingLineForFallback(tone, jtRaw, co);
   const mid =
     len === 'Detailed'
       ? `${open}\n\nWe think your background could be a strong match. We'd love to share more about the team, scope, and what success looks like in the first 90 days.\n\nIf you're open to it, the next step is simple: review the role and apply when you're ready.`
@@ -116,18 +200,19 @@ export async function generateCampaignFormFields(params: {
           ? `${co} is hiring — know someone great?`
           : `New opportunity: ${jt} at ${co}`;
   return {
-    subject: subj.slice(0, 60),
-    previewText: len === 'Short' ? `${jt} at ${co}` : `${jt} · ${co} · ${params.goal.slice(0, 40)}`,
-    headline: jt,
+    subject: subj.slice(0, 78),
+    previewText: len === 'Short' ? `${jt} at ${co}`.slice(0, 160) : `${jt} · ${co} · ${params.goal.slice(0, 40)}`.slice(0, 160),
+    headline: jtRaw.startsWith('{{') ? jtRaw : fallbackHeadlineFromJobTitle(jtRaw, co),
     subhead: `${co} · Talent`,
-    message: mid,
+    message: fixDuplicateRoleInClassicMessage(mid),
     buttonLabel: params.goal.includes('event') ? 'RSVP' : 'View Role & Apply',
     buttonUrl: '{{jobUrl}}',
     signOff: `Best,\n${co} Recruiting`,
   };
 }
 
-export async function generateFromConversation(params: {
+/** Heuristic template when OpenAI is unavailable or fails. */
+export async function generateFromConversationFallback(params: {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   companyName: string;
 }): Promise<AICampaignFormFields> {
@@ -149,10 +234,7 @@ export async function generateFromConversation(params: {
   if (lower.includes('detailed') || lower.includes('longer')) length = 'Detailed';
   else if (lower.includes('medium')) length = 'Medium';
 
-  const jobGuess =
-    lastUser.match(/\b(?:for|role|title)\s*[:\s]+\s*([^.,\n]{2,80})/i)?.[1]?.trim() ||
-    lastUser.match(/\b(?:engineer|manager|designer|nurse|developer)\b[^.,\n]*/i)?.[0]?.trim() ||
-    '';
+  const jobGuess = extractJobTitleGuessFromUserMessage(lastUser);
 
   return generateCampaignFormFields({
     goal,
@@ -162,6 +244,9 @@ export async function generateFromConversation(params: {
     companyName: params.companyName,
   });
 }
+
+/** @deprecated Use generateFromConversationFallback — kept for any external imports. */
+export const generateFromConversation = generateFromConversationFallback;
 
 export function quickEditMessageBody(message: string, mode: 'shorter' | 'personal' | 'urgency'): string {
   const t = message.trim();

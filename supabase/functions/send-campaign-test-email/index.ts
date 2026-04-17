@@ -1,4 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  assertFullyResolvedMergeTags,
+  replaceMergeTags,
+  type MergeContext,
+} from "../_shared/campaign-merge-tags.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,7 +109,7 @@ Deno.serve(async (req) => {
 
     const baseUrl = org.base_url || Deno.env.get("APP_URL") || "";
     const testRecipientId = "test";
-    const mergeContext = {
+    const mergeContext: MergeContext = {
       candidate: mockCandidate,
       campaign,
       sender: senderData,
@@ -114,10 +119,20 @@ Deno.serve(async (req) => {
       baseUrl,
     };
 
-    const personalizedSubject = replaceMergeTags(firstEmail.subject, mergeContext);
+    const personalizedSubject = replaceMergeTags(firstEmail.subject ?? "", mergeContext);
     let rawHtml = firstEmail.html_content || `<p>Hello ${mockCandidate.first_name},</p><p>This is a test email.</p>`;
     rawHtml = fixBrokenButtonLinks(rawHtml, !!jobData);
     let personalizedHtml = replaceMergeTags(rawHtml, mergeContext);
+
+    const mergeResolved = assertFullyResolvedMergeTags(personalizedSubject, personalizedHtml);
+    if (!mergeResolved.ok) {
+      return new Response(
+        JSON.stringify({
+          error: `Unknown or unsupported merge tags: ${mergeResolved.keys.map((k) => "{{" + k + "}}").join(", ")}`,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const unsubscribeUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}/unsubscribe?r=${testRecipientId}` : "#";
     const testFooter = `
@@ -134,6 +149,9 @@ Deno.serve(async (req) => {
     formData.append("to", recipientEmail);
     formData.append("subject", `[TEST] ${personalizedSubject}`);
     formData.append("html", personalizedHtml);
+    formData.append("v:campaign_id", campaignId);
+    formData.append("v:test", "true");
+    formData.append("v:has_job", jobData ? "true" : "false");
 
     const response = await fetch(mailgunUrl, {
       method: "POST",
@@ -142,9 +160,15 @@ Deno.serve(async (req) => {
     });
 
     if (!response.ok) {
-      const errText = await response.text();
+      let errText = await response.text();
+      try {
+        const j = JSON.parse(errText) as { message?: string };
+        if (j.message) errText = j.message;
+      } catch {
+        /* keep raw */
+      }
       return new Response(
-        JSON.stringify({ error: errText }),
+        JSON.stringify({ error: errText || `Mailgun error (${response.status})` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -185,50 +209,4 @@ function appendUnsubscribeFooter(html: string, footer: string): string {
   const trimmed = html.trim();
   if (trimmed.endsWith("</body>")) return trimmed.replace(/<\/body>/i, `${footer}</body>`);
   return trimmed + footer;
-}
-
-function replaceMergeTags(content: string, ctx: {
-  candidate: any;
-  campaign: any;
-  sender: any;
-  org: any;
-  job: any;
-  recipientId: string;
-  baseUrl: string;
-}): string {
-  const { candidate, campaign, sender, org, job, recipientId, baseUrl } = ctx;
-  const fullName = [candidate.first_name, candidate.last_name].filter(Boolean).join(" ") || "";
-  const skills = Array.isArray(candidate.tags) ? candidate.tags.join(", ") : (candidate.tags || "");
-  const senderName = [sender.first_name, sender.last_name].filter(Boolean).join(" ") || "";
-  const senderCompany = org.company_name || sender.company || "";
-  const unsubscribeLink = baseUrl ? `${baseUrl.replace(/\/$/, "")}/unsubscribe?r=${recipientId}` : "#";
-
-  return content
-    .replace(/\{\{firstName\}\}/g, candidate.first_name || "")
-    .replace(/\{\{lastName\}\}/g, candidate.last_name || "")
-    .replace(/\{\{fullName\}\}/g, fullName)
-    .replace(/\{\{email\}\}/g, candidate.email || "")
-    .replace(/\{\{company\}\}/g, candidate.company || "")
-    .replace(/\{\{title\}\}/g, candidate.title || "")
-    .replace(/\{\{skills\}\}/g, skills)
-    .replace(/\{\{location\}\}/g, candidate.location || "")
-    .replace(/\{\{source\}\}/g, candidate.source || "")
-    .replace(/\{\{linkedinUrl\}\}/g, candidate.linkedin_url || "")
-    .replace(/\{\{campaignName\}\}/g, campaign.name || "")
-    .replace(/\{\{currentDate\}\}/g, new Date().toLocaleDateString())
-    .replace(/\{\{currentTime\}\}/g, new Date().toLocaleTimeString())
-    .replace(/\{\{senderName\}\}/g, senderName)
-    .replace(/\{\{senderTitle\}\}/g, sender.title || "")
-    .replace(/\{\{senderCompany\}\}/g, senderCompany)
-    .replace(/\{\{senderBrand\}\}/g, org.brand_name || "")
-    .replace(/\{\{senderEmail\}\}/g, sender.email || "")
-    .replace(/\{\{senderLinkedinUrl\}\}/g, sender.linkedin_url || "")
-    .replace(/\{\{jobTitle\}\}/g, job?.title || "")
-    .replace(/\{\{jobDepartment\}\}/g, job?.department || "")
-    .replace(/\{\{jobLocation\}\}/g, job?.location || "")
-    .replace(/\{\{jobType\}\}/g, job?.type || "")
-    .replace(/\{\{jobDescription\}\}/g, job?.description || "")
-    .replace(/\{\{jobUrl\}\}/g, job?.url || job?.view_url || "")
-    .replace(/\{\{unsubscribeLink\}\}/g, unsubscribeLink)
-    .replace(/\{\{viewInBrowserLink\}\}/g, "#");
 }

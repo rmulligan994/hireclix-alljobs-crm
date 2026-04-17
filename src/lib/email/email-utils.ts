@@ -1,4 +1,13 @@
-import type { AnnouncementForm, ComposeKind, ContentBlock, BrandSettings } from '@/types/email-types';
+import type {
+  AnnouncementForm,
+  ComposeKind,
+  ContentBlock,
+  BrandSettings,
+  HeadingBlock,
+  TextBlock,
+  ButtonBlock,
+} from '@/types/email-types';
+import { sanitizeEmailInlineHtml, stripHtmlToPlain } from './sanitize-email-inline-html';
 
 let _blockIdCounter = 0;
 export function genBlockId(): string {
@@ -650,6 +659,23 @@ export function buildMergeTokenUsageReport(params: {
   crmMap: Record<string, string | undefined>;
 }): MergeTokenUsageRow[] {
   const { subject, form, htmlBody, crmMap } = params;
+  const blockMergeSources = form.useBlocks
+    ? form.blocks.flatMap((b): string[] => {
+        switch (b.type) {
+          case 'heading':
+            return [b.text, b.textHtml ?? ''];
+          case 'text':
+            return [b.content, b.contentHtml ?? ''];
+          case 'button':
+            return [b.label, b.url];
+          case 'image':
+            return [b.url, b.alt];
+          default:
+            return [];
+        }
+      })
+    : [];
+
   const keys = extractMergeVars(
     subject,
     form.previewText,
@@ -662,7 +688,26 @@ export function buildMergeTokenUsageReport(params: {
     form.buttonUrl,
     form.signOff,
     htmlBody,
+    ...blockMergeSources,
   );
+  const blockSources: { label: string; text: string }[] = form.useBlocks
+    ? form.blocks.flatMap((b, i) => {
+        const label = `block_${i + 1}_${b.type}`;
+        switch (b.type) {
+          case 'heading':
+            return [{ label, text: `${b.text}\n${b.textHtml ?? ''}` }];
+          case 'text':
+            return [{ label, text: `${b.content}\n${b.contentHtml ?? ''}` }];
+          case 'button':
+            return [{ label, text: `${b.label}\n${b.url}` }];
+          case 'image':
+            return [{ label, text: `${b.url}\n${b.alt}` }];
+          default:
+            return [];
+        }
+      })
+    : [];
+
   const sources: { label: string; text: string }[] = [
     { label: 'subjectLine', text: subject },
     { label: 'previewText', text: form.previewText },
@@ -675,6 +720,7 @@ export function buildMergeTokenUsageReport(params: {
     { label: 'ctaUrl', text: form.buttonUrl },
     { label: 'signOff', text: form.signOff },
     { label: 'template HTML', text: htmlBody },
+    ...blockSources,
   ];
   return keys.map(key => {
     const tag = `{{${key}}}`;
@@ -696,6 +742,154 @@ export function applyBrandPrimaryToHtmlPreview(html: string, brand: BrandSetting
     .replace(/#1d4ed8/gi, p)
     .replace(/#059669/gi, p)
     .replace(/#7c3aed/gi, p);
+}
+
+/** Map classic Visual fields into blocks when switching to block layout (preserves content). */
+export function classicAnnouncementFieldsToBlocks(form: AnnouncementForm): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+
+  if (form.eyebrow?.trim()) {
+    blocks.push({ type: 'text', id: genBlockId(), content: form.eyebrow.trim() });
+  }
+  if (form.headline?.trim()) {
+    blocks.push({ type: 'heading', id: genBlockId(), text: form.headline.trim(), level: 2 });
+  }
+  if (form.subhead?.trim()) {
+    blocks.push({ type: 'text', id: genBlockId(), content: form.subhead.trim() });
+  }
+  if (form.useMessageRichHtml && (form.messageRichHtml ?? '').trim()) {
+    const raw = form.messageRichHtml ?? '';
+    const sanitized = sanitizeEmailInlineHtml(raw);
+    const plain =
+      form.message?.trim() ||
+      stripHtmlToPlain(sanitized) ||
+      stripHtmlToPlain(raw);
+    blocks.push({
+      type: 'text',
+      id: genBlockId(),
+      content: plain,
+      contentHtml: sanitized || undefined,
+    });
+  } else if (form.message?.trim()) {
+    blocks.push({ type: 'text', id: genBlockId(), content: form.message });
+  }
+  if (form.buttonLabel?.trim() || form.buttonUrl?.trim()) {
+    blocks.push({
+      type: 'button',
+      id: genBlockId(),
+      label: form.buttonLabel?.trim() || 'Learn more',
+      url: form.buttonUrl?.trim() || '#',
+    });
+  }
+  if (form.signOff?.trim()) {
+    blocks.push({ type: 'text', id: genBlockId(), content: form.signOff.trim() });
+  }
+
+  return blocks;
+}
+
+function skipDecorativeBlocks(blocks: ContentBlock[], start: number): number {
+  let i = start;
+  while (
+    i < blocks.length &&
+    (blocks[i].type === 'image' || blocks[i].type === 'divider' || blocks[i].type === 'spacer')
+  ) {
+    i++;
+  }
+  return i;
+}
+
+function headingPlainForClassic(block: HeadingBlock): string {
+  const h = block.textHtml?.trim();
+  if (h) return stripHtmlToPlain(sanitizeEmailInlineHtml(h)) || block.text;
+  return block.text;
+}
+
+function textPlainForClassic(block: TextBlock): string {
+  const h = block.contentHtml?.trim();
+  if (h) return stripHtmlToPlain(sanitizeEmailInlineHtml(h)) || block.content;
+  return block.content;
+}
+
+/**
+ * Map blocks back into classic "template" fields when switching out of block layout.
+ * Order mirrors {@link classicAnnouncementFieldsToBlocks}: eyebrow → headline → subhead → message(s) → button → sign-off.
+ */
+export function blocksToClassicAnnouncementFields(
+  blocks: ContentBlock[],
+  prev: AnnouncementForm,
+): AnnouncementForm {
+  let i = 0;
+
+  const eyebrowParts: string[] = [];
+  while (i < blocks.length && blocks[i].type === 'text') {
+    eyebrowParts.push(textPlainForClassic(blocks[i] as TextBlock));
+    i++;
+  }
+  i = skipDecorativeBlocks(blocks, i);
+
+  let headline = '';
+  if (i < blocks.length && blocks[i].type === 'heading') {
+    headline = headingPlainForClassic(blocks[i] as HeadingBlock);
+    i++;
+  }
+  i = skipDecorativeBlocks(blocks, i);
+
+  let subhead = '';
+  if (i < blocks.length && blocks[i].type === 'text') {
+    subhead = textPlainForClassic(blocks[i] as TextBlock);
+    i++;
+  }
+  i = skipDecorativeBlocks(blocks, i);
+
+  const messageParts: string[] = [];
+  const messageHtmlParts: string[] = [];
+  while (i < blocks.length && blocks[i].type === 'text') {
+    const t = blocks[i] as TextBlock;
+    messageParts.push(t.content);
+    if (t.contentHtml?.trim()) {
+      messageHtmlParts.push(sanitizeEmailInlineHtml(t.contentHtml));
+    }
+    i++;
+  }
+  i = skipDecorativeBlocks(blocks, i);
+
+  let buttonLabel = prev.buttonLabel;
+  let buttonUrl = prev.buttonUrl;
+  if (i < blocks.length && blocks[i].type === 'button') {
+    const b = blocks[i] as ButtonBlock;
+    buttonLabel = b.label;
+    buttonUrl = b.url;
+    i++;
+  }
+  i = skipDecorativeBlocks(blocks, i);
+
+  const signOffParts: string[] = [];
+  while (i < blocks.length && blocks[i].type === 'text') {
+    signOffParts.push(textPlainForClassic(blocks[i] as TextBlock));
+    i++;
+  }
+
+  const eyebrow = eyebrowParts.join('\n').trim();
+  const message = messageParts.join('\n\n');
+  const messageRichHtml = messageHtmlParts.length > 0 ? messageHtmlParts.join('<br><br>') : null;
+  const useMessageRichHtml = Boolean(messageRichHtml?.trim());
+  const signOff = signOffParts.join('\n\n').trim();
+
+  return {
+    ...prev,
+    useBlocks: false,
+    blocks: [],
+    eyebrow,
+    headline,
+    subhead,
+    message,
+    messageRichHtml,
+    useMessageRichHtml,
+    buttonLabel,
+    buttonUrl,
+    signOff,
+  };
 }
 
 /** Create an empty announcement form */
@@ -940,18 +1134,27 @@ function renderBlockRow(block: ContentBlock, brand?: BrandSettings): string {
     case 'heading': {
       const tag = `h${block.level}`;
       const sizes: Record<number, string> = { 1: '28px', 2: '22px', 3: '18px' };
+      const inner = block.textHtml?.trim()
+        ? sanitizeEmailInlineHtml(block.textHtml)
+        : escapeHtml(block.text);
       return `<tr>
 <td style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<${tag} style="margin:0;font-family:${font};font-size:${sizes[block.level] || '22px'};line-height:1.3;color:#1a1a2e;font-weight:bold;">${block.text}</${tag}>
+<${tag} style="margin:0;font-family:${font};font-size:${sizes[block.level] || '22px'};line-height:1.3;color:#1a1a2e;font-weight:bold;">${inner}</${tag}>
 </td>
 </tr>`;
     }
-    case 'text':
+    case 'text': {
+      const hasRich = Boolean(block.contentHtml?.trim());
+      const inner = hasRich
+        ? sanitizeEmailInlineHtml(block.contentHtml ?? '')
+        : escapeHtml(block.content).replace(/\r\n|\n|\r/g, '<br/>');
+      const ws = hasRich ? '' : 'white-space:pre-wrap;';
       return `<tr>
 <td style="padding:0 40px 12px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0;font-family:${font};font-size:15px;line-height:24px;color:#374151;white-space:pre-wrap;">${block.content}</p>
+<p style="margin:0;font-family:${font};font-size:15px;line-height:24px;color:#374151;${ws}">${inner}</p>
 </td>
 </tr>`;
+    }
     case 'image':
       return `<tr>
 <td style="padding:0 40px 16px;background-color:#ffffff;" class="padding-mobile">

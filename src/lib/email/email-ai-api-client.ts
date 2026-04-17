@@ -1,8 +1,20 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { AICampaignFormFields } from '@/lib/email/email-ai-adapter';
+import type { AIEmailAssistantResult } from '@/lib/email/email-ai-adapter';
 
 export type EmailAISubjectResponse = { suggestions: string[] };
-export type EmailAIChatResponse = { fields: AICampaignFormFields };
+export type EmailAIChatResponse = { fields: AIEmailAssistantResult };
+
+/** Optional snapshot of the current email so the model can revise whole layouts, not only classic fields. */
+export type EmailAIEditorContext = {
+  composeKind: 'announcement_form' | 'raw_html';
+  useBlocks: boolean;
+  subject: string;
+  previewText: string;
+  /** Short text summary of blocks or classic body for edits */
+  bodySummary: string;
+  /** First ~4k chars of HTML when in Code mode */
+  htmlExcerpt?: string;
+};
 
 async function getAccessToken(): Promise<string> {
   const {
@@ -14,7 +26,7 @@ async function getAccessToken(): Promise<string> {
   return session.access_token;
 }
 
-/** Calls `POST /api/email/ai` with the user session. */
+/** Calls Supabase Edge Function `email-ai` (OpenAI + fallbacks). */
 export async function emailAiRequest(
   body:
     | { mode: 'subject_suggestions'; prompt: string }
@@ -22,35 +34,45 @@ export async function emailAiRequest(
         mode: 'chat';
         messages: Array<{ role: 'user' | 'assistant' | string; content: string }>;
         companyName: string;
+        editorContext?: EmailAIEditorContext | null;
       },
 ): Promise<EmailAISubjectResponse | EmailAIChatResponse> {
   const token = await getAccessToken();
-  const res = await fetch('/api/email/ai', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
+  const { data, error } = await supabase.functions.invoke('email-ai', {
+    body,
+    headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string } & Record<string, unknown>;
-  if (!res.ok) {
-    throw new Error(typeof data.error === 'string' ? data.error : `AI request failed (${res.status})`);
+  if (error) {
+    throw new Error(error.message || 'AI request failed');
+  }
+  if (data == null) {
+    throw new Error('No response from email AI. Check that the email-ai function is deployed.');
+  }
+  const payload = data as { error?: string } & Record<string, unknown>;
+  if (payload && typeof payload === 'object' && typeof payload.error === 'string') {
+    throw new Error(payload.error);
   }
   return data as EmailAISubjectResponse | EmailAIChatResponse;
 }
 
 export async function fetchEmailAiUsage(): Promise<{ requestsThisMonth: number; monthLabel: string }> {
   const token = await getAccessToken();
-  const res = await fetch('/api/email/ai/usage', {
+  const { data, error } = await supabase.functions.invoke('email-ai', {
+    body: { action: 'usage' },
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string; requestsThisMonth?: number; monthLabel?: string };
-  if (!res.ok) {
-    throw new Error(typeof data.error === 'string' ? data.error : 'Usage request failed');
+  if (error) {
+    throw new Error(error.message || 'Usage request failed');
+  }
+  if (data == null) {
+    throw new Error('No response from email AI usage.');
+  }
+  const payload = data as { error?: string; requestsThisMonth?: number; monthLabel?: string; note?: string };
+  if (payload && typeof payload.error === 'string') {
+    throw new Error(payload.error);
   }
   return {
-    requestsThisMonth: data.requestsThisMonth ?? 0,
-    monthLabel: data.monthLabel ?? '',
+    requestsThisMonth: payload.requestsThisMonth ?? 0,
+    monthLabel: payload.monthLabel ?? '',
   };
 }

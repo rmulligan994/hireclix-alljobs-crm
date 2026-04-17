@@ -67,6 +67,12 @@ import {
 } from '@/components/candidates/search';
 import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
 import { CANDIDATE_SEARCH_PLACEHOLDER, CANDIDATE_SEARCH_TOOLTIP } from '@/lib/candidateSearchHints';
+import type { CandidateListEnriched } from '@/types/Candidate';
+import type { FilterableCandidate } from '@/lib/candidateSearch';
+
+/** Stable fallbacks so React Query `data === undefined` does not allocate a new `[]` every render. */
+const EMPTY_ENRICHED: readonly CandidateListEnriched[] = [];
+const EMPTY_SEARCH_ROWS: readonly FilterableCandidate[] = [];
 
 interface PoolCandidate {
   id: string;
@@ -117,7 +123,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
     [pool?.candidates]
   );
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const { data: searchRows = [], isLoading: searchLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data: searchRowsData, isLoading: searchLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useCandidatesSearch(
       {
         searchQuery: debouncedSearchQuery,
@@ -127,38 +133,42 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
       },
       { pageSize: 50 }
     );
-  const { data: allCandidates = [] } = useCandidatesEnrichedByIds(poolCandidateIds);
+  const searchRows = searchRowsData ?? EMPTY_SEARCH_ROWS;
+
+  const { data: enrichedByData, isPending: enrichedPending } = useCandidatesEnrichedByIds(poolCandidateIds);
+  const allCandidates = enrichedByData ?? EMPTY_ENRICHED;
   const removeCandidateFromPool = useRemoveCandidateFromPool();
   const removeCandidatesFromPool = useRemoveCandidatesFromPool();
   const addCandidatesToPool = useAddCandidatesToPool();
   const deleteTalentPool = useDeleteTalentPool();
 
-  // Build candidates with full info when pool and candidates are loaded
+  // Build candidates with full info when pool and enriched rows are ready (avoid unstable `= []` defaults in deps).
   useEffect(() => {
-    if (pool?.candidates && allCandidates) {
-      const candidatesWithInfo = pool.candidates.map(pc => {
-        const candidate = allCandidates.find(c => c.id === pc.candidateId);
-        return {
-          id: pc.candidateId,
-          candidateId: pc.candidateId,
-          name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
-          title: candidate?.title || '',
-          company: candidate?.company || '',
-          location: candidate?.location || '',
-          source: candidate?.source || '',
-          tags: candidate?.tags || [],
-          pipelines: (candidate?.pipelineAssociations || []).map(p => ({
-            id: p.id,
-            name: p.name,
-            stage: p.stage,
-          })),
-          dateAdded: pc.addedAt.toISOString().split('T')[0],
-          lastActivityAt: candidate?.lastActivityAt ?? null,
-        };
-      });
-      setPoolCandidates(candidatesWithInfo);
-    }
-  }, [pool, allCandidates]);
+    if (!pool?.candidates?.length) return;
+    if (poolCandidateIds.length > 0 && enrichedPending) return;
+    const enriched = enrichedByData ?? EMPTY_ENRICHED;
+    const candidatesWithInfo = pool.candidates.map((pc) => {
+      const candidate = enriched.find((c) => c.id === pc.candidateId);
+      return {
+        id: pc.candidateId,
+        candidateId: pc.candidateId,
+        name: candidate ? `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() : 'Unknown',
+        title: candidate?.title || '',
+        company: candidate?.company || '',
+        location: candidate?.location || '',
+        source: candidate?.source || '',
+        tags: candidate?.tags || [],
+        pipelines: (candidate?.pipelineAssociations || []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          stage: p.stage,
+        })),
+        dateAdded: pc.addedAt.toISOString().split('T')[0],
+        lastActivityAt: candidate?.lastActivityAt ?? null,
+      };
+    });
+    setPoolCandidates(candidatesWithInfo);
+  }, [pool, poolCandidateIds.length, enrichedByData, enrichedPending]);
 
   const poolMetaById = useMemo(() => {
     const m = new Map<string, PoolCandidate>();
