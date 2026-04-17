@@ -543,6 +543,10 @@ async function sendOneEmail(
 }
 
 function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
+  /** Compliance footer already includes {{unsubscribeLink}}; skip body stubs to avoid duplicate links. */
+  const alreadyHasUnsubscribeMerge =
+    /\{\{\s*unsubscribeLink\s*\}\}/i.test(html) ||
+    /\{\{\s*unsubscribe_url\s*\}\}/i.test(html);
   return html.replace(/<a(\s[^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, content) => {
     const a = attrs || "";
     const hrefMatch = a.match(/href\s*=\s*["']([^"']*)["']/i);
@@ -554,7 +558,7 @@ function fixBrokenButtonLinks(html: string, hasJob: boolean): string {
     let href = "#";
     if (/(^|\s)(email|contact|reach out|reply)(\s|$)/.test(text) || /^email$/.test(text)) href = "mailto:{{senderEmail}}";
     else if (/linkedin|linked in|connect/.test(text)) href = "{{senderLinkedinUrl}}";
-    else if (/unsubscribe/.test(text)) href = "{{unsubscribeLink}}";
+    else if (!alreadyHasUnsubscribeMerge && /unsubscribe/.test(text)) href = "{{unsubscribeLink}}";
     else if (hasJob && /(apply|view job|learn more)/.test(text)) href = "{{jobUrl}}";
     else if (hasJob) href = "{{jobUrl}}";
     return `<a href="${href}"${a}>${content}</a>`;
