@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, User, Building2, Briefcase, Check, Copy, Link2 } from 'lucide-react';
@@ -50,9 +50,12 @@ function filterTags(tags: MergeTag[], query: string): MergeTag[] {
 
 interface MergeTagsPanelProps {
   campaignJobId?: string | null;
+  /** `popover`: one outer scroll (parent); shorter tag lists without nested ScrollArea clipping */
+  variant?: 'default' | 'popover';
 }
 
-export const MergeTagsPanel = ({ campaignJobId }: MergeTagsPanelProps) => {
+export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTagsPanelProps) => {
+  const inPopover = variant === 'popover';
   const [senderSearch, setSenderSearch] = useState('');
   const [candidateSearch, setCandidateSearch] = useState('');
   const [jobSearch, setJobSearch] = useState('');
@@ -82,25 +85,47 @@ export const MergeTagsPanel = ({ campaignJobId }: MergeTagsPanelProps) => {
           className="pl-8 h-8 text-xs"
         />
       </div>
-      <ScrollArea className="h-20">
-        <div className="space-y-1">
-          {filterTags(tags, search).map((tag) => (
-            <button
-              key={tag.value}
-              type="button"
-              onClick={() => copyToClipboard(tag.value)}
-              className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted text-left group"
-            >
-              <span className="text-muted-foreground group-hover:text-foreground truncate">{tag.name}</span>
-              {copiedValue === tag.value ? (
-                <Check className="w-3 h-3 text-green-600 shrink-0" />
-              ) : (
-                <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />
-              )}
-            </button>
-          ))}
+      {inPopover ? (
+        <div className="max-h-36 overflow-y-auto overscroll-contain rounded-md border border-border/60 bg-muted/20 px-1">
+          <div className="space-y-1 py-0.5">
+            {filterTags(tags, search).map((tag) => (
+              <button
+                key={tag.value}
+                type="button"
+                onClick={() => copyToClipboard(tag.value)}
+                className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted text-left group"
+              >
+                <span className="text-muted-foreground group-hover:text-foreground truncate">{tag.name}</span>
+                {copiedValue === tag.value ? (
+                  <Check className="w-3 h-3 text-green-600 shrink-0" />
+                ) : (
+                  <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
-      </ScrollArea>
+      ) : (
+        <ScrollArea className="h-20">
+          <div className="space-y-1">
+            {filterTags(tags, search).map((tag) => (
+              <button
+                key={tag.value}
+                type="button"
+                onClick={() => copyToClipboard(tag.value)}
+                className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted text-left group"
+              >
+                <span className="text-muted-foreground group-hover:text-foreground truncate">{tag.name}</span>
+                {copiedValue === tag.value ? (
+                  <Check className="w-3 h-3 text-green-600 shrink-0" />
+                ) : (
+                  <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
     </div>
   );
 
@@ -113,6 +138,67 @@ export const MergeTagsPanel = ({ campaignJobId }: MergeTagsPanelProps) => {
     ...(campaignJobId ? [{ name: 'Apply to Job', value: '{{jobUrl}}' }] : []),
   ];
 
+  const categorySections: ReactNode = (
+    <div className="space-y-4 pr-1">
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <User className="w-3.5 h-3.5 text-sky-blue" />
+          <span className="text-xs font-medium">Sender</span>
+        </div>
+        {renderTagList(SENDER_TAGS, senderSearch, setSenderSearch, 'Search sender…')}
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Building2 className="w-3.5 h-3.5 text-sky-blue" />
+          <span className="text-xs font-medium">Candidate</span>
+        </div>
+        {renderTagList(CANDIDATE_TAGS, candidateSearch, setCandidateSearch, 'Search candidate…')}
+      </div>
+
+      {campaignJobId && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Briefcase className="w-3.5 h-3.5 text-sky-blue" />
+            <span className="text-xs font-medium">Job</span>
+          </div>
+          {renderTagList(JOB_TAGS, jobSearch, setJobSearch, 'Search job…')}
+
+          {job && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <div className="text-[10px] font-medium text-muted-foreground mb-2">Actual values (this job)</div>
+              <div className="space-y-1.5">
+                {job.title && (
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(job.title)}
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
+                  >
+                    <span className="truncate">{job.title}</span>
+                    {copiedValue === job.title ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
+                  </button>
+                )}
+                {jobUrl && (
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(jobUrl)}
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
+                  >
+                    <span className="truncate flex items-center gap-1">
+                      <Link2 className="w-3 h-3 shrink-0" />
+                      Apply URL
+                    </span>
+                    {copiedValue === jobUrl ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex flex-col min-h-0">
       <div className="text-xs font-medium text-muted-foreground mb-2">Merge Tags</div>
@@ -120,7 +206,7 @@ export const MergeTagsPanel = ({ campaignJobId }: MergeTagsPanelProps) => {
         Click to copy. For buttons: add a link in the editor, then paste or pick from the link list.
       </p>
 
-      <div className="mb-4">
+      <div className="mb-4 shrink-0">
         <div className="text-[10px] font-medium text-muted-foreground mb-2">Quick links for buttons</div>
         <div className="space-y-1.5">
           {quickLinks.map((item) => (
@@ -144,67 +230,7 @@ export const MergeTagsPanel = ({ campaignJobId }: MergeTagsPanelProps) => {
         </p>
       </div>
 
-      <ScrollArea className="flex-1 pr-2">
-        <div className="space-y-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <User className="w-3.5 h-3.5 text-sky-blue" />
-              <span className="text-xs font-medium">Sender</span>
-            </div>
-            {renderTagList(SENDER_TAGS, senderSearch, setSenderSearch, 'Search...')}
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Building2 className="w-3.5 h-3.5 text-sky-blue" />
-              <span className="text-xs font-medium">Candidate</span>
-            </div>
-            {renderTagList(CANDIDATE_TAGS, candidateSearch, setCandidateSearch, 'Search...')}
-          </div>
-
-          {campaignJobId && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Briefcase className="w-3.5 h-3.5 text-sky-blue" />
-                <span className="text-xs font-medium">Job</span>
-              </div>
-              {renderTagList(JOB_TAGS, jobSearch, setJobSearch, 'Search...')}
-
-              {/* Actual job values - copy real data */}
-              {job && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <div className="text-[10px] font-medium text-muted-foreground mb-2">Actual values (this job)</div>
-                  <div className="space-y-1.5">
-                    {job.title && (
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(job.title)}
-                        className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
-                      >
-                        <span className="truncate">{job.title}</span>
-                        {copiedValue === job.title ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
-                      </button>
-                    )}
-                    {jobUrl && (
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(jobUrl)}
-                        className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
-                      >
-                        <span className="truncate flex items-center gap-1">
-                          <Link2 className="w-3 h-3 shrink-0" />
-                          Apply URL
-                        </span>
-                        {copiedValue === jobUrl ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+      {inPopover ? categorySections : <ScrollArea className="min-h-0 max-h-[50vh] flex-1 pr-2">{categorySections}</ScrollArea>}
     </div>
   );
 };

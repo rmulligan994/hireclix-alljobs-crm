@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Sparkles, Upload, Clipboard, BookOpen, Globe, ChevronDown, Monitor, Smartphone, Plus, X, ArrowUp, ArrowDown, Image, Type, Heading, MousePointerClick, Minus, FolderOpen, Info } from 'lucide-react';
+import { Sparkles, Upload, Clipboard, BookOpen, Globe, ChevronDown, Monitor, Smartphone, Plus, X, ArrowUp, ArrowDown, Image, Type, Heading, MousePointerClick, Minus, FolderOpen, Info, ArrowDownToLine, LayoutList } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AnnouncementForm, ComposeKind, ContentBlock } from '@/types/email-types';
 import { emptyAnnouncementForm, stripEmailScripts, renderAnnouncementToHTML, parseHtmlToBlocks, genBlockId, getEmailEditorPreviewHtml } from '@/lib/email/email-utils';
@@ -412,8 +412,13 @@ export function EmailComposer({
 
         {/* Visual mode — Dynamic Block Editor */}
         <TabsContent value="announcement_form" className="space-y-3">
-          {formPayload.useBlocks && formPayload.blocks.length > 0 ? (
+          {formPayload.useBlocks ? (
             <>
+              {formPayload.blocks.length === 0 && (
+                <p className="text-xs text-muted-foreground border border-dashed rounded-md p-3">
+                  No blocks yet. Add a heading, text, image, or button below. You can reorder blocks or remove any block.
+                </p>
+              )}
               <div className="space-y-2">
                 {formPayload.blocks.map((block, idx) => (
                   <BlockEditor
@@ -445,12 +450,44 @@ export function EmailComposer({
                   <DropdownMenuItem onClick={() => addBlock('image')}><Image className="h-4 w-4 mr-2" /> Image</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => addBlock('button')}><MousePointerClick className="h-4 w-4 mr-2" /> Button</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => addBlock('divider')}><Minus className="h-4 w-4 mr-2" /> Divider</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => addBlock('spacer')}><ArrowDownToLine className="h-4 w-4 mr-2" /> Spacer</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() =>
+                  onFormPayloadChange({
+                    ...formPayload,
+                    useBlocks: false,
+                  })
+                }
+              >
+                <LayoutList className="h-4 w-4 mr-2" />
+                Use classic fields instead
+              </Button>
             </>
           ) : (
             /* Legacy flat-field form */
             <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() =>
+                  onFormPayloadChange({
+                    ...formPayload,
+                    useBlocks: true,
+                    blocks: [],
+                  })
+                }
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Use block layout
+              </Button>
               <div className="space-y-2">
                 <Label>Eyebrow</Label>
                 <Input
@@ -532,14 +569,19 @@ export function EmailComposer({
             {composeKind === 'announcement_form' ? (
               <AnnouncementLayoutPreview form={formPayload} viewport={viewport} siteLabel={siteLabel} />
             ) : (
-              <div className="border rounded-md overflow-hidden" style={{ maxWidth: viewport === 'mobile' ? 375 : '100%' }}>
-                <iframe
-                  srcDoc={previewHtml}
-                  className="w-full border-0"
-                  style={{ height: 400 }}
-                  title="Email Preview"
-                  sandbox="allow-same-origin allow-scripts"
-                />
+              <div className="flex justify-center w-full">
+                <div
+                  className="border rounded-md overflow-hidden bg-background shadow-sm"
+                  style={{ width: viewport === 'mobile' ? 390 : 600, maxWidth: '100%' }}
+                >
+                  <iframe
+                    srcDoc={previewHtml}
+                    className="w-full border-0"
+                    style={{ height: 400 }}
+                    title="Email Preview"
+                    sandbox="allow-same-origin allow-scripts"
+                  />
+                </div>
               </div>
             )}
           </CollapsibleContent>

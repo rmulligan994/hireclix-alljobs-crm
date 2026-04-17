@@ -52,7 +52,7 @@ export function EmailPreviewPane({
             size="icon"
             className="h-8 w-8"
             onClick={() => setViewport('desktop')}
-            title="Desktop width"
+            title="Desktop preview (~600px wide)"
           >
             <Monitor className="h-4 w-4" />
           </Button>
@@ -62,7 +62,7 @@ export function EmailPreviewPane({
             size="icon"
             className="h-8 w-8"
             onClick={() => setViewport('mobile')}
-            title="Narrow / mobile"
+            title="Mobile preview (~390px wide)"
           >
             <Smartphone className="h-4 w-4" />
           </Button>
@@ -72,14 +72,19 @@ export function EmailPreviewPane({
         {composeKind === 'announcement_form' ? (
           <AnnouncementLayoutPreview form={formPayload} viewport={viewport} siteLabel={siteLabel} />
         ) : (
-          <div className="overflow-hidden rounded border bg-background" style={{ maxWidth: viewport === 'mobile' ? 375 : '100%' }}>
-            <iframe
-              srcDoc={previewHtml}
-              className="w-full border-0 bg-white"
-              style={{ height: 'min(480px, 60vh)' }}
-              title="Email preview"
-              sandbox="allow-same-origin allow-scripts"
-            />
+          <div className="flex justify-center w-full">
+            <div
+              className="overflow-hidden rounded border bg-background shadow-sm"
+              style={{ width: viewport === 'mobile' ? 390 : 600, maxWidth: '100%' }}
+            >
+              <iframe
+                srcDoc={previewHtml}
+                className="w-full border-0 bg-white"
+                style={{ height: 'min(480px, 60vh)' }}
+                title="Email preview"
+                sandbox="allow-same-origin allow-scripts"
+              />
+            </div>
           </div>
         )}
       </div>

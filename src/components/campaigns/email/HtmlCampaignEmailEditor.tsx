@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Info, Tags, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { EmailPreviewPane } from './EmailPreviewPane';
 import { toast } from 'sonner';
@@ -153,14 +154,16 @@ export function HtmlCampaignEmailEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent
-              className="w-[min(calc(100vw-2rem),400px)] p-0"
+              className="w-[min(calc(100vw-2rem),400px)] p-0 overflow-hidden"
               align="center"
               side="bottom"
               sideOffset={6}
             >
-              <div className="max-h-[min(70vh,520px)] overflow-y-auto p-3">
-                <MergeTagsPanel campaignJobId={campaignJobId} />
-              </div>
+              <ScrollArea className="h-[min(70vh,520px)]">
+                <div className="p-3">
+                  <MergeTagsPanel campaignJobId={campaignJobId} variant="popover" />
+                </div>
+              </ScrollArea>
             </PopoverContent>
           </Popover>
         </div>
@@ -186,12 +189,20 @@ export function HtmlCampaignEmailEditor({
                       {helpBannerOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </AlertTitle>
                     <CollapsibleContent>
-                      <AlertDescription className="mt-1.5 text-xs">
-                        Use <strong>Visual</strong> for a structured layout or <strong>Code</strong> for full HTML. Open{' '}
-                        <strong>Insert merge tag</strong> above to copy tokens. The live preview updates on the right (wide
-                        screens). Links like{' '}
-                        <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">{'{{jobUrl}}'}</kbd> resolve when the
-                        campaign sends.
+                      <AlertDescription className="mt-1.5 text-xs space-y-2">
+                        <p>
+                          Use <strong>Visual</strong> for blocks or classic fields, or <strong>Code</strong> for full HTML. Open{' '}
+                          <strong>Insert merge tag</strong> to copy tokens. The preview uses ~600px desktop and ~390px mobile
+                          widths (centered). Links like{' '}
+                          <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">{'{{jobUrl}}'}</kbd> resolve when the
+                          campaign sends.
+                        </p>
+                        <p>
+                          <strong>HTML in Code mode:</strong> inline <code className="text-[10px] px-1 rounded bg-muted">style=&quot;…&quot;</code> on tags is the most reliable across Gmail, Outlook, and Apple Mail. A{' '}
+                          <code className="text-[10px] px-1 rounded bg-muted">&lt;style&gt;</code> block in{' '}
+                          <code className="text-[10px] px-1 rounded bg-muted">&lt;head&gt;</code> may be stripped or altered; many
+                          teams rely on table layouts and inline CSS for bulletproof templates.
+                        </p>
                       </AlertDescription>
                     </CollapsibleContent>
                   </div>

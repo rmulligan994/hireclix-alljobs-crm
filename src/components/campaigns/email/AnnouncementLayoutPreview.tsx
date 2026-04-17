@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { AnnouncementForm, ContentBlock } from '@/types/email-types';
 
 interface AnnouncementLayoutPreviewProps {
@@ -40,29 +41,44 @@ function BlockPreview({ block }: { block: ContentBlock }) {
   }
 }
 
-export function AnnouncementLayoutPreview({ form, viewport, siteLabel = 'Your Company' }: AnnouncementLayoutPreviewProps) {
-  const maxW = viewport === 'mobile' ? 375 : '100%';
+/** Matches common ~600px desktop and ~390px mobile email preview widths. */
+const PREVIEW_FRAME_PX = { desktop: 600, mobile: 390 } as const;
 
-  // Block-based rendering
-  if (form.useBlocks && form.blocks.length > 0) {
-    return (
-      <div className="border rounded-md overflow-auto bg-muted/30" style={{ maxWidth: maxW }}>
-        <div className="p-6 max-w-[560px] mx-auto bg-background rounded" style={{ fontFamily: 'Arial, sans-serif' }}>
-          <p className="text-xs text-muted-foreground mb-3">{siteLabel}</p>
-          {form.blocks.map((block) => (
-            <BlockPreview key={block.id} block={block} />
-          ))}
-          <hr className="my-4 border-border" />
-          <p className="text-xs text-muted-foreground"><a href="#" className="text-muted-foreground underline">Unsubscribe</a></p>
+export function AnnouncementLayoutPreview({ form, viewport, siteLabel = 'Your Company' }: AnnouncementLayoutPreviewProps) {
+  const frameW = viewport === 'mobile' ? PREVIEW_FRAME_PX.mobile : PREVIEW_FRAME_PX.desktop;
+
+  const frame = (children: ReactNode) => (
+    <div className="flex justify-center w-full">
+      <div
+        className="border rounded-md overflow-auto bg-muted/30 shadow-sm w-full"
+        style={{ maxWidth: frameW }}
+      >
+        <div className="p-6 mx-auto bg-background rounded min-h-[120px]" style={{ fontFamily: 'Arial, sans-serif' }}>
+          {children}
         </div>
       </div>
+    </div>
+  );
+
+  // Block-based rendering (empty list still uses block mode)
+  if (form.useBlocks) {
+    return frame(
+      <>
+        <p className="text-xs text-muted-foreground mb-3">{siteLabel}</p>
+        {form.blocks.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic py-6 text-center">Add blocks to see content here.</p>
+        ) : (
+          form.blocks.map((block) => <BlockPreview key={block.id} block={block} />)
+        )}
+        <hr className="my-4 border-border" />
+        <p className="text-xs text-muted-foreground"><a href="#" className="text-muted-foreground underline">Unsubscribe</a></p>
+      </>,
     );
   }
 
   // Legacy flat-field rendering
-  return (
-    <div className="border rounded-md overflow-auto bg-muted/30" style={{ maxWidth: maxW }}>
-      <div className="p-6 max-w-[560px] mx-auto bg-background rounded" style={{ fontFamily: 'Arial, sans-serif' }}>
+  return frame(
+    <>
         <p className="text-xs text-muted-foreground mb-3">{siteLabel}</p>
         <p className="text-sm text-foreground mb-2">Hi {'{{firstName}}'},</p>
         {form.headline && <h2 className="text-xl font-bold text-foreground mb-1">{form.headline}</h2>}
@@ -76,7 +92,6 @@ export function AnnouncementLayoutPreview({ form, viewport, siteLabel = 'Your Co
         {form.signOff && <p className="text-sm text-muted-foreground mt-4">{form.signOff}</p>}
         <hr className="my-4 border-border" />
         <p className="text-xs text-muted-foreground"><a href="#" className="text-muted-foreground underline">Unsubscribe</a></p>
-      </div>
-    </div>
+    </>,
   );
 }

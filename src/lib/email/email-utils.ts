@@ -1016,8 +1016,8 @@ export function renderAnnouncementToHTML(
   siteConfig: { siteName: string; memberName?: string },
   brand?: BrandSettings
 ): string {
-  // If using blocks, render from blocks
-  if (form.useBlocks && form.blocks.length > 0) {
+  // Block layout (including empty — preview/shell only until user adds blocks)
+  if (form.useBlocks) {
     return renderBlocksToHTML(form.blocks, siteConfig, brand);
   }
 
