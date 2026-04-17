@@ -8,10 +8,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "next build && npx wrangler dev"
   },
   "dependencies": {
-    "@beefree.io/sdk": "^10.1.0-feat-load-config-async.0",
     "@hookform/resolvers": "^3.10.0",
     "@opennextjs/cloudflare": "^1.6.5",
     "@radix-ui/react-accordion": "^1.2.11",
@@ -83,6 +84,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
+    "vitest": "^3.2.4",
     "wrangler": "^4.59.2"
   }
 }

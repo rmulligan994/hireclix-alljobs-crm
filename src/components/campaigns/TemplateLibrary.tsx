@@ -67,7 +67,7 @@ export const TemplateLibrary = ({ onSelectTemplate }: TemplateLibraryProps) => {
                       </div>
                       <div>
                         <CardTitle className="text-lg">Start from Scratch</CardTitle>
-                        <CardDescription>Create a custom email template with the visual editor</CardDescription>
+                        <CardDescription>Create a custom email with the HTML editor</CardDescription>
                       </div>
                     </div>
                     <Button 

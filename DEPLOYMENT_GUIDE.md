@@ -22,7 +22,6 @@
 ### Before You Begin
 - [ ] Supabase account created
 - [ ] Mailgun account created (for email)
-- [ ] BeeFree account created (for email editor)
 - [ ] Webflow account with Cloud hosting
 - [ ] Node.js 18+ installed locally
 - [ ] Supabase CLI installed (`npm install -g supabase`)
@@ -82,9 +81,6 @@ These are set in the Supabase Dashboard (not in `.env`):
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | Webhook signing key for event verification | Mailgun → Sending → Webhooks → Signing key |
 | `MAILGUN_REGION` | (Optional) Set to `EU` for EU region | Omit for US (default) |
 | `APP_URL` | (Optional) Fallback for unsubscribe links if not set in Settings → Organization | e.g. `https://your-app.com` |
-| `BEE_CLIENT_ID` | BeeFree email editor client ID | [BeeFree Dashboard](https://developers.beefree.io/) |
-| `BEE_CLIENT_SECRET` | BeeFree email editor secret | [BeeFree Dashboard](https://developers.beefree.io/) |
-
 > **Note**: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are automatically available in Edge Functions.
 
 ### Step 3: Email Domain Setup (Mailgun)
@@ -280,7 +276,6 @@ Implementation requires:
 3. **Deploy Edge Functions**
    ```bash
    # Deploy all functions
-   supabase functions deploy beefree-auth
    supabase functions deploy send-campaign-email
    ```
 
@@ -289,8 +284,6 @@ Implementation requires:
    supabase secrets set MAILGUN_API_KEY=key-xxxxx
    supabase secrets set MAILGUN_DOMAIN=mg.yourcompany.com
    supabase secrets set MAILGUN_WEBHOOK_SIGNING_KEY=your-signing-key
-   supabase secrets set BEE_CLIENT_ID=your-client-id
-   supabase secrets set BEE_CLIENT_SECRET=your-secret
    ```
 
 ### Mailgun Email Setup
@@ -302,15 +295,6 @@ Implementation requires:
    - Webhook URL: `https://YOUR_PROJECT.supabase.co/functions/v1/mailgun-webhook`
    - Events: Delivered, Opened, Clicks, Permanent Failures
    - Copy the Signing key to `MAILGUN_WEBHOOK_SIGNING_KEY` secret
-
-### BeeFree Email Editor Setup
-
-1. Create account at [beefree.io](https://beefree.io)
-2. Create an application in developer portal
-3. Copy Client ID and Secret to Supabase secrets
-4. Configure allowed origins for your domain
-
----
 
 ## Deployment Steps
 
@@ -373,7 +357,7 @@ netlify deploy --prod
 - [ ] Can create/edit/delete pipelines
 - [ ] Can create/edit/delete talent pools
 - [ ] Can create campaigns
-- [ ] Can open BeeFree email editor
+- [ ] Can edit campaign emails in the HTML email builder
 - [ ] Can send test campaign email
 - [ ] Dashboard loads with real metrics
 - [ ] Settings page saves changes
@@ -432,8 +416,6 @@ netlify deploy --prod
 | `src/integrations/supabase/client.ts` | Supabase connection |
 | `src/config/backend.config.ts` | Backend configuration |
 | `supabase/functions/send-campaign-email/index.ts` | Email sending |
-| `supabase/functions/beefree-auth/index.ts` | Email editor auth |
-
 ### Useful Commands
 ```bash
 # Development
@@ -491,7 +473,6 @@ Jobs sync from the client's career site (Webflow CMS) to Supabase every 15 minut
 
 - **Supabase Docs**: https://supabase.com/docs
 - **Mailgun Docs**: https://documentation.mailgun.com/docs/mailgun
-- **BeeFree Docs**: https://docs.beefree.io
 - **React Query**: https://tanstack.com/query
 - **Shadcn/UI**: https://ui.shadcn.com
 

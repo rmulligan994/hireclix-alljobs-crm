@@ -157,7 +157,9 @@ export const campaignService = {
     if (error) throw error;
     return (data || []).map(e => ({
       ...e,
-      bee_json: e.bee_json as Record<string, unknown> | undefined
+      bee_json: e.bee_json as Record<string, unknown> | undefined,
+      compose_kind: e.compose_kind ?? null,
+      form_payload: e.form_payload ?? null,
     }));
   },
 
@@ -170,8 +172,10 @@ export const campaignService = {
         delay_days: input.delay_days || 0,
         delay_hours: input.delay_hours || 0,
         subject: input.subject,
-        bee_json: input.bee_json as Json,
-        html_content: input.html_content,
+        bee_json: (input.bee_json ?? null) as Json | null,
+        html_content: input.html_content ?? null,
+        compose_kind: input.compose_kind ?? null,
+        form_payload: (input.form_payload ?? null) as Json | null,
         email_template_id: input.email_template_id,
       })
       .select()
@@ -190,8 +194,10 @@ export const campaignService = {
     if (input.delay_days !== undefined) updateData.delay_days = input.delay_days;
     if (input.delay_hours !== undefined) updateData.delay_hours = input.delay_hours;
     if (input.subject !== undefined) updateData.subject = input.subject;
-    if (input.bee_json !== undefined) updateData.bee_json = input.bee_json as Json;
+    if (input.bee_json !== undefined) updateData.bee_json = input.bee_json as Json | null;
     if (input.html_content !== undefined) updateData.html_content = input.html_content;
+    if (input.compose_kind !== undefined) updateData.compose_kind = input.compose_kind;
+    if (input.form_payload !== undefined) updateData.form_payload = input.form_payload as Json | null;
     if (input.email_template_id !== undefined) updateData.email_template_id = input.email_template_id;
 
     const { data, error } = await supabase
@@ -611,8 +617,10 @@ export const campaignService = {
         delay_days: e.delay_days,
         delay_hours: e.delay_hours,
         subject: e.subject,
-        bee_json: e.bee_json,
-        html_content: e.html_content,
+        bee_json: e.bee_json ?? null,
+        html_content: e.html_content ?? undefined,
+        compose_kind: e.compose_kind ?? null,
+        form_payload: e.form_payload ?? null,
       });
     }
     return newCampaign;

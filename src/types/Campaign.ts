@@ -51,8 +51,12 @@ export interface CampaignEmail {
   delay_days: number;
   delay_hours: number;
   subject: string;
-  bee_json?: Record<string, unknown>;
+  /** @deprecated Legacy BeeFree template JSON; not used for new emails */
+  bee_json?: Record<string, unknown> | null;
   html_content?: string | null;
+  /** announcement_form | raw_html */
+  compose_kind?: string | null;
+  form_payload?: unknown | null;
   email_template_id?: string | null;
   created_at: string;
   updated_at: string;
@@ -115,8 +119,10 @@ export interface CreateCampaignEmailInput {
   delay_days?: number;
   delay_hours?: number;
   subject: string;
-  bee_json?: Record<string, unknown>;
+  bee_json?: Record<string, unknown> | null;
   html_content?: string;
+  compose_kind?: string | null;
+  form_payload?: unknown | null;
   email_template_id?: string;
 }
 
@@ -125,7 +131,9 @@ export interface UpdateCampaignEmailInput {
   delay_days?: number;
   delay_hours?: number;
   subject?: string;
-  bee_json?: Record<string, unknown>;
+  bee_json?: Record<string, unknown> | null;
   html_content?: string;
+  compose_kind?: string | null;
+  form_payload?: unknown | null;
   email_template_id?: string;
 }

@@ -50,12 +50,11 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
       const createdPipeline = await createPipeline.mutateAsync({
         name: title.trim(),
         description: description.trim() || undefined,
-        stages: stages.sort((a, b) => a.order - b.order),
+        stages: [...stages].sort((a, b) => a.order - b.order),
       });
 
       onPipelineCreated?.(createdPipeline);
-      onOpenChange(false);
-      resetForm();
+      handleOpenChange(false);
       router.push(`/pipelines/${createdPipeline.id}`);
     } catch (error) {
       // Error is handled by the mutation hook
@@ -73,13 +72,13 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
     })));
   };
 
-  const handleClose = () => {
-    onOpenChange(false);
-    resetForm();
+  const handleOpenChange = (next: boolean) => {
+    onOpenChange(next);
+    if (!next) resetForm();
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
@@ -143,7 +142,7 @@ export function CreatePipelineDialog({ open, onOpenChange, onPipelineCreated }: 
           <div className="flex gap-3 pt-4 border-t border-border">
             <Button
               variant="outline"
-              onClick={handleClose}
+              onClick={() => handleOpenChange(false)}
               className="flex-1 border-border text-muted-foreground hover:text-foreground"
             >
               Cancel

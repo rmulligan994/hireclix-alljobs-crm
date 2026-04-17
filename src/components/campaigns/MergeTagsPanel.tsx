@@ -114,7 +114,7 @@ export const MergeTagsPanel = ({ campaignJobId }: MergeTagsPanelProps) => {
   ];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-0">
       <div className="text-xs font-medium text-muted-foreground mb-2">Merge Tags</div>
       <p className="text-[10px] text-muted-foreground mb-3">
         Click to copy. For buttons: add a link in the editor, then paste or pick from the link list.

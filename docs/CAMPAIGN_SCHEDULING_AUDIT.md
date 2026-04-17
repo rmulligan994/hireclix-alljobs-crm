@@ -74,7 +74,7 @@ This document provides a full audit of the campaign scheduling system, from UI t
 | step_order | int | 1, 2, 3... |
 | delay_days | int | Used for custom cadence; daily=1, weekly=7, monthly=30 |
 | delay_hours | int | Used for custom cadence |
-| subject, html_content, bee_json | - | Email content |
+| subject, html_content, compose_kind, form_payload | - | Email content |
 
 ### scheduled_emails
 | Column | Type | Purpose |

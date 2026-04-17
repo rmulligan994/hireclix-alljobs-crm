@@ -54,8 +54,8 @@ const Pipelines = () => {
   const archivePipeline = useArchivePipeline();
   const unarchivePipeline = useUnarchivePipeline();
 
-  const filteredPipelines = (pipelines || []).filter(pipeline => 
-    pipeline.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredPipelines = (pipelines || []).filter((pipeline) =>
+    (pipeline.name ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleArchiveClick = (e: React.MouseEvent, pipeline: Pipeline) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Search, X } from 'lucide-react';
 
@@ -23,19 +23,11 @@ export const CampaignSearchBar = ({
     setLocalValue(value);
   }, [value]);
 
-  const debouncedOnChange = useCallback(
-    (val: string) => {
-      const timer = setTimeout(() => onChange(val), debounceMs);
-      return () => clearTimeout(timer);
-    },
-    [onChange, debounceMs]
-  );
-
   useEffect(() => {
     if (localValue === value) return;
-    const cleanup = debouncedOnChange(localValue);
-    return cleanup;
-  }, [localValue, debounceMs]);
+    const t = window.setTimeout(() => onChange(localValue), debounceMs);
+    return () => window.clearTimeout(t);
+  }, [localValue, value, debounceMs, onChange]);
 
   return (
     <div className="relative">

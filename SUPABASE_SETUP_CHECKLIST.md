@@ -12,7 +12,7 @@ Use this checklist to ensure your Supabase project is fully configured for the C
 |--------|----------|------------------------|
 | **Auth** | Built-in (sign up, sign in, password reset, sessions) | Not included — you'd need another auth provider |
 | **Database** | PostgreSQL (relational, RLS, triggers) | SQLite (simpler, D1) |
-| **Edge Functions** | Yes — Beefree auth, send-campaign-email, mailgun-webhook | No serverless functions |
+| **Edge Functions** | Yes — send-campaign-email, mailgun-webhook | No serverless functions |
 | **File storage** | Yes (avatars, resumes) | Yes (Object storage) |
 | **App integration** | Already built — all services use Supabase | Would require full rewrite of backend |
 | **Multi-tenant** | Yes — one project per client via `instances.yaml` | Single environment per project |
@@ -53,7 +53,7 @@ Or deploy to all instances:
 - `talent_pool_candidates` — junction table
 - `notes` — candidate notes
 - `communications` — candidate communications
-- `email_templates` — BeeFree email templates
+- `email_templates` — saved email HTML templates
 - `campaigns` — email campaigns
 - `campaign_emails` — campaign email templates
 - `campaign_recipients` — campaign recipients
@@ -74,9 +74,6 @@ Supabase Dashboard → Edge Functions → Secrets. Add:
 | `MAILGUN_DOMAIN` | Verified sending domain | [Mailgun Domains](https://app.mailgun.com/app/sending/domains) |
 | `MAILGUN_FROM` | (Optional) From address | Defaults to `noreply@{domain}` |
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | Webhook signature verification | Mailgun → Sending → Webhooks |
-| `BEE_CLIENT_ID` | BeeFree email editor | [BeeFree Developers](https://developers.beefree.io/) |
-| `BEE_CLIENT_SECRET` | BeeFree email editor | BeeFree Developers |
-
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are automatically available in Edge Functions.
 
 ### 5. Deploy Edge Functions
@@ -87,7 +84,6 @@ supabase functions deploy
 ```
 
 Functions:
-- `beefree-auth` — fetches BeeFree auth token for the email editor
 - `send-campaign-email` — sends campaign emails via Mailgun
 - `mailgun-webhook` — receives Mailgun events (delivered, opened, clicked) for analytics
 
@@ -121,7 +117,7 @@ If the app stores avatars or resumes, ensure a storage bucket exists:
 
 - [ ] Sign up / sign in works on the deployed app
 - [ ] Candidates, pipelines, talent pools load
-- [ ] Email editor (BeeFree) loads when creating campaigns
+- [ ] Campaign email HTML editor loads when creating campaigns
 - [ ] Campaign emails send successfully (test with a small campaign)
 
 ---

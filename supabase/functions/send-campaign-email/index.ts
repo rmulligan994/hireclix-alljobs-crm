@@ -582,5 +582,15 @@ function replaceMergeTags(content: string, ctx: {
     .replace(/\{\{jobDescription\}\}/g, job?.description || "")
     .replace(/\{\{jobUrl\}\}/g, job?.url || job?.view_url || "")
     .replace(/\{\{unsubscribeLink\}\}/g, unsubscribeLink)
-    .replace(/\{\{viewInBrowserLink\}\}/g, "#");
+    .replace(/\{\{viewInBrowserLink\}\}/g, "#")
+    // Legacy / imported template aliases (snake_case & third-party starters)
+    .replace(/\{\{company_name\}\}/g, senderCompany)
+    .replace(/\{\{member_name\}\}/g, fullName)
+    .replace(/\{\{job_title\}\}/g, job?.title || "")
+    .replace(/\{\{apply_url\}\}/g, job?.url || job?.view_url || "")
+    .replace(/\{\{unsubscribe_url\}\}/g, unsubscribeLink)
+    .replace(/\{\{recruiter_name\}\}/g, senderName)
+    .replace(/\{\{recruiter_email\}\}/g, sender.email || "")
+    .replace(/\{\{recruiter_title\}\}/g, sender.title || "")
+    .replace(/\{\{site_name\}\}/g, senderCompany);
 }

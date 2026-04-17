@@ -10,6 +10,8 @@ export interface EmailTemplate {
   preheader: string | null;
   bee_json: Json | null;
   html_content: string | null;
+  compose_kind?: string | null;
+  form_payload?: Json | null;
   thumbnail_url: string | null;
   is_default: boolean;
   created_at: string;
@@ -21,8 +23,10 @@ export interface CreateEmailTemplateInput {
   category?: string;
   subject?: string;
   preheader?: string;
-  bee_json?: Json;
+  bee_json?: Json | null;
   html_content?: string;
+  compose_kind?: string | null;
+  form_payload?: Json | null;
   thumbnail_url?: string;
 }
 
@@ -31,8 +35,10 @@ export interface UpdateEmailTemplateInput {
   category?: string;
   subject?: string;
   preheader?: string;
-  bee_json?: Json;
+  bee_json?: Json | null;
   html_content?: string;
+  compose_kind?: string | null;
+  form_payload?: Json | null;
   thumbnail_url?: string;
 }
 
@@ -81,8 +87,10 @@ export const emailTemplateService = {
         category: input.category || 'custom',
         subject: input.subject,
         preheader: input.preheader,
-        bee_json: input.bee_json,
+        bee_json: input.bee_json ?? null,
         html_content: input.html_content,
+        compose_kind: input.compose_kind ?? null,
+        form_payload: input.form_payload ?? null,
         thumbnail_url: input.thumbnail_url,
         user_id: user.id,
       })
@@ -103,6 +111,8 @@ export const emailTemplateService = {
         preheader: input.preheader,
         bee_json: input.bee_json,
         html_content: input.html_content,
+        compose_kind: input.compose_kind,
+        form_payload: input.form_payload,
         thumbnail_url: input.thumbnail_url,
       })
       .eq('id', id)

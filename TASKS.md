@@ -73,14 +73,11 @@
 **Steps**:
 1. [ ] Get Mailgun API key from https://app.mailgun.com/app/account/security/api_keys
 2. [ ] Add sending domain in Mailgun and get `MAILGUN_DOMAIN`
-3. [ ] Get Beefree credentials from https://developers.beefree.io/
-4. [ ] In Supabase Dashboard, add secrets:
+3. [ ] In Supabase Dashboard, add secrets:
    - `MAILGUN_API_KEY` = your-mailgun-key
    - `MAILGUN_DOMAIN` = mg.yourdomain.com
    - `MAILGUN_WEBHOOK_SIGNING_KEY` = from Mailgun webhook settings
-   - `BEE_CLIENT_ID` = your-bee-client-id
-   - `BEE_CLIENT_SECRET` = your-bee-secret
-5. [ ] Deploy edge functions: `supabase functions deploy`
+4. [ ] Deploy edge functions: `supabase functions deploy`
 
 ---
 

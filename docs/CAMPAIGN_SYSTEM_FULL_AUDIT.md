@@ -29,7 +29,7 @@ This audit evaluates the campaign system against true email marketing platform s
 | Step | Component | Status |
 |------|-----------|--------|
 | Details | Name, type, goal, folder, job | OK |
-| Template | TemplateLibrary, BeefreeEditor | OK |
+| Template | TemplateLibrary, HtmlCampaignEmailEditor | OK |
 | Sequence | SequenceBuilder — cadence, dates | OK |
 | Audience | Talent pools, pipelines, lead status | OK |
 | Review | Summary, test email, launch/schedule | OK |

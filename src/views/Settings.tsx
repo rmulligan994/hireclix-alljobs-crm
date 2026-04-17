@@ -355,7 +355,7 @@ const Settings = () => {
                     HireClix Career Site Integration
                   </CardTitle>
                   <CardDescription>
-                    Connect your career site CMS jobs collection for read-only display on the Jobs tab. Requires an API token with cms:read scope.
+                    Connect your career site CMS jobs collection for read-only display on the Jobs tab. The same Site ID and token are used to list Webflow assets when inserting images in campaign emails.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -393,7 +393,8 @@ const Settings = () => {
                       placeholder="Leave blank to keep current token"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Create a token in your career site account settings → Integrations → API Access. Needs cms:read scope.
+                      Create a token in your career site account settings → Integrations → API Access. For jobs sync: cms:read.
+                      For campaign email image picking from Webflow assets, include assets:read and sites:read on the same site.
                     </p>
                   </div>
                   <div className="space-y-2">

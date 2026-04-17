@@ -58,21 +58,23 @@ export function AddCandidatesToPipelineDialog({
     }
   };
 
-  const handleAddSelected = () => {
-    onAddCandidates(selectedIds);
+  const resetLocalState = () => {
     setSelectedIds([]);
     setSearchQuery('');
-    onOpenChange(false);
   };
 
-  const handleClose = () => {
-    setSelectedIds([]);
-    setSearchQuery('');
-    onOpenChange(false);
+  const handleOpenChange = (next: boolean) => {
+    onOpenChange(next);
+    if (!next) resetLocalState();
+  };
+
+  const handleAddSelected = () => {
+    onAddCandidates(selectedIds);
+    handleOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="bg-card border-border max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-6 gap-4">
         <DialogHeader className="shrink-0">
           <DialogTitle className="font-heading text-xl text-foreground flex items-center gap-2">
@@ -226,7 +228,7 @@ export function AddCandidatesToPipelineDialog({
         <div className="flex gap-3 pt-4 border-t border-border shrink-0">
           <Button
             variant="outline"
-            onClick={handleClose}
+            onClick={() => handleOpenChange(false)}
             className="flex-1 border-border text-muted-foreground hover:text-foreground"
           >
             Cancel

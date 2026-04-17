@@ -86,8 +86,6 @@ Each Supabase project needs its own secrets. Configure in **Supabase Dashboard â
 | Secret | Purpose |
 |--------|---------|
 | `MAILGUN_API_KEY` | Email sending (campaigns) |
-| `BEE_CLIENT_ID` | BeeFree email editor |
-| `BEE_CLIENT_SECRET` | BeeFree email editor |
 
 ---
 

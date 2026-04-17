@@ -18,10 +18,12 @@ export type Database = {
         Row: {
           bee_json: Json | null
           campaign_id: string
+          compose_kind: string | null
           created_at: string
           delay_days: number
           delay_hours: number
           email_template_id: string | null
+          form_payload: Json | null
           html_content: string | null
           id: string
           step_order: number
@@ -31,10 +33,12 @@ export type Database = {
         Insert: {
           bee_json?: Json | null
           campaign_id: string
+          compose_kind?: string | null
           created_at?: string
           delay_days?: number
           delay_hours?: number
           email_template_id?: string | null
+          form_payload?: Json | null
           html_content?: string | null
           id?: string
           step_order?: number
@@ -44,10 +48,12 @@ export type Database = {
         Update: {
           bee_json?: Json | null
           campaign_id?: string
+          compose_kind?: string | null
           created_at?: string
           delay_days?: number
           delay_hours?: number
           email_template_id?: string | null
+          form_payload?: Json | null
           html_content?: string | null
           id?: string
           step_order?: number
@@ -402,7 +408,9 @@ export type Database = {
         Row: {
           bee_json: Json | null
           category: string
+          compose_kind: string | null
           created_at: string
+          form_payload: Json | null
           html_content: string | null
           id: string
           is_default: boolean
@@ -416,7 +424,9 @@ export type Database = {
         Insert: {
           bee_json?: Json | null
           category?: string
+          compose_kind?: string | null
           created_at?: string
+          form_payload?: Json | null
           html_content?: string | null
           id?: string
           is_default?: boolean
@@ -430,7 +440,9 @@ export type Database = {
         Update: {
           bee_json?: Json | null
           category?: string
+          compose_kind?: string | null
           created_at?: string
+          form_payload?: Json | null
           html_content?: string | null
           id?: string
           is_default?: boolean
@@ -440,6 +452,27 @@ export type Database = {
           thumbnail_url?: string | null
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      email_ai_usage: {
+        Row: {
+          created_at: string
+          id: string
+          mode: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mode: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mode?: string
+          user_id?: string
         }
         Relationships: []
       }

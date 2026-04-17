@@ -67,7 +67,7 @@ export function StageConfigEditor({ stages, onChange }: StageConfigEditorProps) 
         </div>
         
         <div className="space-y-2">
-          {stages.sort((a, b) => a.order - b.order).map((stage, index) => (
+          {[...stages].sort((a, b) => a.order - b.order).map((stage, index) => (
             <Card key={stage.id} className="bg-background border-border">
               <CardContent className="p-3">
                 <div className="flex items-center gap-3">

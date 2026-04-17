@@ -1,9 +1,6 @@
 # CORRECT PROJECT: xvkeruwiravjnzikrtkp (do NOT use xiyryfkhfaprjzjapeag)
 project_id = "xvkeruwiravjnzikrtkp"
 
-[functions.beefree-auth]
-verify_jwt = false
-
 [functions.send-campaign-email]
 verify_jwt = false
 

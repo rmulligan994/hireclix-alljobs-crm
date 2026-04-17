@@ -126,8 +126,7 @@ export const AddCandidatesToPoolDialog = ({
     }
   };
 
-  const handleAddSelected = () => {
-    onAddCandidates(selectedCandidates);
+  const resetDialogState = () => {
     setSelectedCandidates([]);
     setSearchQuery('');
     setFilters({
@@ -146,29 +145,16 @@ export const AddCandidatesToPoolDialog = ({
       lastContactCustomFrom: undefined,
       lastContactCustomTo: undefined,
     });
-    onOpenChange(false);
   };
 
-  const handleClose = () => {
-    setSelectedCandidates([]);
-    setSearchQuery('');
-    setFilters({
-      skills: [],
-      locations: [],
-      pipelines: [],
-      pipelineStages: [],
-      talentPools: [],
-      sources: [],
-      companies: [],
-      experienceLevels: [],
-      dateAdded: null,
-      lastContact: null,
-      dateAddedCustomFrom: undefined,
-      dateAddedCustomTo: undefined,
-      lastContactCustomFrom: undefined,
-      lastContactCustomTo: undefined,
-    });
-    onOpenChange(false);
+  const handleOpenChange = (next: boolean) => {
+    onOpenChange(next);
+    if (!next) resetDialogState();
+  };
+
+  const handleAddSelected = () => {
+    onAddCandidates(selectedCandidates);
+    handleOpenChange(false);
   };
 
   const activeFilterCount =
@@ -180,7 +166,7 @@ export const AddCandidatesToPoolDialog = ({
     filters.pipelineStages.length;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="bg-card border-border max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-6 gap-4">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 text-foreground">
@@ -346,7 +332,7 @@ export const AddCandidatesToPoolDialog = ({
         </div>
 
         <DialogFooter className="mt-4 shrink-0">
-          <Button variant="outline" onClick={handleClose} className="border-border">
+          <Button variant="outline" onClick={() => handleOpenChange(false)} className="border-border">
             Cancel
           </Button>
           <Button

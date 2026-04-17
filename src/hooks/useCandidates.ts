@@ -19,6 +19,14 @@ export interface CandidatesSearchParams {
   scopeCandidateIds?: string[];
 }
 
+/** Order-independent key so refetches with reordered id lists do not spawn duplicate queries. */
+function candidatesSearchQueryKey(params: CandidatesSearchParams): string {
+  const p: CandidatesSearchParams = { ...params };
+  if (p.excludeIds?.length) p.excludeIds = [...p.excludeIds].sort();
+  if (p.scopeCandidateIds?.length) p.scopeCandidateIds = [...p.scopeCandidateIds].sort();
+  return stableStringify(p);
+}
+
 /**
  * Search and filter candidates with pagination.
  * Use pageSize for infinite scroll (TalentPool) or large limit for single page (Add Candidates dialogs).
@@ -30,7 +38,7 @@ export const useCandidatesSearch = (
   const pageSize = options?.limit ?? options?.pageSize ?? 50;
 
   const query = useInfiniteQuery({
-    queryKey: ['candidates', 'search', stableStringify(params)],
+    queryKey: ['candidates', 'search', candidatesSearchQueryKey(params)],
     queryFn: async ({ pageParam = 0 }) => {
       const result = await candidateService.searchPaginated({
         ...params,

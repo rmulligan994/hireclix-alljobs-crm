@@ -9,8 +9,9 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Plus, Trash2, Mail, Clock, Edit, Copy, ChevronDown, ChevronUp, CalendarDays, Send, Calendar as CalendarIcon } from 'lucide-react';
-import { BeefreeEmailEditor } from './BeefreeEmailEditor';
+import { HtmlCampaignEmailEditor } from './email/HtmlCampaignEmailEditor';
 import { CampaignEmail, ScheduleRecurrence } from '@/types/Campaign';
+import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 import { format, addDays, differenceInDays, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +28,9 @@ export interface SequenceMetadata {
 
 interface SequenceBuilderProps {
   template?: any;
-  templateBeeJson?: Record<string, unknown> | null;
+  templateComposeKind?: ComposeKind | null;
+  templateFormPayload?: unknown | null;
+  templateEditorSubject?: string;
   templateHtml?: string | null;
   onContinue?: (steps: Partial<CampaignEmail>[], opts?: { firstSendDate?: string; metadata?: SequenceMetadata }) => void;
   campaignJobId?: string | null;
@@ -41,7 +44,8 @@ interface EmailStep {
   delay: number;
   delayUnit: 'hours' | 'days' | 'weeks';
   subject: string;
-  beeJson: Record<string, unknown> | null;
+  composeKind: ComposeKind | null;
+  formPayload: unknown | null;
   htmlContent: string | null;
   expanded: boolean;
   /** For specific_dates mode: exact date for this step */
@@ -56,7 +60,16 @@ const SCHEDULE_DESCRIPTIONS: Record<ScheduleType, string> = {
   specific_dates: 'Pick an exact date for each email.',
 };
 
-export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onContinue, campaignJobId, initialSteps }: SequenceBuilderProps) => {
+export const SequenceBuilder = ({
+  template,
+  templateComposeKind,
+  templateFormPayload,
+  templateEditorSubject,
+  templateHtml,
+  onContinue,
+  campaignJobId,
+  initialSteps,
+}: SequenceBuilderProps) => {
   const [sendImmediately, setSendImmediately] = useState(true);
   const [scheduledFirstDate, setScheduledFirstDate] = useState<Date | undefined>();
   const [scheduledFirstTime, setScheduledFirstTime] = useState('09:00');
@@ -78,8 +91,9 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
       order: 1,
       delay: 0,
       delayUnit: 'days',
-      subject: 'Initial Outreach',
-      beeJson: templateBeeJson || template?.bee_json || null,
+      subject: templateEditorSubject || template?.subject || 'Initial Outreach',
+      composeKind: templateComposeKind || (template?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form'),
+      formPayload: templateFormPayload ?? template?.form_payload ?? null,
       htmlContent: templateHtml || template?.html_content || null,
       expanded: true,
       scheduledDate: undefined,
@@ -108,7 +122,8 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
           delay,
           delayUnit,
           subject: e.subject ?? 'Untitled',
-          beeJson: (e.bee_json && typeof e.bee_json === 'object' && !Array.isArray(e.bee_json)) ? e.bee_json as Record<string, unknown> : null,
+          composeKind: (e.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form') as ComposeKind,
+          formPayload: e.form_payload ?? null,
           htmlContent: e.html_content ?? null,
           expanded: idx === 0,
           scheduledDate: undefined,
@@ -120,12 +135,20 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
 
   // Update first step when template changes (only if no initialSteps)
   useEffect(() => {
-    if ((templateBeeJson || templateHtml) && (!initialSteps || initialSteps.length === 0)) {
+    if ((templateHtml || templateFormPayload) && (!initialSteps || initialSteps.length === 0)) {
       setSteps(prev => prev.map((step, idx) =>
-        idx === 0 ? { ...step, beeJson: templateBeeJson || step.beeJson, htmlContent: templateHtml || step.htmlContent } : step
+        idx === 0
+          ? {
+              ...step,
+              composeKind: templateComposeKind || step.composeKind,
+              formPayload: templateFormPayload ?? step.formPayload,
+              htmlContent: templateHtml || step.htmlContent,
+              subject: templateEditorSubject || template?.subject || step.subject,
+            }
+          : step
       ));
     }
-  }, [templateBeeJson, templateHtml, initialSteps]);
+  }, [templateComposeKind, templateFormPayload, templateEditorSubject, templateHtml, template?.subject, initialSteps]);
 
   // When switching to daily/weekly/monthly: single email only (same template repeated at schedule)
   useEffect(() => {
@@ -154,7 +177,8 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
       delay: baseDelay,
       delayUnit: 'days',
       subject: `Email ${steps.length + 1}`,
-      beeJson: null,
+      composeKind: 'announcement_form',
+      formPayload: null,
       htmlContent: null,
       expanded: false,
       scheduledDate: scheduleType === 'specific_dates' && firstSendDate
@@ -188,10 +212,23 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
     }
   };
 
-  const handleEditorSave = (beeJson: Record<string, unknown>, html: string) => {
+  const handleEditorSave = (payload: {
+    html: string;
+    subject: string;
+    compose_kind: ComposeKind;
+    form_payload: AnnouncementForm | null;
+  }) => {
     if (editingStep) {
       setSteps(steps.map(s =>
-        s.id === editingStep ? { ...s, beeJson, htmlContent: html } : s
+        s.id === editingStep
+          ? {
+              ...s,
+              subject: payload.subject,
+              composeKind: payload.compose_kind,
+              formPayload: payload.form_payload,
+              htmlContent: payload.html,
+            }
+          : s
       ));
       setEditingStep(null);
     }
@@ -245,8 +282,10 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
         delay_days: delayDays,
         delay_hours: delayHours,
         subject: step.subject,
-        bee_json: step.beeJson || undefined,
+        bee_json: null,
         html_content: step.htmlContent || undefined,
+        compose_kind: step.composeKind ?? null,
+        form_payload: step.formPayload ?? null,
       };
     });
 
@@ -401,8 +440,12 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
     <>
       <Dialog open={!!editingStep} onOpenChange={() => setEditingStep(null)}>
         <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0">
-          <BeefreeEmailEditor
-            initialTemplate={editingStepData?.beeJson}
+          <HtmlCampaignEmailEditor
+            key={editingStep ?? 'closed'}
+            initialSubject={editingStepData?.subject ?? ''}
+            initialHtmlContent={editingStepData?.htmlContent}
+            initialComposeKind={editingStepData?.composeKind ?? 'announcement_form'}
+            initialFormPayload={editingStepData?.formPayload ?? undefined}
             onSave={handleEditorSave}
             onCancel={() => setEditingStep(null)}
             campaignJobId={campaignJobId}
@@ -661,7 +704,7 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
                                   {format(step.scheduledDate, 'PPP')}
                                 </Badge>
                               )}
-                              {step.beeJson ? (
+                              {step.htmlContent?.trim() ? (
                                 <Badge className="bg-sky-blue/20 text-sky-blue border-sky-blue text-xs">Configured</Badge>
                               ) : (
                                 <Badge variant="secondary" className="text-xs">Draft</Badge>
@@ -708,8 +751,8 @@ export const SequenceBuilder = ({ template, templateBeeJson, templateHtml, onCon
                           <div className="space-y-2">
                             <Label>Email Preview</Label>
                             <div className="bg-muted p-4 rounded-lg text-sm text-muted-foreground">
-                              {step.beeJson ? (
-                                <div className="italic">Email designed with visual editor. Click edit to modify.</div>
+                              {step.htmlContent?.trim() ? (
+                                <div className="italic">Email content saved. Click edit to modify.</div>
                               ) : (
                                 <div className="italic">No content yet. Click edit to design this email.</div>
                               )}

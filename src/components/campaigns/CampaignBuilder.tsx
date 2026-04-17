@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SequenceBuilder, type SequenceMetadata } from './SequenceBuilder';
 import { TemplateLibrary } from './TemplateLibrary';
-import { BeefreeEmailEditor } from './BeefreeEmailEditor';
+import { HtmlCampaignEmailEditor } from './email/HtmlCampaignEmailEditor';
 import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Users, Loader2, Search, AlertTriangle, Mail, Folder } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
 import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients, useCreateCampaignEmail } from '@/hooks/useCampaigns';
@@ -25,6 +25,7 @@ import { isOverRecipientLimit, getRecipientLimitForRole } from '@/config/roleLim
 import { EmailTemplate } from '@/services/emailTemplateService';
 import { AudienceFilter, CampaignEmail, Campaign, LeadStatus } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
+import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -48,7 +49,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const [campaignType, setCampaignType] = useState('');
   const [campaignGoal, setCampaignGoal] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
-  const [templateBeeJson, setTemplateBeeJson] = useState<Record<string, unknown> | null>(null);
+  const [templateComposeKind, setTemplateComposeKind] = useState<ComposeKind>('announcement_form');
+  const [templateFormPayload, setTemplateFormPayload] = useState<unknown | null>(null);
+  const [templateEditorSubject, setTemplateEditorSubject] = useState('');
   const [templateHtml, setTemplateHtml] = useState<string | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [emailSteps, setEmailSteps] = useState<Partial<CampaignEmail>[]>([]);
@@ -105,18 +108,20 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           subject: e.subject,
           bee_json: e.bee_json,
           html_content: e.html_content,
+          compose_kind: e.compose_kind,
+          form_payload: e.form_payload,
         }));
         setEmailSteps(steps);
         const first = emails[0];
-        if (first?.bee_json && typeof first.bee_json === 'object' && !Array.isArray(first.bee_json)) {
-          setTemplateBeeJson(first.bee_json as Record<string, unknown>);
-        } else {
-          setTemplateBeeJson(null);
-        }
+        setTemplateComposeKind((first?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form') as ComposeKind);
+        setTemplateFormPayload(first?.form_payload ?? null);
+        setTemplateEditorSubject(first?.subject ?? '');
         setTemplateHtml(first?.html_content ?? null);
       } else {
         setEmailSteps([]);
-        setTemplateBeeJson(null);
+        setTemplateComposeKind('announcement_form');
+        setTemplateFormPayload(null);
+        setTemplateEditorSubject('');
         setTemplateHtml(null);
       }
     });
@@ -127,11 +132,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   useEffect(() => {
     if (open && !editingCampaign && initialTemplate !== undefined) {
       setSelectedTemplate(initialTemplate ?? null);
-      if (initialTemplate?.bee_json && typeof initialTemplate.bee_json === 'object' && !Array.isArray(initialTemplate.bee_json)) {
-        setTemplateBeeJson(initialTemplate.bee_json as Record<string, unknown>);
-      } else {
-        setTemplateBeeJson(null);
-      }
+      const ck = initialTemplate?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form';
+      setTemplateComposeKind(ck);
+      setTemplateFormPayload(initialTemplate?.form_payload ?? null);
+      setTemplateEditorSubject(initialTemplate?.subject ?? '');
       setTemplateHtml(initialTemplate?.html_content ?? null);
       setCurrentStep('editor');
     }
@@ -183,8 +187,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         delay_days: step.delay_days || 0,
         delay_hours: step.delay_hours || 0,
         subject: step.subject || 'Untitled',
-        bee_json: step.bee_json,
+        bee_json: null,
         html_content: step.html_content ?? undefined,
+        compose_kind: step.compose_kind ?? null,
+        form_payload: step.form_payload ?? null,
       });
     }
   };
@@ -201,36 +207,48 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
   const handleTemplateSelect = (template: EmailTemplate | null) => {
     setSelectedTemplate(template);
-    if (template?.bee_json && typeof template.bee_json === 'object' && !Array.isArray(template.bee_json)) {
-      setTemplateBeeJson(template.bee_json as Record<string, unknown>);
-    } else {
-      setTemplateBeeJson(null);
-    }
+    const ck = template?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form';
+    setTemplateComposeKind(ck);
+    setTemplateFormPayload(template?.form_payload ?? null);
+    setTemplateEditorSubject(template?.subject ?? '');
     setTemplateHtml(template?.html_content ?? null);
     setCurrentStep('editor');
   };
 
-  const handleEditorSave = (beeJson: Record<string, unknown>, html: string) => {
-    setTemplateBeeJson(beeJson);
-    setTemplateHtml(html);
-    
+  const handleEditorSave = (payload: {
+    html: string;
+    subject: string;
+    compose_kind: ComposeKind;
+    form_payload: AnnouncementForm | null;
+  }) => {
+    setTemplateHtml(payload.html);
+    setTemplateComposeKind(payload.compose_kind);
+    setTemplateFormPayload(payload.form_payload);
+    setTemplateEditorSubject(payload.subject);
+
     if (selectedTemplate) {
       updateTemplate({
         id: selectedTemplate.id,
         input: {
-          bee_json: beeJson as Json,
-          html_content: html,
+          bee_json: null,
+          html_content: payload.html,
+          subject: payload.subject,
+          compose_kind: payload.compose_kind,
+          form_payload: payload.form_payload as Json | null,
         },
       });
     } else {
       createTemplate({
         name: campaignName || 'Untitled Template',
         category: campaignType || 'custom',
-        bee_json: beeJson as Json,
-        html_content: html,
+        subject: payload.subject,
+        bee_json: null,
+        html_content: payload.html,
+        compose_kind: payload.compose_kind,
+        form_payload: payload.form_payload as Json | null,
       });
     }
-    
+
     setCurrentStep('sequence');
   };
 
@@ -518,7 +536,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setCampaignType('');
     setCampaignGoal('');
     setSelectedTemplate(null);
-    setTemplateBeeJson(null);
+    setTemplateComposeKind('announcement_form');
+    setTemplateFormPayload(null);
+    setTemplateEditorSubject('');
     setTemplateHtml(null);
     setCampaignId(null);
     setEmailSteps([]);
@@ -556,8 +576,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     return (
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0">
-          <BeefreeEmailEditor
-            initialTemplate={templateBeeJson}
+          <HtmlCampaignEmailEditor
+            initialSubject={templateEditorSubject}
+            initialHtmlContent={templateHtml}
+            initialComposeKind={templateComposeKind}
+            initialFormPayload={templateFormPayload ?? undefined}
             onSave={handleEditorSave}
             onCancel={handleEditorCancel}
             campaignJobId={selectedJobId}
@@ -801,7 +824,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             <SequenceBuilder 
               template={selectedTemplate} 
               onContinue={handleSequenceContinue}
-              templateBeeJson={templateBeeJson}
+              templateComposeKind={templateComposeKind}
+              templateFormPayload={templateFormPayload}
+              templateEditorSubject={templateEditorSubject}
               templateHtml={templateHtml}
               campaignJobId={selectedJobId}
               initialSteps={emailSteps.length > 0 ? emailSteps : undefined}
