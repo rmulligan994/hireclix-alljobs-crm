@@ -1,5 +1,5 @@
 import type { EmailCampaign, EmailTemplate, EmailEvent, SiteEmailOverride } from '@/types/email-types';
-import { emailShell, ctaButton } from '@/lib/email/email-utils';
+import { DEFAULT_COMPLIANCE_FOOTER, emailShell, ctaButton } from '@/lib/email/email-utils';
 
 /** Set localStorage `email-module-seed-campaigns` = `1` to load sample campaigns (returning-user demo). */
 export const MOCK_CAMPAIGNS: EmailCampaign[] = [
@@ -22,6 +22,7 @@ export const MOCK_CAMPAIGNS: EmailCampaign[] = [
       signOff: 'Best, The Acme Team',
       blocks: [],
       useBlocks: false,
+      complianceFooter: { ...DEFAULT_COMPLIANCE_FOOTER },
     },
     status: 'sent',
     recipient_source: { type: 'talent_pool', pool_id: 'pool-eng' },
@@ -55,7 +56,7 @@ export const MOCK_TEMPLATES: EmailTemplate[] = [
     subject: 'New Role: {{job_title}}',
     html_body: '<h1>{{job_title}}</h1><p>Apply now at {{company_name}}</p>',
     kind: 'announcement_form',
-    form_payload: { eyebrow: '', headline: '{{job_title}}', subhead: 'at {{company_name}}', message: 'We have an exciting new role for you.', messageRichHtml: null, useMessageRichHtml: false, previewText: '', buttonLabel: 'Apply Now', buttonUrl: '{{apply_url}}', signOff: '', blocks: [], useBlocks: false },
+    form_payload: { eyebrow: '', headline: '{{job_title}}', subhead: 'at {{company_name}}', message: 'We have an exciting new role for you.', messageRichHtml: null, useMessageRichHtml: false, previewText: '', buttonLabel: 'Apply Now', buttonUrl: '{{apply_url}}', signOff: '', blocks: [], useBlocks: false, complianceFooter: { ...DEFAULT_COMPLIANCE_FOOTER } },
     source: 'manual',
     webflow_asset_refs: [],
     created_by: 'user-1',

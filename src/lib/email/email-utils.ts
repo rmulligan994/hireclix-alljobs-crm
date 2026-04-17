@@ -1,5 +1,6 @@
 import type {
   AnnouncementForm,
+  ComplianceFooter,
   ComposeKind,
   ContentBlock,
   BrandSettings,
@@ -907,6 +908,7 @@ export function emptyAnnouncementForm(): AnnouncementForm {
     signOff: '',
     blocks: [],
     useBlocks: false,
+    complianceFooter: { ...DEFAULT_COMPLIANCE_FOOTER },
   };
 }
 
@@ -931,6 +933,7 @@ export function payloadToAnnouncementForm(payload: unknown): AnnouncementForm {
     signOff: p?.signOff ?? '',
     blocks: p?.blocks ?? [],
     useBlocks: p?.useBlocks ?? false,
+    complianceFooter: normalizeComplianceFooter(p?.complianceFooter as Partial<ComplianceFooter> | null),
   };
 }
 
@@ -942,7 +945,54 @@ export function isValidAnnouncementForSave(form: AnnouncementForm): boolean {
 
 // ========== Email Shell & CTA Button (moved from email-mock-data) ==========
 
-export function emailShell(preheader: string, bodyRows: string): string {
+export const DEFAULT_COMPLIANCE_FOOTER: ComplianceFooter = {
+  companyLine: '{{senderCompany}}',
+  disclaimerText: "You're receiving this because you're part of our talent community.",
+  unsubscribeLinkLabel: 'Unsubscribe',
+};
+
+export function normalizeComplianceFooter(f?: Partial<ComplianceFooter> | null): ComplianceFooter {
+  return {
+    companyLine: (f?.companyLine ?? DEFAULT_COMPLIANCE_FOOTER.companyLine).trim() || DEFAULT_COMPLIANCE_FOOTER.companyLine,
+    disclaimerText:
+      (f?.disclaimerText ?? DEFAULT_COMPLIANCE_FOOTER.disclaimerText).trim() || DEFAULT_COMPLIANCE_FOOTER.disclaimerText,
+    unsubscribeLinkLabel:
+      (f?.unsubscribeLinkLabel ?? DEFAULT_COMPLIANCE_FOOTER.unsubscribeLinkLabel).trim() ||
+      DEFAULT_COMPLIANCE_FOOTER.unsubscribeLinkLabel,
+  };
+}
+
+/** HTML table appended below main body (block shell); link href is always {{unsubscribeLink}} for send pipeline. */
+export function complianceFooterToHtml(footer: ComplianceFooter): string {
+  const f = normalizeComplianceFooter(footer);
+  const company = escapeHtml(f.companyLine);
+  const disc = escapeHtml(f.disclaimerText).replace(/\r\n|\n|\r/g, '<br/>');
+  const linkLabel = escapeHtml(f.unsubscribeLinkLabel);
+  return `<!-- Compliance footer -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="email-container" style="margin:0 auto;max-width:600px;">
+<tr>
+<td style="padding:30px 40px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#9a9a9a;text-align:center;" class="padding-mobile">
+<p style="margin:0 0 8px;">${company}</p>
+<p style="margin:0;">${disc}<br/>
+<a href="{{unsubscribeLink}}" style="color:#9a9a9a;text-decoration:underline;">${linkLabel}</a></p>
+</td>
+</tr>
+</table>`;
+}
+
+function legacyComplianceFooterRow(footer: ComplianceFooter, font: string): string {
+  const f = normalizeComplianceFooter(footer);
+  const company = escapeHtml(f.companyLine);
+  const disc = escapeHtml(f.disclaimerText).replace(/\r\n|\n|\r/g, '<br/>');
+  const linkLabel = escapeHtml(f.unsubscribeLinkLabel);
+  return `<tr><td style="font-size:11px;color:#a1a1aa;padding-top:24px;border-top:1px solid #e4e4e7;font-family:${font};">
+<p style="margin:0 0 8px;color:#71717a;font-size:12px;">${company}</p>
+<p style="margin:0;color:#a1a1aa;">${disc}<br/>
+<a href="{{unsubscribeLink}}" style="color:#a1a1aa;text-decoration:underline;">${linkLabel}</a></p>
+</td></tr>`;
+}
+
+export function emailShell(preheader: string, bodyRows: string, complianceFooterHtml?: string): string {
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
@@ -979,16 +1029,7 @@ ${preheader}
 ${bodyRows}
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
-<!-- Footer -->
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="email-container" style="margin:0 auto;max-width:600px;">
-<tr>
-<td style="padding:30px 40px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#9a9a9a;text-align:center;" class="padding-mobile">
-<p style="margin:0 0 8px;">{{senderCompany}}</p>
-<p style="margin:0;">You're receiving this because you're part of our talent community.<br/>
-<a href="{{unsubscribeLink}}" style="color:#9a9a9a;text-decoration:underline;">Unsubscribe</a></p>
-</td>
-</tr>
-</table>
+${complianceFooterHtml ?? ''}
 </center>
 </body>
 </html>`;
@@ -1182,7 +1223,12 @@ ${ctaButton(block.label, block.url, primary)}
   }
 }
 
-export function renderBlocksToHTML(blocks: ContentBlock[], siteConfig: { siteName: string }, brand?: BrandSettings): string {
+export function renderBlocksToHTML(
+  blocks: ContentBlock[],
+  siteConfig: { siteName: string },
+  brand?: BrandSettings,
+  complianceFooter?: ComplianceFooter,
+): string {
   const firstHeading = blocks.find(b => b.type === 'heading');
   const preheader = firstHeading?.type === 'heading' ? firstHeading.text : siteConfig.siteName;
 
@@ -1210,7 +1256,8 @@ export function renderBlocksToHTML(blocks: ContentBlock[], siteConfig: { siteNam
 ${logoRow}
 ${rows}`;
 
-  return emailShell(preheader, bodyRows);
+  const footerHtml = complianceFooterToHtml(normalizeComplianceFooter(complianceFooter));
+  return emailShell(preheader, bodyRows, footerHtml);
 }
 
 /** Render announcement form to responsive HTML string (legacy flat-field mode) */
@@ -1221,7 +1268,7 @@ export function renderAnnouncementToHTML(
 ): string {
   // Block layout (including empty — preview/shell only until user adds blocks)
   if (form.useBlocks) {
-    return renderBlocksToHTML(form.blocks, siteConfig, brand);
+    return renderBlocksToHTML(form.blocks, siteConfig, brand, form.complianceFooter);
   }
 
   const { headline, subhead, message, messageRichHtml, useMessageRichHtml, previewText, buttonLabel, buttonUrl, signOff } = form;
@@ -1266,9 +1313,7 @@ ${buttonLabel && buttonUrl ? `<tr><td style="padding-bottom:24px;">
 <!--[if !mso]><!--><a href="${buttonUrl}" style="display:inline-block;background:${ctaBg};color:#ffffff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;font-family:${font};">${buttonLabel}</a><!--<![endif]-->
 </td></tr>` : ''}
 ${signOff ? `<tr><td style="font-size:14px;color:#71717a;padding-top:8px;font-family:${font};">${signOff}</td></tr>` : ''}
-<tr><td style="font-size:11px;color:#a1a1aa;padding-top:24px;border-top:1px solid #e4e4e7;font-family:${font};">
-<a href="{{unsubscribeLink}}" style="color:#a1a1aa;">Unsubscribe</a>
-</td></tr>
+${legacyComplianceFooterRow(form.complianceFooter, font)}
 </table>
 </td></tr>
 </table>
@@ -1284,7 +1329,7 @@ export function getEmailEditorPreviewHtml(
   siteName: string,
 ): string {
   if (composeKind === 'announcement_form') {
-    return renderAnnouncementToHTML(formPayload, { siteName });
+    return applySampleMerge(renderAnnouncementToHTML(formPayload, { siteName }), {});
   }
   return applySampleMerge(htmlBody, {});
 }

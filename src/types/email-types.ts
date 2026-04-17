@@ -70,6 +70,16 @@ export interface SpacerBlock {
 
 export type ContentBlock = HeadingBlock | TextBlock | ImageBlock | ButtonBlock | DividerBlock | SpacerBlock;
 
+/** Editable copy for the automatic email footer (always sent for Visual / announcement emails). */
+export interface ComplianceFooter {
+  /** Top line; default uses merge tag {{senderCompany}} */
+  companyLine: string;
+  /** Compliance / explanation line(s); plain text, merge tags OK */
+  disclaimerText: string;
+  /** Label for the required {{unsubscribeLink}} anchor */
+  unsubscribeLinkLabel: string;
+}
+
 export interface AnnouncementForm {
   /** Small label / kicker above headline in designed templates */
   eyebrow: string;
@@ -90,6 +100,8 @@ export interface AnnouncementForm {
   // Dynamic block system
   blocks: ContentBlock[];
   useBlocks: boolean;
+  /** Shown in editor as a fixed block; always appended to sent HTML for this layout. */
+  complianceFooter: ComplianceFooter;
 }
 
 export interface EmailCampaign {

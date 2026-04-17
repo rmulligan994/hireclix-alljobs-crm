@@ -8,9 +8,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Upload, Clipboard, BookOpen, Globe, ChevronDown, Monitor, Smartphone, Plus, X, Image, Type, Heading, MousePointerClick, Minus, FolderOpen, Info, ArrowDownToLine, LayoutList, GripVertical } from 'lucide-react';
+import { Upload, Clipboard, BookOpen, Globe, ChevronDown, Monitor, Smartphone, Plus, X, Image, Type, Heading, MousePointerClick, Minus, FolderOpen, Info, ArrowDownToLine, LayoutList, GripVertical, Lock } from 'lucide-react';
 import { toast } from 'sonner';
-import type { AnnouncementForm, ComposeKind, ContentBlock } from '@/types/email-types';
+import type { AnnouncementForm, ComposeKind, ContentBlock, ComplianceFooter } from '@/types/email-types';
 import {
   emptyAnnouncementForm,
   stripEmailScripts,
@@ -21,6 +21,7 @@ import {
   classicAnnouncementFieldsToBlocks,
   blocksToClassicAnnouncementFields,
   payloadToAnnouncementForm,
+  normalizeComplianceFooter,
 } from '@/lib/email/email-utils';
 import {
   buildFormPayloadFromImportedHtml,
@@ -28,7 +29,6 @@ import {
   SCRATCH_HTML_IMPORT_COPY,
 } from '@/lib/email/email-html-import-flow';
 import type { PrepareRegionMappingResult } from '@/lib/email/email-region-detection';
-import { AnnouncementLayoutPreview } from './AnnouncementLayoutPreview';
 import { StarterLibraryDialog } from './StarterLibraryDialog';
 import type { StarterTemplate } from '@/data/email-starter-data';
 import { WebflowAssetPicker } from './WebflowAssetPicker';
@@ -433,6 +433,16 @@ export function EmailComposer({
 
   const SIGN_OFF_IMPORT_DEFAULT = 'Best,\nYour Team';
 
+  const patchComplianceFooter = (patch: Partial<ComplianceFooter>) => {
+    onFormPayloadChange({
+      ...formPayload,
+      complianceFooter: {
+        ...normalizeComplianceFooter(formPayload.complianceFooter),
+        ...patch,
+      },
+    });
+  };
+
   const finalizeRegionalHtml = (html: string, toastMsg?: string) => {
     onHtmlBodyChange(html);
     onComposeKindChange('raw_html');
@@ -801,6 +811,46 @@ export function EmailComposer({
               </div>
             </>
           )}
+          <div className="rounded-lg border border-dashed border-sky-blue/35 bg-muted/15 p-4 space-y-3 mt-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Lock className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+              <span className="text-sm font-medium">Compliance footer</span>
+              <Badge variant="secondary" className="text-[10px] font-normal">
+                Always included · not draggable
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Editable copy for the bottom of the email. The unsubscribe link always uses the merge token{' '}
+              <code className="text-[10px] px-1 rounded bg-muted">{'{{unsubscribeLink}}'}</code> when sent.
+            </p>
+            <div className="space-y-2">
+              <Label className="text-xs">Company line</Label>
+              <Input
+                value={normalizeComplianceFooter(formPayload.complianceFooter).companyLine}
+                onChange={(e) => patchComplianceFooter({ companyLine: e.target.value })}
+                placeholder="{{senderCompany}}"
+                className="text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Disclaimer</Label>
+              <Textarea
+                value={normalizeComplianceFooter(formPayload.complianceFooter).disclaimerText}
+                onChange={(e) => patchComplianceFooter({ disclaimerText: e.target.value })}
+                rows={3}
+                className="text-sm resize-y min-h-[72px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Unsubscribe link label</Label>
+              <Input
+                value={normalizeComplianceFooter(formPayload.complianceFooter).unsubscribeLinkLabel}
+                onChange={(e) => patchComplianceFooter({ unsubscribeLinkLabel: e.target.value })}
+                placeholder="Unsubscribe"
+                className="text-sm"
+              />
+            </div>
+          </div>
           <EmailTemplatePickerDialog
             open={templatePickerOpen}
             onOpenChange={setTemplatePickerOpen}
@@ -841,24 +891,20 @@ export function EmailComposer({
                 <Smartphone className="h-4 w-4" />
               </Button>
             </div>
-            {composeKind === 'announcement_form' ? (
-              <AnnouncementLayoutPreview form={formPayload} viewport={viewport} siteLabel={siteLabel} />
-            ) : (
-              <div className="flex justify-center w-full">
-                <div
-                  className="border rounded-md overflow-hidden bg-background shadow-sm"
-                  style={{ width: viewport === 'mobile' ? 390 : 600, maxWidth: '100%' }}
-                >
-                  <iframe
-                    srcDoc={previewHtml}
-                    className="w-full border-0"
-                    style={{ height: 400 }}
-                    title="Email Preview"
-                    sandbox="allow-same-origin allow-scripts"
-                  />
-                </div>
+            <div className="flex justify-center w-full">
+              <div
+                className="border rounded-md overflow-hidden bg-background shadow-sm"
+                style={{ width: viewport === 'mobile' ? 390 : 600, maxWidth: '100%' }}
+              >
+                <iframe
+                  srcDoc={previewHtml}
+                  className="w-full border-0"
+                  style={{ height: 400 }}
+                  title="Email Preview"
+                  sandbox="allow-same-origin allow-scripts"
+                />
               </div>
-            )}
+            </div>
           </CollapsibleContent>
         </Collapsible>
       )}

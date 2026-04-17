@@ -85,7 +85,7 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
         />
       </div>
       {inPopover ? (
-        <div className="max-h-36 overflow-y-auto overscroll-contain rounded-md border border-border/60 bg-muted/20 px-1">
+        <div className="max-h-36 min-h-0 overflow-y-auto overscroll-contain touch-pan-y rounded-md border border-border/60 bg-muted/20 px-1">
           <div className="space-y-1 py-0.5">
             {filterTags(tags, search).map((tag) => (
               <button
@@ -105,7 +105,7 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
           </div>
         </div>
       ) : (
-        <div className="h-20 overflow-y-auto overscroll-contain rounded-md border border-border/40">
+        <div className="h-20 min-h-0 overflow-y-auto overscroll-contain touch-pan-y rounded-md border border-border/40">
           <div className="space-y-1 p-0.5">
             {filterTags(tags, search).map((tag) => (
               <button

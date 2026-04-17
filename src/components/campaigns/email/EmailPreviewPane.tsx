@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Monitor, Smartphone, Maximize2 } from 'lucide-react';
-import { AnnouncementLayoutPreview } from './AnnouncementLayoutPreview';
 import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 import { getEmailEditorPreviewHtml } from '@/lib/email/email-utils';
 import { cn } from '@/lib/utils';
@@ -84,24 +83,20 @@ export function EmailPreviewPane({
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto rounded-md border bg-muted/15 p-2">
-        {composeKind === 'announcement_form' ? (
-          <AnnouncementLayoutPreview form={formPayload} viewport={viewport} siteLabel={siteLabel} />
-        ) : (
-          <div className="flex justify-center w-full">
-            <div
-              className="overflow-hidden rounded border bg-background shadow-sm"
-              style={{ width: viewport === 'mobile' ? 390 : 600, maxWidth: '100%' }}
-            >
-              <iframe
-                srcDoc={previewHtml}
-                className="w-full border-0 bg-white"
-                style={{ height: 'min(480px, 60vh)' }}
-                title="Email preview"
-                sandbox="allow-same-origin allow-scripts"
-              />
-            </div>
+        <div className="flex justify-center w-full">
+          <div
+            className="overflow-hidden rounded border bg-background shadow-sm"
+            style={{ width: viewport === 'mobile' ? 390 : 600, maxWidth: '100%' }}
+          >
+            <iframe
+              srcDoc={previewHtml}
+              className="w-full border-0 bg-white"
+              style={{ height: 'min(480px, 60vh)' }}
+              title="Email preview"
+              sandbox="allow-same-origin allow-scripts"
+            />
           </div>
-        )}
+        </div>
       </div>
 
       <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
