@@ -405,6 +405,12 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             folder_id: selectedFolderId,
           },
         });
+        if (filteredCandidates && filteredCandidates.length > 0) {
+          await addRecipients.mutateAsync({
+            campaignId,
+            candidateIds: filteredCandidates.map((c) => c.id),
+          });
+        }
       }
       
       toast({
@@ -487,13 +493,26 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         await updateCampaign.mutateAsync({
           id: campaignId,
           input: {
+            name: campaignName,
+            type: campaignType,
+            goal: campaignGoal,
             status: 'scheduled',
             scheduled_at: scheduledAtIso,
             schedule_recurrence: sequenceMetadata?.scheduleRecurrence ?? null,
+            audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
           },
         });
+        if (emailSteps.length > 0) {
+          await saveCampaignEmails(campaignId);
+        }
+        if (filteredCandidates && filteredCandidates.length > 0) {
+          await addRecipients.mutateAsync({
+            campaignId,
+            candidateIds: filteredCandidates.map((c) => c.id),
+          });
+        }
       }
 
       // Queue emails with Mailgun via o:deliverytime
@@ -573,7 +592,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         await updateCampaign.mutateAsync({
           id: campaignId,
           input: {
+            name: campaignName,
+            type: campaignType,
+            goal: campaignGoal,
             status: 'active',
+            audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
             ...(sequenceMetadata?.scheduleRecurrence !== undefined && {
@@ -583,6 +606,12 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         });
         if (emailSteps.length > 0) {
           await saveCampaignEmails(campaignId);
+        }
+        if (filteredCandidates && filteredCandidates.length > 0) {
+          await addRecipients.mutateAsync({
+            campaignId,
+            candidateIds: filteredCandidates.map((c) => c.id),
+          });
         }
       }
 
@@ -742,6 +771,12 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                           folder_id: selectedFolderId,
                         },
                       });
+                      if (filteredCandidates && filteredCandidates.length > 0) {
+                        await addRecipients.mutateAsync({
+                          campaignId,
+                          candidateIds: filteredCandidates.map((c) => c.id),
+                        });
+                      }
                     }
                   } catch {
                     // Don't block navigation; save is best-effort

@@ -8,7 +8,10 @@ interface QuickAction {
   title: string;
   description: string;
   icon: LucideIcon;
-  path: string;
+  /** In-app route */
+  path?: string;
+  /** External URL (opens in a new tab) */
+  href?: string;
 }
 
 const actions: QuickAction[] = [
@@ -20,7 +23,7 @@ const actions: QuickAction[] = [
   },
   {
     title: 'Manage Jobs',
-    description: 'Create and track open positions',
+    description: 'track open positions',
     icon: Briefcase,
     path: '/jobs',
   },
@@ -34,7 +37,7 @@ const actions: QuickAction[] = [
     title: 'Reports',
     description: 'Analytics and recruitment insights',
     icon: BarChart3,
-    path: '/reports',
+    href: 'https://dashboard.hireclix.com/client/dist/#/login',
   },
 ];
 
@@ -52,7 +55,13 @@ export const QuickActions = () => {
           return (
             <Card
               key={action.title}
-              onClick={() => router.push(action.path)}
+              onClick={() => {
+                if (action.href) {
+                  window.open(action.href, '_blank', 'noopener,noreferrer');
+                } else if (action.path) {
+                  router.push(action.path);
+                }
+              }}
               className="p-6 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:border-sky-blue/50 group"
             >
               <div className="flex flex-col items-center text-center">
