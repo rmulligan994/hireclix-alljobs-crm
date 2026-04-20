@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+function envInt(name: string, defaultVal: number): number {
+  const v = Deno.env.get(name);
+  if (v == null || v === "") return defaultVal;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : defaultVal;
+}
+
+/**
+ * Drain due scheduled_emails in chunks. Tunable for production volume (set in Supabase secrets):
+ * - PROCESS_SCHEDULED_EMAILS_BATCH — rows fetched per DB round (default 400)
+ * - PROCESS_SCHEDULED_EMAILS_DELAY_MS — pause between child function calls (default 50)
+ * - PROCESS_SCHEDULED_EMAILS_MAX_RUNTIME_MS — stop after this many ms (default 230000, stay under edge timeout)
+ * - PROCESS_SCHEDULED_EMAILS_MAX_ROUNDS — cap DB fetch rounds per invocation (default 80)
+ *
+ * The old fixed limit of 100 was only to reduce the chance of hitting the Edge Function wall clock;
+ * it is not a product requirement. Child calls still run sequentially; for very high volume, shorten
+ * DELAY_MS if Mailgun allows, raise BATCH/ROUNDS, or run cron more often than hourly.
+ */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
@@ -16,50 +34,69 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch all pending scheduled emails that are due (scheduled_at <= now)
-    const now = new Date().toISOString();
-    const { data: dueEmails, error: fetchError } = await supabase
-      .from("scheduled_emails")
-      .select("id")
-      .eq("status", "pending")
-      .lte("scheduled_at", now)
-      .limit(100); // Process in batches to avoid timeout
-
-    if (fetchError) {
-      console.error("Error fetching scheduled emails:", fetchError);
-      return new Response(
-        JSON.stringify({ error: fetchError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const batchSize = envInt("PROCESS_SCHEDULED_EMAILS_BATCH", 400);
+    const delayMs = envInt("PROCESS_SCHEDULED_EMAILS_DELAY_MS", 50);
+    const maxRuntimeMs = envInt("PROCESS_SCHEDULED_EMAILS_MAX_RUNTIME_MS", 230000);
+    const maxRounds = envInt("PROCESS_SCHEDULED_EMAILS_MAX_ROUNDS", 80);
 
     const edgeUrl = `${supabaseUrl}/functions/v1/send-campaign-email`;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || supabaseKey;
+    const started = Date.now();
+
     let processed = 0;
+    let scheduledEmailRowsTouched = 0;
     const errors: string[] = [];
 
-    // 1. Process due scheduled_emails (step 2+ of drip sequences)
-    for (const row of dueEmails || []) {
-      try {
-        const res = await fetch(edgeUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${anonKey}`,
-          },
-          body: JSON.stringify({ scheduledEmailId: row.id }),
-        });
+    // 1. Process due scheduled_emails in rounds until empty, time budget, or round cap
+    for (let round = 0; round < maxRounds; round++) {
+      if (Date.now() - started >= maxRuntimeMs) break;
 
-        const data = await res.json();
-        if (res.ok && data.success) {
-          processed++;
-        } else {
-          errors.push(`scheduled_emails ${row.id}: ${data.error || res.statusText}`);
-        }
-      } catch (err) {
-        errors.push(`scheduled_emails ${row.id}: ${(err as Error).message}`);
+      const now = new Date().toISOString();
+      const { data: dueEmails, error: fetchError } = await supabase
+        .from("scheduled_emails")
+        .select("id")
+        .eq("status", "pending")
+        .lte("scheduled_at", now)
+        .order("scheduled_at", { ascending: true })
+        .limit(batchSize);
+
+      if (fetchError) {
+        console.error("Error fetching scheduled emails:", fetchError);
+        return new Response(
+          JSON.stringify({ error: fetchError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-      await new Promise((r) => setTimeout(r, 300)); // Rate limit between calls
+
+      if (!dueEmails?.length) break;
+
+      for (const row of dueEmails) {
+        if (Date.now() - started >= maxRuntimeMs) break;
+
+        scheduledEmailRowsTouched++;
+        try {
+          const res = await fetch(edgeUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${anonKey}`,
+            },
+            body: JSON.stringify({ scheduledEmailId: row.id }),
+          });
+
+          const data = await res.json();
+          if (res.ok && data.success) {
+            processed++;
+          } else {
+            errors.push(`scheduled_emails ${row.id}: ${data.error || res.statusText}`);
+          }
+        } catch (err) {
+          errors.push(`scheduled_emails ${row.id}: ${(err as Error).message}`);
+        }
+        if (delayMs > 0) {
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
+      }
     }
 
     // 2. Process active campaigns with pending recipients (step 1 not yet sent — e.g. launch failed or recipients added later)
@@ -74,6 +111,8 @@ Deno.serve(async (req) => {
       : [];
 
     for (const campaign of activeCampaigns) {
+      if (Date.now() - started >= maxRuntimeMs) break;
+
       try {
         const res = await fetch(edgeUrl, {
           method: "POST",
@@ -93,14 +132,17 @@ Deno.serve(async (req) => {
       } catch (err) {
         errors.push(`campaign ${campaign.id}: ${(err as Error).message}`);
       }
-      await new Promise((r) => setTimeout(r, 300)); // Rate limit between calls
+      if (delayMs > 0) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
     }
 
     return new Response(
       JSON.stringify({
         processed,
-        scheduledEmails: dueEmails?.length ?? 0,
+        scheduledEmailInvocations: scheduledEmailRowsTouched,
         pendingCampaigns: activeCampaigns?.length ?? 0,
+        durationMs: Date.now() - started,
         errors: errors.length ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

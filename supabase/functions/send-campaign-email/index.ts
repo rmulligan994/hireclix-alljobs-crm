@@ -210,16 +210,12 @@ async function processCampaignSend(
       const candidate = recipient.candidates as any;
       if (!candidate?.email) continue;
 
-      const { error: insertErr } = await supabase.from("scheduled_emails").upsert(
-        {
-          campaign_id: campaignId,
-          campaign_email_id: firstEmail.id,
-          campaign_recipient_id: recipient.id,
-          scheduled_at: scheduledAt,
-          status: "pending",
-        },
-        { onConflict: "campaign_id,campaign_recipient_id,campaign_email_id" }
-      );
+      const { error: insertErr } = await ensurePendingScheduledEmail(supabase, {
+        campaign_id: campaignId,
+        campaign_email_id: firstEmail.id,
+        campaign_recipient_id: recipient.id,
+        scheduled_at: scheduledAt,
+      });
       if (!insertErr) {
         queued++;
         recipientIds.push(recipient.id);
@@ -319,6 +315,32 @@ function computeNextScheduledAt(
   return new Date(Date.now() + delayMs);
 }
 
+/** One pending row per (campaign, recipient, email step); update time if already queued (schedule-for-later retries). */
+async function ensurePendingScheduledEmail(
+  supabase: any,
+  row: {
+    campaign_id: string;
+    campaign_email_id: string;
+    campaign_recipient_id: string;
+    scheduled_at: string;
+  }
+) {
+  const { data: existing } = await supabase
+    .from("scheduled_emails")
+    .select("id")
+    .eq("campaign_id", row.campaign_id)
+    .eq("campaign_email_id", row.campaign_email_id)
+    .eq("campaign_recipient_id", row.campaign_recipient_id)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (existing) {
+    return supabase.from("scheduled_emails").update({ scheduled_at: row.scheduled_at }).eq("id", existing.id);
+  }
+
+  return supabase.from("scheduled_emails").insert({ ...row, status: "pending" });
+}
+
 /** Insert the next drip step into scheduled_emails for a recipient who just received a step */
 async function insertNextDripStep(
   supabase: any,
@@ -331,6 +353,14 @@ async function insertNextDripStep(
     .select("schedule_recurrence")
     .eq("id", campaignId)
     .single();
+
+  const recurrence = campaign?.schedule_recurrence as {
+    type?: string;
+    dayOfWeek?: number;
+    dayOfMonth?: number;
+    time?: string;
+    endOnDate?: string;
+  } | null;
 
   const { data: currentStep } = await supabase
     .from("campaign_emails")
@@ -347,28 +377,43 @@ async function insertNextDripStep(
     .order("step_order", { ascending: true });
 
   const nextStep = allSteps?.find((s: any) => s.step_order === currentStep.step_order + 1);
-  if (!nextStep) return;
 
-  const recurrence = campaign?.schedule_recurrence as { type?: string; dayOfWeek?: number; dayOfMonth?: number; time?: string; endOnDate?: string } | null;
-  const scheduledAt = computeNextScheduledAt(recurrence, nextStep);
+  let targetEmailId: string;
+  let delaySource: { delay_days?: number; delay_hours?: number };
 
-  // Respect endOnDate from schedule_recurrence (daily/weekly/monthly)
+  if (nextStep) {
+    targetEmailId = nextStep.id;
+    delaySource = nextStep;
+  } else if (recurrence?.type === "daily" || recurrence?.type === "weekly" || recurrence?.type === "monthly") {
+    // Daily/weekly/monthly builder uses a single campaign_email; re-queue same step on cadence.
+    targetEmailId = currentCampaignEmailId;
+    delaySource = currentStep;
+  } else {
+    return;
+  }
+
+  const scheduledAt = computeNextScheduledAt(recurrence, delaySource);
+
   if (recurrence?.endOnDate) {
     const endDate = new Date(recurrence.endOnDate);
     endDate.setHours(23, 59, 59, 999);
-    if (scheduledAt > endDate) return; // Don't schedule past end date
+    if (scheduledAt > endDate) return;
   }
 
-  await supabase.from("scheduled_emails").upsert(
-    {
-      campaign_id: campaignId,
-      campaign_email_id: nextStep.id,
-      campaign_recipient_id: campaignRecipientId,
-      scheduled_at: scheduledAt.toISOString(),
-      status: "pending",
-    },
-    { onConflict: "campaign_id,campaign_recipient_id,campaign_email_id" }
-  );
+  const { error } = await supabase.from("scheduled_emails").insert({
+    campaign_id: campaignId,
+    campaign_email_id: targetEmailId,
+    campaign_recipient_id: campaignRecipientId,
+    scheduled_at: scheduledAt.toISOString(),
+    status: "pending",
+  });
+
+  if (error?.code === "23505") {
+    return;
+  }
+  if (error) {
+    console.error("insertNextDripStep insert failed:", error);
+  }
 }
 
 /** Send one email to one recipient. Returns { error?: string } on failure. */

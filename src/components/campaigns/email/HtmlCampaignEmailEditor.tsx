@@ -386,12 +386,15 @@ export function HtmlCampaignEmailEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent
-              className="w-[min(calc(100vw-2rem),400px)] max-h-[min(70vh,520px)] overflow-y-auto overscroll-contain p-3 touch-pan-y"
+              className="w-[min(calc(100vw-2rem),400px)] max-h-[min(70vh,520px)] p-0 flex flex-col overflow-hidden"
               align="center"
               side="bottom"
               sideOffset={6}
+              onOpenAutoFocus={(e) => e.preventDefault()}
             >
-              <MergeTagsPanel campaignJobId={campaignJobId} variant="popover" />
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 touch-pan-y [-webkit-overflow-scrolling:touch]">
+                <MergeTagsPanel campaignJobId={campaignJobId} variant="popover" />
+              </div>
             </PopoverContent>
           </Popover>
         </div>

@@ -572,8 +572,18 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       } else {
         await updateCampaign.mutateAsync({
           id: campaignId,
-          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null, folder_id: selectedFolderId },
+          input: {
+            status: 'active',
+            job_id: campaignType === 'job_alert' ? selectedJobId : null,
+            folder_id: selectedFolderId,
+            ...(sequenceMetadata?.scheduleRecurrence !== undefined && {
+              schedule_recurrence: sequenceMetadata.scheduleRecurrence,
+            }),
+          },
         });
+        if (emailSteps.length > 0) {
+          await saveCampaignEmails(campaignId);
+        }
       }
 
       // Invoke edge function to send step 1 immediately and queue step 2+

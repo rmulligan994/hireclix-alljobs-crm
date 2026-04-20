@@ -85,7 +85,7 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
         />
       </div>
       {inPopover ? (
-        <div className="max-h-36 min-h-0 overflow-y-auto overscroll-contain touch-pan-y rounded-md border border-border/60 bg-muted/20 px-1">
+        <div className="rounded-md border border-border/60 bg-muted/20 px-1">
           <div className="space-y-1 py-0.5">
             {filterTags(tags, search).map((tag) => (
               <button
