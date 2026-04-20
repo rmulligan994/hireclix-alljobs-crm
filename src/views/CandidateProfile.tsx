@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { getStageColorClass } from '@/utils/stageColors';
 import { AddToPipelineDialog } from '@/components/candidates/AddToPipelineDialog';
 import { AddToTalentPoolDialog } from '@/components/candidates/AddToTalentPoolDialog';
@@ -20,13 +19,11 @@ import {
   Mail,
   Phone,
   MapPin,
-  Sparkles,
   Tag,
   FileText,
   StickyNote,
   Clock,
   Plus,
-  RefreshCw,
   X,
   Eye,
   Download,
@@ -63,6 +60,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { UploadResumeDialog } from '@/components/candidates/UploadResumeDialog';
+import { CandidateTagEditor } from '@/components/candidates/CandidateTagEditor';
 import { useCandidateWithAssociations } from '@/hooks/useCandidates';
 import { useCandidateListContext } from '@/contexts/CandidateListContext';
 import { useNotes, useCreateNote, useCommunications } from '@/hooks/useCommunications';
@@ -74,7 +72,6 @@ import { toast } from 'sonner';
 const CandidateProfile = ({ id }: { id: string }) => {
   const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [archivedPipelinesOpen, setArchivedPipelinesOpen] = useState(false);
   const [addToPipelineOpen, setAddToPipelineOpen] = useState(false);
   const [addToPoolOpen, setAddToPoolOpen] = useState(false);
@@ -108,13 +105,6 @@ const CandidateProfile = ({ id }: { id: string }) => {
   const nextCandidateId = id ? getNextCandidateId(id) : null;
   const previousCandidateId = id ? getPreviousCandidateId(id) : null;
   const hasListContext = currentIndex !== -1 && totalCount > 0;
-
-  // Placeholder data for features not yet connected to DB
-  const aiSummary = candidate ? [
-    `${candidate.title || 'Professional'} ${candidate.company ? `at ${candidate.company}` : ''}`,
-    candidate.location ? `Located in ${candidate.location}` : 'Location not specified',
-    candidate.tags?.length ? `Skills: ${candidate.tags.slice(0, 3).join(', ')}` : 'No skills listed yet',
-  ] : [];
 
   const handleViewResume = async (resumeId: string) => {
     try {
@@ -224,7 +214,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
       <div className="flex h-screen bg-background font-body">
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+          <TopBar />
           <main className="flex-1 p-6 overflow-y-auto">
             <div className="flex items-start gap-4 mb-6">
               <Skeleton className="h-9 w-20" />
@@ -256,7 +246,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
       <div className="flex h-screen bg-background font-body">
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+          <TopBar />
           <main className="flex-1 p-6 overflow-y-auto">
             <div className="flex items-start gap-4 mb-6">
               <Button variant="outline" size="sm" onClick={() => router.back()} className="border-border text-muted-foreground hover:text-foreground">
@@ -290,10 +280,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
 
         <main className="flex-1 p-6 overflow-y-auto">
           {/* Back Button & Page Title & Navigation */}
@@ -389,35 +376,6 @@ const CandidateProfile = ({ id }: { id: string }) => {
                   <p>Added: {format(candidate.createdAt, 'M/d/yyyy')}</p>
                   <p>Updated: {format(candidate.updatedAt, 'M/d/yyyy')}</p>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* AI-Generated Summary - Full Width */}
-          <Card className="mb-6 bg-card border-border">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-sky-blue">
-                  <Sparkles className="w-5 h-5" />
-                  AI-Generated Summary
-                </CardTitle>
-                <span className="text-xs text-muted-foreground">AI Powered</span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 mb-4">
-                {aiSummary.map((point, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-foreground">
-                    <span className="w-2 h-2 rounded-full bg-sky-blue mt-2 flex-shrink-0" />
-                    {point}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground">
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Regenerate
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -520,35 +478,13 @@ const CandidateProfile = ({ id }: { id: string }) => {
           {/* Tags & Skills - Full Width */}
           <Card className="mb-6 bg-card border-border">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-sky-blue">
-                  <Tag className="w-5 h-5" />
-                  Tags & Skills
-                </CardTitle>
-                <Button className="bg-gradient-primary hover:opacity-90" size="sm">
-                  <Plus className="w-4 h-4 mr-1" />
-                  Add Tag
-                </Button>
-              </div>
+              <CardTitle className="flex items-center gap-2 text-sky-blue">
+                <Tag className="w-5 h-5" />
+                Tags & Skills
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">Current Tags</p>
-                <div className="flex flex-wrap gap-2">
-                  {candidate.tags && candidate.tags.length > 0 ? (
-                    candidate.tags.map((tag) => (
-                      <Badge key={tag} className="bg-sky-blue/20 text-sky-blue border-sky-blue px-3 py-1">
-                        {tag}
-                        <button className="ml-2 hover:text-white">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">No tags assigned</p>
-                  )}
-                </div>
-              </div>
+            <CardContent>
+              <CandidateTagEditor candidateId={candidate.id} tags={candidate.tags ?? []} />
             </CardContent>
           </Card>
 
@@ -834,11 +770,6 @@ const CandidateProfile = ({ id }: { id: string }) => {
           </Card>
         </main>
       </div>
-
-      <AICopilot
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-      />
 
       <AddToPipelineDialog
         open={addToPipelineOpen}

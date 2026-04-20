@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import {
   Table,
   TableBody,
@@ -38,7 +37,6 @@ function formatLastUpdated(dateStr: string | null): string {
 
 const Jobs = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncJustTriggered, setSyncJustTriggered] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -90,10 +88,7 @@ const Jobs = () => {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
 
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -288,7 +283,6 @@ const Jobs = () => {
         </main>
       </div>
 
-      <AICopilot open={copilotOpen} onClose={() => setCopilotOpen(false)} />
     </div>
   );
 };

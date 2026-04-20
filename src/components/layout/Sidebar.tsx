@@ -6,13 +6,12 @@ import {
   FolderKanban,
   GitBranch,
   Mail, 
-  BarChart3, 
   Settings, 
-  Zap,
   Briefcase,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  LogOut,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePathname } from 'next/navigation';
@@ -32,8 +31,6 @@ const navigationItems = [
   { icon: GitBranch, label: 'Pipelines', path: '/pipelines' },
   { icon: Briefcase, label: 'Jobs', path: '/jobs' },
   { icon: Mail, label: 'Campaigns', path: '/campaigns' },
-  { icon: BarChart3, label: 'Analytics', path: '/analytics' },
-  { icon: Zap, label: 'Integrations', path: '/integrations' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 

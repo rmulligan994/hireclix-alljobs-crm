@@ -4,7 +4,6 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidateDialog } from '@/components/candidates/AddCandidateDialog';
 import { FindDuplicatesDialog } from '@/components/candidates/FindDuplicatesDialog';
 import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
@@ -56,7 +55,6 @@ const TalentPool = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
   const [findDuplicatesOpen, setFindDuplicatesOpen] = useState(false);
   const [importCandidatesOpen, setImportCandidatesOpen] = useState(false);
@@ -113,6 +111,9 @@ const TalentPool = () => {
     total: filteredTotal,
     allFiltered,
     isLoading,
+    isError: searchError,
+    error: searchErrorDetail,
+    refetch: refetchSearch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -275,10 +276,7 @@ const TalentPool = () => {
       />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
         
         <main className="flex-1 p-6 overflow-y-auto">
           {/* Header */}
@@ -537,7 +535,17 @@ const TalentPool = () => {
 
           {/* Candidates Table */}
           <div className="bg-card rounded-lg border border-border overflow-hidden">
-            {isLoading ? (
+            {searchError ? (
+              <div className="flex flex-col items-center justify-center min-h-[320px] py-12 px-4 text-center">
+                <p className="text-destructive font-medium mb-1">Couldn&apos;t load candidates</p>
+                <p className="text-sm text-muted-foreground mb-4 max-w-md">
+                  {searchErrorDetail instanceof Error ? searchErrorDetail.message : 'Search failed. Check your connection and try again.'}
+                </p>
+                <Button variant="outline" onClick={() => refetchSearch()}>
+                  Retry
+                </Button>
+              </div>
+            ) : isLoading ? (
               <div className="flex flex-col items-center justify-center min-h-[320px] py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-sky-blue mb-4" />
                 <span className="text-muted-foreground">Loading candidates...</span>
@@ -625,9 +633,22 @@ const TalentPool = () => {
                             </span>
                             <LeadUsageIndicator lastActivityAt={candidate.lastActivityAt} />
                           </div>
-                          <div className="flex items-center text-xs text-muted-foreground mt-1">
-                            <Mail className="w-3 h-3 mr-1" />
-                            <Phone className="w-3 h-3 ml-2 mr-1" />
+                          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground mt-1 min-w-0">
+                            {candidate.email ? (
+                              <span className="flex items-center gap-1 truncate" title={candidate.email}>
+                                <Mail className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{candidate.email}</span>
+                              </span>
+                            ) : null}
+                            {candidate.phone ? (
+                              <span className="flex items-center gap-1 truncate" title={candidate.phone}>
+                                <Phone className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{candidate.phone}</span>
+                              </span>
+                            ) : null}
+                            {!candidate.email && !candidate.phone ? (
+                              <span className="text-muted-foreground/70">No contact on file</span>
+                            ) : null}
                           </div>
                         </div>
                       </TableCell>
@@ -648,7 +669,7 @@ const TalentPool = () => {
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
                         <div className="flex flex-wrap gap-1">
-                          {candidate.skills.slice(0, 4).map((skill) => (
+                          {(candidate.skills ?? []).slice(0, 4).map((skill) => (
                             <Badge
                               key={skill}
                               variant="secondary"
@@ -658,22 +679,22 @@ const TalentPool = () => {
                               {skill}
                             </Badge>
                           ))}
-                          {candidate.skills.length > 4 && (
-                            <Badge variant="secondary" className="text-xs">+{candidate.skills.length - 4}</Badge>
+                          {(candidate.skills ?? []).length > 4 && (
+                            <Badge variant="secondary" className="text-xs">+{(candidate.skills ?? []).length - 4}</Badge>
                           )}
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()} className="border-b border-border">
                         <div className="flex flex-col gap-1 max-w-xs">
-                          {candidate.pipelineAssociations.length === 0 ? (
+                          {(candidate.pipelineAssociations ?? []).length === 0 ? (
                             <span className="text-xs text-muted-foreground">Not in pipeline</span>
                           ) : (
                             <>
                               <span className="text-xs text-muted-foreground">
-                                {candidate.pipelineAssociations.length} pipeline{candidate.pipelineAssociations.length !== 1 ? 's' : ''}
+                                {(candidate.pipelineAssociations ?? []).length} pipeline{(candidate.pipelineAssociations ?? []).length !== 1 ? 's' : ''}
                               </span>
                               <div className="flex flex-wrap gap-1">
-                                {candidate.pipelineAssociations.map((pipeline) => (
+                                {(candidate.pipelineAssociations ?? []).map((pipeline) => (
                                   <Badge
                                     key={`${pipeline.id}-${pipeline.name}`}
                                     className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${getStageColor(pipeline.stage)}`}
@@ -716,11 +737,6 @@ const TalentPool = () => {
         filters={filters}
         onChange={setFilters}
         options={filterOptions}
-      />
-
-      <AICopilot 
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
       />
 
       <AddCandidateDialog 

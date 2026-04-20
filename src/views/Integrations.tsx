@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +12,6 @@ import { Search, Check, ExternalLink } from 'lucide-react';
 
 const Integrations = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
 
   const integrations = [
     {
@@ -82,10 +80,7 @@ const Integrations = () => {
       />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
         
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-8">
@@ -228,10 +223,6 @@ const Integrations = () => {
         </main>
       </div>
 
-      <AICopilot 
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-      />
     </div>
   );
 };

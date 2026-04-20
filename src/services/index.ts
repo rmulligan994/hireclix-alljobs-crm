@@ -25,6 +25,7 @@ export {
   type TimelinePoint,
 } from './analyticsService';
 export { talentPoolService } from './talentPoolService';
+export { tagCatalogService } from './tagCatalogService';
 export { userService } from './userService';
 export { communicationService } from './communicationService';
 export {

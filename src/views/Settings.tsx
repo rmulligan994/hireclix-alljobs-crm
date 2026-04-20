@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,7 +36,6 @@ import type { UserRole } from '@/types/User';
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const { toast } = useToast();
   const [customTemplates, setCustomTemplates] = useState<PipelineTemplate[]>([]);
   const { settings: orgSettings, update: updateOrgSettings, isUpdating: isUpdatingOrg } = useOrganizationSettings();
@@ -202,10 +200,7 @@ const Settings = () => {
       />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
         
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-8">
@@ -909,10 +904,6 @@ const Settings = () => {
         </main>
       </div>
 
-      <AICopilot 
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-      />
     </div>
   );
 };

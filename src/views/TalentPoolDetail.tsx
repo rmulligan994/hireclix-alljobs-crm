@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidatesToPoolDialog } from '@/components/talent-pools/AddCandidatesToPoolDialog';
 import { EditTalentPoolDialog } from '@/components/talent-pools/EditTalentPoolDialog';
 import { BulkAddToPipelineDialog } from '@/components/candidates/BulkAddToPipelineDialog';
@@ -93,7 +92,6 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
   const { toast } = useToast();
   const createNote = useCreateNote();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<CandidateFilters>({
     skills: [],
@@ -200,7 +198,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
       <div className="flex h-screen bg-background font-body">
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+          <TopBar />
           <main className="flex-1 p-6">
             <div className="mb-6">
               <Skeleton className="h-8 w-64 mb-2" />
@@ -396,7 +394,7 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+        <TopBar />
 
         <main className="flex-1 p-6 overflow-y-auto">
           {/* Header */}
@@ -677,8 +675,6 @@ const TalentPoolDetail = ({ id }: { id: string }) => {
           )}
         </main>
       </div>
-
-      <AICopilot open={copilotOpen} onClose={() => setCopilotOpen(false)} />
 
       <AddCandidatesToPoolDialog
         open={addCandidatesOpen}

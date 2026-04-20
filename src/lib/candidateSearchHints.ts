@@ -14,4 +14,4 @@ export const CANDIDATE_SEARCH_TOOLTIP =
 
 /** Short placeholder for inputs with limited space */
 export const CANDIDATE_SEARCH_PLACEHOLDER =
-  'Search… e.g. engineer -devops or "product manager"';
+  'Search name, email, tags… e.g. engineer -devops or "product manager"';

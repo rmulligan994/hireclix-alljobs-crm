@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PipelineChart } from '@/components/dashboard/PipelineChart';
 import { MyActivity } from '@/components/dashboard/MyActivity';
@@ -26,7 +25,6 @@ import { Button } from '@/components/ui/button';
 
 const Index = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [addCandidateOpen, setAddCandidateOpen] = useState(false);
 
   const { data: currentUser } = useCurrentUser();
@@ -46,10 +44,7 @@ const Index = () => {
       
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
         
         {/* Dashboard Content */}
         <main className="flex-1 p-6 overflow-y-auto">
@@ -125,11 +120,6 @@ const Index = () => {
         </main>
       </div>
 
-      {/* AI Copilot */}
-      <AICopilot 
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-      />
 
       {/* Add Candidate Dialog */}
       <AddCandidateDialog 

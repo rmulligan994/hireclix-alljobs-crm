@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { CampaignBuilder } from '@/components/campaigns/CampaignBuilder';
 import { TemplateLibrary } from '@/components/campaigns/TemplateLibrary';
 import { CampaignScheduledQueue } from '@/components/campaigns/CampaignScheduledQueue';
@@ -45,7 +44,6 @@ const Campaigns = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [scopeTab, setScopeTab] = useState<'my' | 'org' | 'upcoming' | 'archived'>('my');
@@ -283,10 +281,7 @@ const Campaigns = () => {
       />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
         
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-8">
@@ -754,11 +749,6 @@ const Campaigns = () => {
           </Tabs>
         </main>
       </div>
-
-      <AICopilot 
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-      />
 
       <CampaignBuilder 
         open={showCampaignBuilder}

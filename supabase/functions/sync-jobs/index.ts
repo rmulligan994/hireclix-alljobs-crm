@@ -117,6 +117,54 @@ async function fetchWebflowAll(
   return all;
 }
 
+/** UUID that never appears as a real PK — used to delete all rows via neq filter */
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Removes jobs that are no longer in the current Webflow collection (e.g. after switching
+ * collection ID or deleting items in CMS). Upsert alone leaves stale rows.
+ */
+async function removeStaleJobs(
+  supabase: ReturnType<typeof createClient>,
+  syncedWebflowIds: string[]
+): Promise<number> {
+  if (syncedWebflowIds.length === 0) {
+    const { data, error } = await supabase.from("jobs").delete().neq("id", NIL_UUID).select("id");
+    if (error) throw error;
+    return data?.length ?? 0;
+  }
+
+  const synced = new Set(syncedWebflowIds);
+  const orphans: string[] = [];
+  let from = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    const { data: rows, error } = await supabase
+      .from("jobs")
+      .select("webflow_item_id")
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!rows?.length) break;
+    for (const r of rows) {
+      if (!synced.has(r.webflow_item_id)) orphans.push(r.webflow_item_id);
+    }
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+
+  let deleted = 0;
+  const CHUNK = 500;
+  for (let i = 0; i < orphans.length; i += CHUNK) {
+    const chunk = orphans.slice(i, i + CHUNK);
+    const { data, error } = await supabase.from("jobs").delete().in("webflow_item_id", chunk).select("id");
+    if (error) throw error;
+    deleted += data?.length ?? 0;
+  }
+  return deleted;
+}
+
 Deno.serve(async (req) => {
   // Verify caller: pg_cron (anon key), cron-job.org (JOBS_CRON_SECRET), or Next.js API (service role)
   const auth = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim();
@@ -191,10 +239,18 @@ Deno.serve(async (req) => {
       upserted += batch.length;
     }
 
+    const syncedIds = items.map((i) => i.id);
+    const staleRemoved = await removeStaleJobs(supabase, syncedIds);
+
     await updateLog(supabase, logId, "success", items.length, upserted);
 
     return new Response(
-      JSON.stringify({ success: true, jobsFetched: items.length, jobsUpserted: upserted }),
+      JSON.stringify({
+        success: true,
+        jobsFetched: items.length,
+        jobsUpserted: upserted,
+        staleJobsRemoved: staleRemoved,
+      }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {

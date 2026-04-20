@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { CreatePipelineDialog } from '@/components/pipelines/CreatePipelineDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +42,6 @@ type ViewFilter = 'active' | 'archived' | 'all';
 const Pipelines = () => {
   const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewFilter, setViewFilter] = useState<ViewFilter>('active');
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -90,10 +88,7 @@ const Pipelines = () => {
       />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar 
-          onCopilotToggle={() => setCopilotOpen(!copilotOpen)}
-          copilotOpen={copilotOpen}
-        />
+        <TopBar />
         
         <main className="flex-1 p-6 overflow-y-auto">
           <div className="mb-8">
@@ -317,11 +312,6 @@ const Pipelines = () => {
           )}
         </main>
       </div>
-
-      <AICopilot 
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
-      />
 
       {/* Archive Confirmation Dialog */}
       <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>

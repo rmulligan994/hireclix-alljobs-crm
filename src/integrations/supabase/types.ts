@@ -855,6 +855,24 @@ export type Database = {
           },
         ]
       }
+      tag_catalog: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       talent_pool_candidates: {
         Row: {
           added_at: string

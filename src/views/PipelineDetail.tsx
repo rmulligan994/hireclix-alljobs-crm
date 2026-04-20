@@ -4,7 +4,6 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
-import { AICopilot } from '@/components/dashboard/AICopilot';
 import { AddCandidatesToPipelineDialog } from '@/components/pipelines/AddCandidatesToPipelineDialog';
 import { MoveToPipelineDialog } from '@/components/pipelines/MoveToPipelineDialog';
 import { QuickNoteDialog } from '@/components/pipelines/QuickNoteDialog';
@@ -80,7 +79,6 @@ const PipelineDetail = ({ id }: { id: string }) => {
   const { toast } = useToast();
   const createNote = useCreateNote();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
   const [addCandidatesOpen, setAddCandidatesOpen] = useState(false);
   const [collapsedStages, setCollapsedStages] = useState<string[]>([]);
@@ -164,7 +162,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
       <div className="flex h-screen bg-background font-body">
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+          <TopBar />
           <main className="flex-1 p-6">
             <div className="mb-6 flex flex-col items-center justify-center">
               <Loader2 className="w-10 h-10 animate-spin text-sky-blue mb-4" />
@@ -457,7 +455,7 @@ const PipelineDetail = ({ id }: { id: string }) => {
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar onCopilotToggle={() => setCopilotOpen(!copilotOpen)} copilotOpen={copilotOpen} />
+        <TopBar />
         
         <main className="flex-1 p-6 overflow-hidden flex flex-col">
           {/* Header */}
@@ -754,8 +752,6 @@ const PipelineDetail = ({ id }: { id: string }) => {
           </div>
         </main>
       </div>
-
-      <AICopilot open={copilotOpen} onClose={() => setCopilotOpen(false)} />
 
       <AddCandidatesToPipelineDialog
         open={addCandidatesOpen}

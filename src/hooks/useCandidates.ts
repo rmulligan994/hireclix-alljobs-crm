@@ -67,6 +67,9 @@ export const useCandidatesSearch = (
     total,
     allFiltered: allFiltered ?? data,
     isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
     fetchNextPage: query.fetchNextPage,
     hasNextPage: query.hasNextPage,
     isFetchingNextPage: query.isFetchingNextPage,
@@ -154,12 +157,21 @@ export const useUpdateCandidate = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateCandidateData }) => 
-      candidateService.update(id, data),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: UpdateCandidateData;
+      silent?: boolean;
+    }) => candidateService.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
       queryClient.invalidateQueries({ queryKey: ['candidates', variables.id] });
-      toast.success('Candidate updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['candidates', variables.id, 'associations'] });
+      if (!variables.silent) {
+        toast.success('Candidate updated successfully');
+      }
     },
     onError: (error: Error) => {
       toast.error(`Failed to update candidate: ${error.message}`);
