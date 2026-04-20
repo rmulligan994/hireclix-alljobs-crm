@@ -149,6 +149,7 @@ export function HtmlCampaignEmailEditor({
       : emptyAnnouncementForm(),
   );
   const [mergePopoverOpen, setMergePopoverOpen] = useState(false);
+  const mergeTagsScrollRef = useRef<HTMLDivElement>(null);
   /** Start collapsed so the editor surface isn’t buried under a long tip block. */
   const [helpBannerOpen, setHelpBannerOpen] = useState(false);
   const [helpBannerDismissed, setHelpBannerDismissed] = useState(false);
@@ -212,6 +213,47 @@ export function HtmlCampaignEmailEditor({
       /* ignore */
     }
   }, [aiChatPersistReady, campaignId, aiMessages, aiInput, aiIncludeContext, aiLlmSuggestions]);
+
+  /**
+   * Trackpad / mouse wheel often chains to a scroll-locked ancestor (e.g. full-screen Dialog).
+   * preventDefault alone would cancel scrolling on this div too; we apply scrollTop ourselves
+   * whenever the list can still move, and stop propagation so the page/dialog doesn’t eat the delta.
+   */
+  useEffect(() => {
+    if (!mergePopoverOpen) return undefined;
+
+    let detach: (() => void) | undefined;
+    const raf = requestAnimationFrame(() => {
+      const el = mergeTagsScrollRef.current;
+      if (!el) return;
+
+      const onWheel = (e: WheelEvent) => {
+        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+        if (maxScroll <= 0) {
+          e.stopPropagation();
+          return;
+        }
+        const { scrollTop } = el;
+        const dy = e.deltaY;
+        const canScrollUp = scrollTop > 0;
+        const canScrollDown = scrollTop < maxScroll - 0.5;
+
+        if ((dy < 0 && canScrollUp) || (dy > 0 && canScrollDown)) {
+          el.scrollTop = Math.max(0, Math.min(maxScroll, scrollTop + dy));
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      };
+
+      el.addEventListener('wheel', onWheel, { passive: false });
+      detach = () => el.removeEventListener('wheel', onWheel);
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      detach?.();
+    };
+  }, [mergePopoverOpen]);
 
   const resetAiChat = useCallback(() => {
     setAiMessages(createDefaultEmailAIMessages());
@@ -392,7 +434,10 @@ export function HtmlCampaignEmailEditor({
               sideOffset={6}
               onOpenAutoFocus={(e) => e.preventDefault()}
             >
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 touch-pan-y [-webkit-overflow-scrolling:touch]">
+              <div
+                ref={mergeTagsScrollRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 touch-pan-y [-webkit-overflow-scrolling:touch]"
+              >
                 <MergeTagsPanel campaignJobId={campaignJobId} variant="popover" />
               </div>
             </PopoverContent>
