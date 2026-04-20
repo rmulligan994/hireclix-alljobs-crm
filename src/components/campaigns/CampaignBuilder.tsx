@@ -13,7 +13,7 @@ import { TemplateLibrary } from './TemplateLibrary';
 import { HtmlCampaignEmailEditor } from './email/HtmlCampaignEmailEditor';
 import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Users, Loader2, Search, AlertTriangle, Mail, Folder } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
-import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients, useCreateCampaignEmail } from '@/hooks/useCampaigns';
+import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients } from '@/hooks/useCampaigns';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
@@ -22,7 +22,7 @@ import { useJobsForCampaign } from '@/hooks/useJobs';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
 import { useCurrentUserRole } from '@/hooks/useCurrentUserRole';
 import { isOverRecipientLimit, getRecipientLimitForRole } from '@/config/roleLimits';
-import { EmailTemplate } from '@/services/emailTemplateService';
+import { EmailTemplate, emailTemplateService } from '@/services/emailTemplateService';
 import { AudienceFilter, CampaignEmail, Campaign, LeadStatus } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
 import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
@@ -38,6 +38,7 @@ import {
   findUnknownMergeTagsInCampaignSteps,
   formatUnknownMergeTagsMessage,
 } from '@/lib/email/merge-tags-validation';
+import { buildCampaignLaunchDescription } from '@/lib/campaignSendToast';
 
 interface CampaignBuilderProps {
   open: boolean;
@@ -59,6 +60,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const [templateHtml, setTemplateHtml] = useState<string | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [emailSteps, setEmailSteps] = useState<Partial<CampaignEmail>[]>([]);
+  /** Bumps when template is re-selected so Sequence remounts with fresh props. */
+  const [sequenceBuilderNonce, setSequenceBuilderNonce] = useState(0);
+  /** Highest step index (0–4) the user has reached; enables step pill navigation. */
+  const [furthestStepIndex, setFurthestStepIndex] = useState(0);
 
   // Initialize from editing campaign
   useEffect(() => {
@@ -96,6 +101,12 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       }
     }
   }, [editingCampaign]);
+
+  useEffect(() => {
+    if (editingCampaign) {
+      setFurthestStepIndex(4);
+    }
+  }, [editingCampaign?.id]);
 
   // Load campaign emails when editing (template, sequence content)
   useEffect(() => {
@@ -141,6 +152,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       setTemplateFormPayload(initialTemplate?.form_payload ?? null);
       setTemplateEditorSubject(initialTemplate?.subject ?? '');
       setTemplateHtml(initialTemplate?.html_content ?? null);
+      setEmailSteps([]);
+      setSequenceBuilderNonce((n) => n + 1);
+      setFurthestStepIndex(1);
       setCurrentStep('editor');
     }
   }, [open, editingCampaign, initialTemplate]);
@@ -168,11 +182,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { createTemplate, updateTemplate } = useEmailTemplates();
+  const { updateTemplate } = useEmailTemplates();
   const createCampaign = useCreateCampaign();
   const updateCampaign = useUpdateCampaign();
   const addRecipients = useAddCampaignRecipients();
-  const createCampaignEmail = useCreateCampaignEmail();
   const { data: talentPools } = useTalentPools();
   const { data: pipelines } = usePipelines();
   const { data: folders } = useCampaignFolders();
@@ -182,21 +195,22 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
   const { data: recipientCount } = useRecipientCount(audienceFilter);
 
-  // Helper to save campaign emails
-  const saveCampaignEmails = async (campaignId: string) => {
-    for (const step of emailSteps) {
-      await createCampaignEmail.mutateAsync({
-        campaign_id: campaignId,
-        step_order: step.step_order || 1,
-        delay_days: step.delay_days || 0,
-        delay_hours: step.delay_hours || 0,
-        subject: step.subject || 'Untitled',
-        bee_json: null,
-        html_content: step.html_content ?? undefined,
-        compose_kind: step.compose_kind ?? null,
-        form_payload: step.form_payload ?? null,
-      });
-    }
+  /** Persists sequence to DB and refreshes local ids from the server (insert/update/delete). */
+  const persistCampaignEmails = async (cid: string) => {
+    const synced = await campaignService.syncCampaignEmails(cid, emailSteps);
+    setEmailSteps(
+      synced.map((e) => ({
+        id: e.id,
+        step_order: e.step_order,
+        delay_days: e.delay_days,
+        delay_hours: e.delay_hours,
+        subject: e.subject,
+        bee_json: e.bee_json,
+        html_content: e.html_content,
+        compose_kind: e.compose_kind,
+        form_payload: e.form_payload,
+      })),
+    );
   };
 
   // Update audience filter when selections change
@@ -216,6 +230,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setTemplateFormPayload(template?.form_payload ?? null);
     setTemplateEditorSubject(template?.subject ?? '');
     setTemplateHtml(template?.html_content ?? null);
+    setEmailSteps([]);
+    setSequenceBuilderNonce((n) => n + 1);
+    // New template body invalidates sequence/audience/review until the user goes through editor → sequence again.
+    setFurthestStepIndex(1);
     setCurrentStep('editor');
   };
 
@@ -238,10 +256,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     form_payload: AnnouncementForm | null;
   }) => {
     applyEditorPayloadToTemplateState(payload);
+    setFurthestStepIndex((f) => Math.max(2, f));
     setCurrentStep('sequence');
   };
 
-  const handleEditorSaveTemplate = (payload: {
+  const handleEditorSaveTemplate = async (payload: {
     html: string;
     subject: string;
     compose_kind: ComposeKind;
@@ -249,34 +268,41 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   }) => {
     applyEditorPayloadToTemplateState(payload);
 
-    if (selectedTemplate) {
-      updateTemplate({
-        id: selectedTemplate.id,
-        input: {
+    try {
+      if (selectedTemplate) {
+        const updated = await emailTemplateService.update(selectedTemplate.id, {
           bee_json: null,
           html_content: payload.html,
           subject: payload.subject,
           compose_kind: payload.compose_kind,
           form_payload: payload.form_payload as Json | null,
-        },
+        });
+        setSelectedTemplate(updated);
+      } else {
+        const created = await emailTemplateService.create({
+          name: campaignName || 'Untitled Template',
+          category: campaignType || 'custom',
+          subject: payload.subject,
+          bee_json: null,
+          html_content: payload.html,
+          compose_kind: payload.compose_kind,
+          form_payload: payload.form_payload as Json | null,
+        });
+        setSelectedTemplate(created);
+      }
+      queryClient.invalidateQueries({ queryKey: ['email-templates'] });
+      toast({
+        title: 'Template saved',
+        description: 'You can reuse it anytime from your template library.',
       });
-    } else {
-      createTemplate({
-        name: campaignName || 'Untitled Template',
-        category: campaignType || 'custom',
-        subject: payload.subject,
-        bee_json: null,
-        html_content: payload.html,
-        compose_kind: payload.compose_kind,
-        form_payload: payload.form_payload as Json | null,
+      setCurrentStep('template');
+    } catch (err) {
+      toast({
+        title: 'Failed to save template',
+        description: (err as Error)?.message ?? 'Please try again.',
+        variant: 'destructive',
       });
     }
-
-    toast({
-      title: 'Template saved',
-      description: 'You can reuse it anytime from your template library.',
-    });
-    setCurrentStep('template');
   };
 
   const handleEditorCancel = () => {
@@ -297,6 +323,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const handleSequenceContinue = (steps: Partial<CampaignEmail>[], opts?: { firstSendDate?: string; metadata?: SequenceMetadata }) => {
     setEmailSteps(steps);
     setSequenceMetadata(opts?.metadata ?? null);
+    setFurthestStepIndex((f) => Math.max(3, f));
     setCurrentStep('audience');
   };
 
@@ -333,7 +360,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         });
         setCampaignId(campaign.id);
         testCampaignId = campaign.id;
-        if (emailSteps.length > 0) await saveCampaignEmails(campaign.id);
+        await persistCampaignEmails(campaign.id);
+      } else {
+        await persistCampaignEmails(testCampaignId);
       }
       const { data, error } = await supabase.functions.invoke('send-campaign-test-email', {
         body: { campaignId: testCampaignId, recipientEmail: user.email },
@@ -380,11 +409,8 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         });
         setCampaignId(campaign.id);
         
-        // Save email steps
-        if (emailSteps.length > 0) {
-          await saveCampaignEmails(campaign.id);
-        }
-        
+        await persistCampaignEmails(campaign.id);
+
         // Add recipients
         if (filteredCandidates && filteredCandidates.length > 0) {
           await addRecipients.mutateAsync({
@@ -405,6 +431,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             folder_id: selectedFolderId,
           },
         });
+        await persistCampaignEmails(campaignId);
         if (filteredCandidates && filteredCandidates.length > 0) {
           await addRecipients.mutateAsync({
             campaignId,
@@ -473,11 +500,8 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         setCampaignId(campaign.id);
         finalCampaignId = campaign.id;
         
-        // Save email steps
-        if (emailSteps.length > 0) {
-          await saveCampaignEmails(campaign.id);
-        }
-        
+        await persistCampaignEmails(campaign.id);
+
         await updateCampaign.mutateAsync({
           id: campaign.id,
           input: { status: 'scheduled' },
@@ -504,9 +528,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             folder_id: selectedFolderId,
           },
         });
-        if (emailSteps.length > 0) {
-          await saveCampaignEmails(campaignId);
-        }
+        await persistCampaignEmails(campaignId);
         if (filteredCandidates && filteredCandidates.length > 0) {
           await addRecipients.mutateAsync({
             campaignId,
@@ -572,10 +594,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         setCampaignId(campaign.id);
         finalCampaignId = campaign.id;
 
-        // Save email steps
-        if (emailSteps.length > 0) {
-          await saveCampaignEmails(campaign.id);
-        }
+        await persistCampaignEmails(campaign.id);
 
         await updateCampaign.mutateAsync({
           id: campaign.id,
@@ -604,9 +623,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
             }),
           },
         });
-        if (emailSteps.length > 0) {
-          await saveCampaignEmails(campaignId);
-        }
+        await persistCampaignEmails(campaignId);
         if (filteredCandidates && filteredCandidates.length > 0) {
           await addRecipients.mutateAsync({
             campaignId,
@@ -626,9 +643,17 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
 
+      const errs = Array.isArray(data?.errors) ? (data.errors as string[]) : [];
+      const skippedNoEmail = typeof data?.skippedNoEmail === 'number' ? data.skippedNoEmail : 0;
+      const extra =
+        errs.length > 0 || skippedNoEmail > 0
+          ? buildCampaignLaunchDescription(errs, skippedNoEmail)
+          : '';
       toast({
         title: 'Campaign launched!',
-        description: 'Your campaign is now active and emails will begin sending.',
+        description: extra
+          ? `Your campaign is active. ${extra}`
+          : 'Your campaign is now active and emails will begin sending.',
       });
       handleClose();
     } catch (err) {
@@ -661,6 +686,8 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setSelectedFolderId(null);
     setSelectedJobId(null);
     setJobSearch('');
+    setSequenceBuilderNonce(0);
+    setFurthestStepIndex(0);
     onOpenChange(false);
   };
 
@@ -750,7 +777,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                         folder_id: selectedFolderId,
                       });
                       setCampaignId(campaign.id);
-                      await saveCampaignEmails(campaign.id);
+                      await persistCampaignEmails(campaign.id);
                       if (filteredCandidates && filteredCandidates.length > 0) {
                         await addRecipients.mutateAsync({
                           campaignId: campaign.id,
@@ -771,6 +798,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                           folder_id: selectedFolderId,
                         },
                       });
+                      await persistCampaignEmails(campaignId);
                       if (filteredCandidates && filteredCandidates.length > 0) {
                         await addRecipients.mutateAsync({
                           campaignId,
@@ -794,22 +822,29 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               const labels = ['Details', 'Template', 'Sequence', 'Audience', 'Review'];
               const isCurrent = currentStep === stepKey;
               const isPast = ['details', 'template', 'sequence', 'audience', 'review'].indexOf(currentStep) > index;
-              const isClickable = !!editingCampaign;
+              const canNavigate = index <= furthestStepIndex;
               return (
                 <button
                   key={stepKey}
                   type="button"
-                  onClick={() => isClickable && setCurrentStep(stepKey)}
+                  onClick={() => {
+                    if (canNavigate) setCurrentStep(stepKey);
+                  }}
                   className={cn(
                     'flex items-center gap-1.5 flex-1 min-w-0 py-2 px-2 rounded-md text-sm font-medium transition-colors',
-                    isCurrent && 'bg-sky-blue/20 text-sky-blue ring-1 ring-sky-blue/30',
-                    isPast && !isCurrent && 'bg-sky-blue/10 text-sky-blue',
+                    isCurrent && 'bg-sky-blue text-white shadow-sm ring-1 ring-sky-blue',
+                    isPast && !isCurrent && 'bg-sky-blue/15 text-sky-blue',
                     !isCurrent && !isPast && 'text-muted-foreground bg-muted/50',
-                    isClickable && 'hover:bg-muted cursor-pointer',
-                    !isClickable && 'cursor-default'
+                    canNavigate && 'hover:bg-sky-blue/20 hover:text-sky-blue cursor-pointer',
+                    !canNavigate && 'cursor-not-allowed opacity-60'
                   )}
                 >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-current/20 text-xs font-bold">
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                      isCurrent ? 'bg-white/25 text-white' : 'bg-current/20',
+                    )}
+                  >
                     {index + 1}
                   </span>
                   <span className="hidden sm:inline truncate">{labels[index]}</span>
@@ -931,7 +966,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
               <Button 
                 className="w-full bg-gradient-primary hover:opacity-90"
-                onClick={() => setCurrentStep('template')}
+                onClick={() => {
+                  setFurthestStepIndex((f) => Math.max(1, f));
+                  setCurrentStep('template');
+                }}
                 disabled={!campaignName || !campaignType}
               >
                 Continue to Templates
@@ -945,6 +983,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
           {currentStep === 'sequence' && (
             <SequenceBuilder 
+              key={sequenceBuilderNonce}
               template={selectedTemplate} 
               onContinue={handleSequenceContinue}
               templateComposeKind={templateComposeKind}
@@ -1131,7 +1170,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
                   <Button 
                     className="w-full bg-gradient-primary hover:opacity-90" 
-                    onClick={() => setCurrentStep('review')}
+                    onClick={() => {
+                      setFurthestStepIndex((f) => Math.max(4, f));
+                      setCurrentStep('review');
+                    }}
                     disabled={
                       !filteredCandidates ||
                       filteredCandidates.length === 0 ||

@@ -205,10 +205,15 @@ async function processCampaignSend(
   // When scheduledAt is provided: insert into scheduled_emails for cron to process later (no immediate send)
   if (scheduledAt) {
     let queued = 0;
+    let skippedNoEmail = 0;
     const recipientIds: string[] = [];
     for (const recipient of recipients) {
       const candidate = recipient.candidates as any;
-      if (!candidate?.email) continue;
+      if (!candidate?.email) {
+        skippedNoEmail++;
+        await supabase.from("campaign_recipients").update({ status: "rejected" }).eq("id", recipient.id);
+        continue;
+      }
 
       const { error: insertErr } = await ensurePendingScheduledEmail(supabase, {
         campaign_id: campaignId,
@@ -228,18 +233,28 @@ async function processCampaignSend(
     await supabase.from("campaigns").update({ status: "scheduled", scheduled_at: scheduledAt }).eq("id", campaignId);
 
     return new Response(
-      JSON.stringify({ success: true, sent: queued, total: recipients.length }),
+      JSON.stringify({
+        success: true,
+        sent: queued,
+        total: recipients.length,
+        skippedNoEmail: skippedNoEmail || undefined,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
   // Immediate send: send step 1 to each recipient, insert next drip step
   let sentCount = 0;
+  let skippedNoEmail = 0;
   const errors: string[] = [];
 
   for (const recipient of recipients) {
     const candidate = recipient.candidates as any;
-    if (!candidate?.email) continue;
+    if (!candidate?.email) {
+      skippedNoEmail++;
+      await supabase.from("campaign_recipients").update({ status: "rejected" }).eq("id", recipient.id);
+      continue;
+    }
 
     const result = await sendOneEmail(supabase, {
       campaignId,
@@ -249,6 +264,7 @@ async function processCampaignSend(
 
     if (result.error) {
       errors.push(`${candidate.email}: ${result.error}`);
+      await supabase.from("campaign_recipients").update({ status: "failed" }).eq("id", recipient.id);
       continue;
     }
 
@@ -265,6 +281,7 @@ async function processCampaignSend(
       success: true,
       sent: sentCount,
       total: recipients.length,
+      skippedNoEmail: skippedNoEmail || undefined,
       errors: errors.length ? errors : undefined,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } }

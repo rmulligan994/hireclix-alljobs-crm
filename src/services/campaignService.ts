@@ -12,6 +12,7 @@ import type {
   ScheduleRecurrence
 } from '@/types/Campaign';
 import { getLeadUsageStatus } from '@/utils/leadUsage';
+import { isUuid } from '@/lib/isUuid';
 import type { Database, Json } from '@/integrations/supabase/types';
 
 type CampaignsInsert = Database['public']['Tables']['campaigns']['Insert'];
@@ -221,6 +222,54 @@ export const campaignService = {
       .eq('id', id);
 
     if (error) throw error;
+  },
+
+  /**
+   * Replace campaign sequence with `steps`: update rows that have persisted UUID ids,
+   * insert new steps without ids, delete DB rows removed from the sequence.
+   */
+  async syncCampaignEmails(campaignId: string, steps: Partial<CampaignEmail>[]): Promise<CampaignEmail[]> {
+    const existing = await this.getEmails(campaignId);
+    const desiredIds = new Set(
+      steps.map((s) => s.id).filter((id): id is string => typeof id === 'string' && isUuid(id)),
+    );
+    for (const e of existing) {
+      if (!desiredIds.has(e.id)) {
+        await this.deleteEmail(e.id);
+      }
+    }
+    const result: CampaignEmail[] = [];
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const payload: UpdateCampaignEmailInput = {
+        step_order: step.step_order ?? i + 1,
+        delay_days: step.delay_days ?? 0,
+        delay_hours: step.delay_hours ?? 0,
+        subject: step.subject || 'Untitled',
+        bee_json: null,
+        html_content: step.html_content ?? undefined,
+        compose_kind: step.compose_kind ?? undefined,
+        form_payload: step.form_payload ?? undefined,
+      };
+      if (step.id && isUuid(step.id)) {
+        result.push(await this.updateEmail(step.id, payload));
+      } else {
+        result.push(
+          await this.createEmail({
+            campaign_id: campaignId,
+            step_order: payload.step_order!,
+            delay_days: payload.delay_days,
+            delay_hours: payload.delay_hours,
+            subject: payload.subject!,
+            bee_json: null,
+            html_content: payload.html_content ?? undefined,
+            compose_kind: payload.compose_kind ?? null,
+            form_payload: payload.form_payload ?? null,
+          }),
+        );
+      }
+    }
+    return result;
   },
 
   // Campaign Recipients

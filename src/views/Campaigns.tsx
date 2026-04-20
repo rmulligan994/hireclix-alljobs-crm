@@ -29,6 +29,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import type { Campaign } from '@/types/Campaign';
 import type { EmailTemplate } from '@/services/emailTemplateService';
+import { describeCampaignSendToast } from '@/lib/campaignSendToast';
 
 const CAMPAIGN_TYPES = ['nurture', 'event', 'job_alert', 'reengagement', 'newsletter'] as const;
 const SORT_OPTIONS = [
@@ -179,9 +180,14 @@ const Campaigns = () => {
           variant: 'default'
         });
       } else {
-        toast({ 
-          title: 'Campaign launched!', 
-          description: `Sent ${data?.sent || 0} of ${data?.total || 0} emails successfully.${data?.errors?.length ? ` ${data.errors.length} failed.` : ''}`
+        toast({
+          title: 'Campaign launched!',
+          description: describeCampaignSendToast({
+            sent: data?.sent,
+            total: data?.total,
+            errors: data?.errors,
+            skippedNoEmail: data?.skippedNoEmail,
+          }),
         });
       }
       refetch();

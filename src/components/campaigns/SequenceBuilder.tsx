@@ -14,6 +14,7 @@ import { CampaignEmail, ScheduleRecurrence } from '@/types/Campaign';
 import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 import { format, addDays, differenceInDays, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { isUuid } from '@/lib/isUuid';
 
 type ScheduleType = 'custom' | 'daily' | 'weekly' | 'monthly' | 'specific_dates';
 
@@ -280,7 +281,7 @@ export const SequenceBuilder = ({
 
     const emailSteps: Partial<CampaignEmail>[] = steps.map((step, index) => {
       const { delayDays, delayHours } = computeDelayForStep(step, index);
-      return {
+      const row: Partial<CampaignEmail> = {
         step_order: step.order,
         delay_days: delayDays,
         delay_hours: delayHours,
@@ -290,6 +291,10 @@ export const SequenceBuilder = ({
         compose_kind: step.composeKind ?? null,
         form_payload: step.formPayload ?? null,
       };
+      if (isUuid(step.id)) {
+        row.id = step.id;
+      }
+      return row;
     });
 
     const baseRecurrence: ScheduleRecurrence | undefined =

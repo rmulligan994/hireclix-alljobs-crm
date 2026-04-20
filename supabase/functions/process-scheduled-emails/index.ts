@@ -99,7 +99,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2. Process active campaigns with pending recipients (step 1 not yet sent — e.g. launch failed or recipients added later)
+    // 2. Process active campaigns with pending recipients (step 1 not yet sent — e.g. launch failed or recipients added later).
+    // Only `pending` is selected; recipients marked `failed` or `rejected` after a send attempt are never retried here.
     const { data: pendingRecipients } = await supabase
       .from("campaign_recipients")
       .select("campaign_id")

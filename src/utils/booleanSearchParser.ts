@@ -251,8 +251,9 @@ export function parseBooleanSearch(query: string): ((candidate: SearchableCandid
  */
 export function hasBooleanSyntax(query: string): boolean {
   const q = query.trim();
+  // `|` is documented as OR in search hints; websearch must rewrite it to ` OR ` server-side.
   const hasBooleanOps =
-    /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b(?:AND|OR|NOT)\b|\(|\)/.test(q);
+    /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b(?:AND|OR|NOT)\b|\(|\)|\|/.test(q);
   // Postgres websearch: `-` before a word/phrase is negation; must route to websearch_to_tsquery
   const hasWebsearchNegation = /(?:^|\s)-(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\w+)/.test(q);
   return hasBooleanOps || hasWebsearchNegation;
