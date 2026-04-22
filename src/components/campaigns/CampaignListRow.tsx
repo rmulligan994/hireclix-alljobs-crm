@@ -31,8 +31,6 @@ import {
   Send,
   Loader2,
   Eye,
-  ChevronDown,
-  ChevronUp,
   Copy,
   UserPlus,
   Archive,
@@ -44,7 +42,6 @@ import {
 import { format } from 'date-fns';
 import type { Campaign, CampaignFolder } from '@/types/Campaign';
 import type { CampaignStats } from '@/hooks/useCampaignStats';
-import { CampaignScheduledQueue } from '@/components/campaigns/CampaignScheduledQueue';
 import { cn } from '@/lib/utils';
 
 export type ListDensity = 'comfortable' | 'compact';
@@ -58,8 +55,6 @@ interface CampaignListRowProps {
   density: ListDensity;
   sendingCampaignId: string | null;
   duplicatingCampaignId: string | null;
-  expandedQueueCampaignId: string | null;
-  onExpandQueue: (id: string | null) => void;
   onView: (c: Campaign) => void;
   onDuplicate: (c: Campaign) => void;
   onLaunch: (id: string) => void;
@@ -84,8 +79,6 @@ export function CampaignListRow({
   density,
   sendingCampaignId,
   duplicatingCampaignId,
-  expandedQueueCampaignId,
-  onExpandQueue,
   onView,
   onDuplicate,
   onLaunch,
@@ -104,8 +97,6 @@ export function CampaignListRow({
   const compact = density === 'compact';
   const s = stats;
   const pending = s?.pending ?? 0;
-  const hasQueue =
-    (s?.scheduled ?? 0) > 0 && campaign.status === 'scheduled' && isOwner;
   const actionBtn = compact ? 'h-8 text-xs' : 'h-9 text-sm';
   const ico = compact ? 'w-3.5 h-3.5' : 'w-4 h-4';
   const icoMr = 'mr-1.5';
@@ -409,31 +400,6 @@ export function CampaignListRow({
             )}
           </div>
         </div>
-        {hasQueue && isOwner && (
-          <div className={cn('mt-2', !compact && 'mt-3')}>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                'text-sunrise hover:text-sunrise px-1',
-                compact ? 'h-7 text-xs' : 'h-8 text-sm'
-              )}
-              onClick={() => onExpandQueue(expandedQueueCampaignId === campaign.id ? null : campaign.id)}
-            >
-              {expandedQueueCampaignId === campaign.id ? (
-                <ChevronUp className={cn(ico, 'mr-1')} />
-              ) : (
-                <ChevronDown className={cn(ico, 'mr-1')} />
-              )}
-              {expandedQueueCampaignId === campaign.id ? 'Hide queue' : 'View queue'}
-            </Button>
-            <CampaignScheduledQueue
-              campaignId={campaign.id}
-              scheduledAt={campaign.scheduled_at ?? null}
-              isExpanded={expandedQueueCampaignId === campaign.id}
-            />
-          </div>
-        )}
       </CardContent>
     </Card>
   );

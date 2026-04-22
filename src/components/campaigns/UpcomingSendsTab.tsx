@@ -1,16 +1,31 @@
 "use client";
 
+import { useState, useMemo, useEffect } from 'react';
 import { useScheduledEmails } from '@/hooks/useCampaigns';
-import { campaignService } from '@/services/campaignService';
+import { useAllProfiles, useCurrentUser } from '@/hooks/useAuth';
+import { profileDisplayName } from '@/lib/profileDisplayName';
+import type { Profile } from '@/types/User';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, isToday, isTomorrow, addDays, startOfDay } from 'date-fns';
-import { Mail, Calendar, X } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { useQueryClient } from '@tanstack/react-query';
+import { Mail, Calendar } from 'lucide-react';
 
-const groupByDate = (items: Array<{ scheduled_at: string; campaign_name: string; campaign_email_subject: string; campaign_id: string; campaign_email_id: string; scheduled_date: string; recipient_count: number; step_order?: number; total_steps?: number; schedule_label?: string | null; source?: 'scheduled_emails' | 'campaign' }>) => {
+const groupByDate = (items: Array<{
+  scheduled_at: string;
+  campaign_name: string;
+  campaign_email_subject: string;
+  campaign_id: string;
+  campaign_email_id: string;
+  scheduled_date: string;
+  recipient_count: number;
+  step_order?: number;
+  total_steps?: number;
+  schedule_label?: string | null;
+  source?: 'scheduled_emails' | 'campaign';
+  sender_user_id: string;
+}>) => {
   const today = startOfDay(new Date());
   const groups: { label: string; items: typeof items }[] = [
     { label: 'Today', items: [] },
@@ -31,22 +46,63 @@ const groupByDate = (items: Array<{ scheduled_at: string; campaign_name: string;
 
 export const UpcomingSendsTab = ({ onViewCampaign }: { onViewCampaign?: (campaignId: string) => void }) => {
   const { data: scheduled, isLoading } = useScheduledEmails();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { data: currentUser } = useCurrentUser();
+  const currentUserId = currentUser?.id ?? '';
+  const { data: allProfiles = [] } = useAllProfiles(true);
+  const [senderUserId, setSenderUserId] = useState<string>('');
 
-  const handleCancel = async (item: { campaign_id: string; campaign_email_id: string; scheduled_date: string; source?: 'scheduled_emails' | 'campaign' }) => {
-    try {
-      if (item.source === 'campaign') {
-        await campaignService.cancelCampaignSchedule(item.campaign_id);
-      } else {
-        await campaignService.cancelScheduledSend(item.campaign_id, item.campaign_email_id, item.scheduled_date);
-      }
-      queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
-      toast({ title: 'Send cancelled' });
-    } catch {
-      toast({ title: 'Failed to cancel', variant: 'destructive' });
+  const profileByUserId = useMemo(() => {
+    const m = new Map<string, Profile>();
+    for (const p of allProfiles) m.set(p.userId, p);
+    return m;
+  }, [allProfiles]);
+
+  const senderOptions = useMemo(() => {
+    const list = scheduled ?? [];
+    const ids = [...new Set(list.map((s) => s.sender_user_id).filter(Boolean))] as string[];
+    return ids
+      .map((id) => ({
+        id,
+        label: id === currentUserId ? 'You' : profileDisplayName(profileByUserId.get(id), id),
+      }))
+      .sort((a, b) => {
+        if (a.id === currentUserId) return -1;
+        if (b.id === currentUserId) return 1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [scheduled, currentUserId, profileByUserId]);
+
+  useEffect(() => {
+    if (!senderUserId) return;
+    if (!senderOptions.some((o) => o.id === senderUserId)) {
+      setSenderUserId('');
     }
-  };
+  }, [senderUserId, senderOptions]);
+
+  const filteredScheduled = useMemo(() => {
+    if (!senderUserId) return scheduled || [];
+    return (scheduled || []).filter((s) => s.sender_user_id === senderUserId);
+  }, [scheduled, senderUserId]);
+
+  const senderFilterRow =
+    senderOptions.length > 0 ? (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground whitespace-nowrap">Sender</span>
+        <Select value={senderUserId || 'all'} onValueChange={(v) => setSenderUserId(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-[min(100%,14rem)] h-9">
+            <SelectValue placeholder="All senders" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All senders</SelectItem>
+            {senderOptions.map((o) => (
+              <SelectItem key={o.id} value={o.id}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    ) : null;
 
   if (isLoading) {
     return (
@@ -58,9 +114,10 @@ export const UpcomingSendsTab = ({ onViewCampaign }: { onViewCampaign?: (campaig
     );
   }
 
-  const groups = groupByDate(scheduled || []);
+  const hasAnyScheduled = (scheduled || []).length > 0;
+  const groups = groupByDate(filteredScheduled);
 
-  if (groups.length === 0) {
+  if (!hasAnyScheduled) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
@@ -74,8 +131,30 @@ export const UpcomingSendsTab = ({ onViewCampaign }: { onViewCampaign?: (campaig
     );
   }
 
+  if (groups.length === 0) {
+    return (
+      <div className="space-y-4">
+        {senderFilterRow}
+        <Card>
+          <CardContent className="py-12 text-center">
+            <h3 className="text-lg font-semibold text-foreground mb-2">No upcoming sends for this sender</h3>
+            <p className="text-muted-foreground max-w-sm mx-auto mb-4">
+              Try choosing another sender or show all senders.
+            </p>
+            {senderUserId && (
+              <Button variant="outline" size="sm" onClick={() => setSenderUserId('')}>
+                Show all senders
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {senderFilterRow}
       {groups.map((group) => (
         <div key={group.label}>
           <h3 className="text-sm font-medium text-muted-foreground mb-3">{group.label}</h3>
@@ -108,22 +187,13 @@ export const UpcomingSendsTab = ({ onViewCampaign }: { onViewCampaign?: (campaig
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {onViewCampaign && (
+                {onViewCampaign && (
+                  <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => onViewCampaign(item.campaign_id)}>
                       View
                     </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => handleCancel(item)}
-                  >
-                    <X className="w-4 h-4 mr-1" />
-                    Cancel
-                  </Button>
-                </div>
+                  </div>
+                )}
               </Card>
             ))}
           </div>

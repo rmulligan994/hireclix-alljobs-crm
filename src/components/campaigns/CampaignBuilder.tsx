@@ -1746,7 +1746,7 @@ export const CampaignBuilder = ({
                       </p>
                     ) : sequenceMetadata?.firstSendDate && sequenceMetadata?.scheduleTime ? (
                       <p className="text-sm text-muted-foreground">
-                        Emails will be queued for {format(parse(sequenceMetadata.firstSendDate, 'yyyy-MM-dd', new Date()), 'PPP')} at {formatHhmmAs12h(sequenceMetadata.scheduleTime)}. They will be sent on the next hourly run. View and manage in the <strong>Upcoming Sends</strong> tab.
+                        Emails will be queued for {format(parse(sequenceMetadata.firstSendDate, 'yyyy-MM-dd', new Date()), 'PPP')} at {formatHhmmAs12h(sequenceMetadata.scheduleTime)}. They are picked up shortly after that time (about every 5 minutes). View and manage in the <strong>Upcoming Sends</strong> tab.
                       </p>
                     ) : (
                       <p className="text-sm text-muted-foreground">

@@ -98,7 +98,6 @@ const Campaigns = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [sendingCampaignId, setSendingCampaignId] = useState<string | null>(null);
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
-  const [expandedQueueCampaignId, setExpandedQueueCampaignId] = useState<string | null>(null);
   /** Standalone template editor (Template Library) — not part of campaign creation. */
   const [templateEditorSession, setTemplateEditorSession] = useState<null | {
     seed: string;
@@ -868,8 +867,6 @@ const Campaigns = () => {
                                     density="comfortable"
                                     sendingCampaignId={sendingCampaignId}
                                     duplicatingCampaignId={duplicatingCampaignId}
-                                    expandedQueueCampaignId={expandedQueueCampaignId}
-                                    onExpandQueue={setExpandedQueueCampaignId}
                                     onView={handleViewCampaign}
                                     onDuplicate={handleDuplicateCampaign}
                                     onLaunch={handleLaunchCampaign}

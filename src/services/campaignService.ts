@@ -485,6 +485,8 @@ export const campaignService = {
       scheduled_date: string;
       recipient_count: number;
       source: 'scheduled_emails' | 'campaign';
+      /** Campaign owner — for sender filter in Upcoming Sends */
+      sender_user_id: string;
     }>
   > {
     const now = new Date();
@@ -497,7 +499,7 @@ export const campaignService = {
         campaign_id,
         campaign_email_id,
         scheduled_at,
-        campaigns(name, schedule_recurrence),
+        campaigns(name, schedule_recurrence, user_id),
         campaign_emails(subject, step_order)
       `)
       .eq('status', 'pending')
@@ -534,7 +536,22 @@ export const campaignService = {
     };
 
     // Group by campaign + step + date so drip campaigns with many recipients don't show 100s of rows
-    const grouped = new Map<string, { id: string; campaign_id: string; campaign_email_id: string; campaign_name: string; subject: string; step_order: number; schedule_recurrence: ScheduleRecurrence | null; scheduled_at: string; scheduled_date: string; count: number }>();
+    const grouped = new Map<
+      string,
+      {
+        id: string;
+        campaign_id: string;
+        campaign_email_id: string;
+        campaign_name: string;
+        subject: string;
+        step_order: number;
+        schedule_recurrence: ScheduleRecurrence | null;
+        scheduled_at: string;
+        scheduled_date: string;
+        count: number;
+        sender_user_id: string;
+      }
+    >();
     for (const row of data || []) {
       const datePart = (row.scheduled_at as string).slice(0, 10);
       const key = `${row.campaign_id}-${row.campaign_email_id}-${datePart}`;
@@ -542,6 +559,7 @@ export const campaignService = {
       const rec = scheduleRecurrenceFromJson(
         (row.campaigns as { schedule_recurrence?: Json } | null)?.schedule_recurrence
       );
+      const senderId = (row.campaigns as { user_id?: string | null } | null)?.user_id ?? '';
       if (existing) {
         existing.count++;
         if (row.scheduled_at < existing.scheduled_at) existing.scheduled_at = row.scheduled_at;
@@ -557,6 +575,7 @@ export const campaignService = {
           scheduled_at: row.scheduled_at,
           scheduled_date: datePart,
           count: 1,
+          sender_user_id: senderId,
         });
       }
     }
@@ -573,6 +592,7 @@ export const campaignService = {
       scheduled_date: string;
       recipient_count: number;
       source: 'scheduled_emails' | 'campaign';
+      sender_user_id: string;
     }> = Array.from(grouped.values()).map((g) => ({
       id: g.id,
       campaign_id: g.campaign_id,
@@ -586,6 +606,7 @@ export const campaignService = {
       scheduled_date: g.scheduled_date,
       recipient_count: g.count,
       source: 'scheduled_emails' as const,
+      sender_user_id: g.sender_user_id,
     }));
 
     // Fallback: include campaigns with status=scheduled and future scheduled_at that may not have scheduled_emails yet
@@ -593,7 +614,7 @@ export const campaignService = {
     if (user) {
       const { data: scheduledCampaigns } = await supabase
         .from('campaigns')
-        .select('id, name, scheduled_at, schedule_recurrence')
+        .select('id, name, scheduled_at, schedule_recurrence, user_id')
         .eq('status', 'scheduled')
         .gte('scheduled_at', startOfToday)
         .or(`user_id.eq.${user.id},is_organization_campaign.eq.true`);
@@ -624,6 +645,7 @@ export const campaignService = {
           scheduled_date: c.scheduled_at!.slice(0, 10),
           recipient_count: count ?? 0,
           source: 'campaign',
+          sender_user_id: c.user_id ?? '',
         });
       }
       result.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
