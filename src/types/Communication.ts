@@ -11,6 +11,10 @@ export interface Communication {
   occurredAt: Date;
   createdAt: Date;
   createdBy?: string;
+  /** Set for campaign sends; used to show subject-only in the comm log. */
+  campaignRecipientId?: string | null;
+  /** Set for sends that went through Mailgun; used to show subject-only in the comm log. */
+  externalMessageId?: string | null;
 }
 
 export interface CreateCommunicationData {

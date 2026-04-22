@@ -1,51 +1,36 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, useMemo, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
-import { Search, User, Building2, Briefcase, Check, Copy, Link2 } from 'lucide-react';
+import { Search, User, Building2, Briefcase, Check, Copy, Link2, Megaphone, Shield } from 'lucide-react';
 import { useJobById } from '@/hooks/useJobs';
+import { MERGE_TAG_CATALOG, type MergeTagCategory } from '@/lib/email/merge-tags-catalog';
 
 interface MergeTag {
   name: string;
   value: string;
 }
 
-const SENDER_TAGS: MergeTag[] = [
-  { name: 'Sender Name', value: '{{senderName}}' },
-  { name: 'Sender Title', value: '{{senderTitle}}' },
-  { name: 'Sender Email', value: '{{senderEmail}}' },
-  { name: 'Sender LinkedIn', value: '{{senderLinkedinUrl}}' },
-  { name: 'Sender Company', value: '{{senderCompany}}' },
-  { name: 'Sender Brand', value: '{{senderBrand}}' },
-];
-
-const CANDIDATE_TAGS: MergeTag[] = [
-  { name: 'First Name', value: '{{firstName}}' },
-  { name: 'Last Name', value: '{{lastName}}' },
-  { name: 'Full Name', value: '{{fullName}}' },
-  { name: 'Email', value: '{{email}}' },
-  { name: 'Company', value: '{{company}}' },
-  { name: 'Title', value: '{{title}}' },
-  { name: 'Skills', value: '{{skills}}' },
-  { name: 'Location', value: '{{location}}' },
-  { name: 'Source', value: '{{source}}' },
-  { name: 'LinkedIn URL', value: '{{linkedinUrl}}' },
-];
-
-const JOB_TAGS: MergeTag[] = [
-  { name: 'Position Title', value: '{{jobTitle}}' },
-  { name: 'Job Department', value: '{{jobDepartment}}' },
-  { name: 'Job Location', value: '{{jobLocation}}' },
-  { name: 'Job Type', value: '{{jobType}}' },
-  { name: 'Job Description', value: '{{jobDescription}}' },
-  { name: 'Job URL', value: '{{jobUrl}}' },
-];
-
 function filterTags(tags: MergeTag[], query: string): MergeTag[] {
   if (!query.trim()) return tags;
   const q = query.toLowerCase();
   return tags.filter((t) => t.name.toLowerCase().includes(q) || t.value.toLowerCase().includes(q));
 }
+
+function catalogTagsForCategories(categories: MergeTagCategory[]): MergeTag[] {
+  return MERGE_TAG_CATALOG.filter((t) => categories.includes(t.category)).map((t) => ({
+    name: t.label,
+    value: `{{${t.key}}}`,
+  }));
+}
+
+const CATEGORY_ICON: Record<MergeTagCategory, typeof User> = {
+  Sender: User,
+  Candidate: Building2,
+  Job: Briefcase,
+  Campaign: Megaphone,
+  System: Shield,
+};
 
 interface MergeTagsPanelProps {
   campaignJobId?: string | null;
@@ -57,10 +42,18 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
   const inPopover = variant === 'popover';
   const [senderSearch, setSenderSearch] = useState('');
   const [candidateSearch, setCandidateSearch] = useState('');
+  const [campaignSearch, setCampaignSearch] = useState('');
   const [jobSearch, setJobSearch] = useState('');
+  const [systemSearch, setSystemSearch] = useState('');
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
 
   const { data: job } = useJobById(campaignJobId ?? null);
+
+  const senderTags = useMemo(() => catalogTagsForCategories(['Sender']), []);
+  const candidateTags = useMemo(() => catalogTagsForCategories(['Candidate']), []);
+  const campaignTags = useMemo(() => catalogTagsForCategories(['Campaign']), []);
+  const jobTags = useMemo(() => catalogTagsForCategories(['Job']), []);
+  const systemTags = useMemo(() => catalogTagsForCategories(['System']), []);
 
   const copyToClipboard = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
@@ -128,6 +121,26 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
     </div>
   );
 
+  const renderCategorySection = (
+    category: MergeTagCategory,
+    title: string,
+    tags: MergeTag[],
+    search: string,
+    setSearch: (v: string) => void,
+    placeholder: string
+  ) => {
+    const Icon = CATEGORY_ICON[category];
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Icon className="w-3.5 h-3.5 text-sky-blue" />
+          <span className="text-xs font-medium">{title}</span>
+        </div>
+        {renderTagList(tags, search, setSearch, placeholder)}
+      </div>
+    );
+  };
+
   const jobUrl = job?.url || job?.view_url;
 
   const quickLinks = [
@@ -139,62 +152,50 @@ export const MergeTagsPanel = ({ campaignJobId, variant = 'default' }: MergeTags
 
   const categorySections: ReactNode = (
     <div className="space-y-4 pr-1">
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <User className="w-3.5 h-3.5 text-sky-blue" />
-          <span className="text-xs font-medium">Sender</span>
-        </div>
-        {renderTagList(SENDER_TAGS, senderSearch, setSenderSearch, 'Search sender…')}
-      </div>
+      {renderCategorySection('Sender', 'Sender', senderTags, senderSearch, setSenderSearch, 'Search sender…')}
+      {renderCategorySection('Candidate', 'Candidate', candidateTags, candidateSearch, setCandidateSearch, 'Search candidate…')}
+      {renderCategorySection('Campaign', 'Campaign', campaignTags, campaignSearch, setCampaignSearch, 'Search campaign…')}
 
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Building2 className="w-3.5 h-3.5 text-sky-blue" />
-          <span className="text-xs font-medium">Candidate</span>
+          <Briefcase className="w-3.5 h-3.5 text-sky-blue" />
+          <span className="text-xs font-medium">Job</span>
         </div>
-        {renderTagList(CANDIDATE_TAGS, candidateSearch, setCandidateSearch, 'Search candidate…')}
-      </div>
+        {renderTagList(jobTags, jobSearch, setJobSearch, 'Search job…')}
 
-      {campaignJobId && (
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Briefcase className="w-3.5 h-3.5 text-sky-blue" />
-            <span className="text-xs font-medium">Job</span>
-          </div>
-          {renderTagList(JOB_TAGS, jobSearch, setJobSearch, 'Search job…')}
-
-          {job && (
-            <div className="mt-3 pt-3 border-t border-border">
-              <div className="text-[10px] font-medium text-muted-foreground mb-2">Actual values (this job)</div>
-              <div className="space-y-1.5">
-                {job.title && (
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(job.title)}
-                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
-                  >
-                    <span className="truncate">{job.title}</span>
-                    {copiedValue === job.title ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
-                  </button>
-                )}
-                {jobUrl && (
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(jobUrl)}
-                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
-                  >
-                    <span className="truncate flex items-center gap-1">
-                      <Link2 className="w-3 h-3 shrink-0" />
-                      Apply URL
-                    </span>
-                    {copiedValue === jobUrl ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
-                  </button>
-                )}
-              </div>
+        {campaignJobId && job && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <div className="text-[10px] font-medium text-muted-foreground mb-2">Actual values (this job)</div>
+            <div className="space-y-1.5">
+              {job.title && (
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(job.title)}
+                  className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
+                >
+                  <span className="truncate">{job.title}</span>
+                  {copiedValue === job.title ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
+                </button>
+              )}
+              {jobUrl && (
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(jobUrl)}
+                  className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs bg-muted/50 hover:bg-muted text-left group"
+                >
+                  <span className="truncate flex items-center gap-1">
+                    <Link2 className="w-3 h-3 shrink-0" />
+                    Apply URL
+                  </span>
+                  {copiedValue === jobUrl ? <Check className="w-3 h-3 text-green-600 shrink-0" /> : <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />}
+                </button>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
+
+      {renderCategorySection('System', 'System', systemTags, systemSearch, setSystemSearch, 'Search system…')}
     </div>
   );
 

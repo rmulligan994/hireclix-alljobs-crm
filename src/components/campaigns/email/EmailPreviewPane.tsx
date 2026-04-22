@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Monitor, Smartphone, Maximize2 } from 'lucide-react';
 import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 import { getEmailEditorPreviewHtml } from '@/lib/email/email-utils';
@@ -27,10 +29,14 @@ export function EmailPreviewPane({
 }: EmailPreviewPaneProps) {
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop');
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [mergeHighlights, setMergeHighlights] = useState(true);
 
   const previewHtml = useMemo(
-    () => getEmailEditorPreviewHtml(composeKind, formPayload, htmlBody, siteLabel),
-    [composeKind, formPayload, htmlBody, siteLabel],
+    () =>
+      getEmailEditorPreviewHtml(composeKind, formPayload, htmlBody, siteLabel, {
+        mergeHighlights,
+      }),
+    [composeKind, formPayload, htmlBody, siteLabel, mergeHighlights],
   );
 
   return (
@@ -38,6 +44,20 @@ export function EmailPreviewPane({
       <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
         <div className="min-w-0">
           <p className="text-xs font-medium text-foreground">Live preview</p>
+          <p className="text-[10px] text-muted-foreground leading-snug mt-0.5 max-w-md">
+            Turn on sample values to preview personalization; turn off to see merge tags exactly as written.
+          </p>
+          <div className="flex items-center gap-2 mt-1.5">
+            <Switch
+              id="preview-merge-highlights"
+              checked={mergeHighlights}
+              onCheckedChange={setMergeHighlights}
+              aria-label="Show sample values for merge tags in preview"
+            />
+            <Label htmlFor="preview-merge-highlights" className="text-[10px] text-muted-foreground font-normal cursor-pointer">
+              Show sample merge values
+            </Label>
+          </div>
           {subject.trim() ? (
             <p className="text-[11px] text-muted-foreground truncate" title={subject}>
               Subject: {subject}

@@ -1,24 +1,13 @@
 import { MERGE_TAG_CATALOG } from '@/lib/email/merge-tags-catalog';
+import { MERGE_CONTEXT_REPLACEMENT_KEYS } from '@/lib/email/merge-context-replacement-keys';
 import type { CampaignEmail } from '@/types/Campaign';
-
-/** Snake_case and third-party aliases supported by the send pipeline (see supabase/functions/_shared/campaign-merge-tags.ts). */
-export const LEGACY_MERGE_TAG_KEYS = [
-  'company_name',
-  'member_name',
-  'job_title',
-  'apply_url',
-  'unsubscribe_url',
-  'recruiter_name',
-  'recruiter_email',
-  'recruiter_title',
-  'site_name',
-] as const;
 
 const TOKEN_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
+/** Catalog tokens plus every key the edge send pipeline may substitute (keep in sync with `campaign-merge-tags.ts`). */
 export const KNOWN_MERGE_TAG_KEYS = new Set<string>([
   ...MERGE_TAG_CATALOG.map((t) => t.key),
-  ...LEGACY_MERGE_TAG_KEYS,
+  ...MERGE_CONTEXT_REPLACEMENT_KEYS,
 ]);
 
 export function extractMergeTagKeysFromText(text: string): string[] {

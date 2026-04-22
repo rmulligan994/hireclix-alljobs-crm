@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { Bold, Italic, Underline, Palette } from 'lucide-react';
+import { Bold, Italic, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { escapeHtml } from '@/lib/email/email-utils';
@@ -28,9 +28,6 @@ function Toolbar({ onCmd }: { onCmd: (cmd: string, val?: string) => void }) {
       <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onMouseDown={(e) => e.preventDefault()} onClick={() => onCmd('italic')} title="Italic">
         <Italic className="h-3.5 w-3.5" />
       </Button>
-      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onMouseDown={(e) => e.preventDefault()} onClick={() => onCmd('underline')} title="Underline">
-        <Underline className="h-3.5 w-3.5" />
-      </Button>
       <label className="inline-flex items-center gap-0.5 cursor-pointer px-1" title="Text color">
         <Palette className="h-3.5 w-3.5 text-muted-foreground" />
         <input
@@ -47,7 +44,7 @@ function Toolbar({ onCmd }: { onCmd: (cmd: string, val?: string) => void }) {
 
 /**
  * contentEditable with a small inline toolbar. Output is sanitized before storage and at send time.
- * Bold / italic / underline / color generally survive in major clients when emitted as inline HTML.
+ * Bold / italic / color generally survive in major clients when emitted as inline HTML.
  */
 export function RichTextInlineEditor({
   editorKey,

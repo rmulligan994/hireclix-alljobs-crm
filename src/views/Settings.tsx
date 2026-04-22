@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
@@ -32,9 +33,11 @@ import { useToast } from '@/hooks/use-toast';
 import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
 import { emailTemplateService, type EmailTemplate } from '@/services/emailTemplateService';
 import { useCurrentUser, useUpdateProfile, useAllProfiles } from '@/hooks/useAuth';
+import { userService } from '@/services';
 import type { UserRole } from '@/types/User';
 
 const Settings = () => {
+  const queryClient = useQueryClient();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { toast } = useToast();
   const [customTemplates, setCustomTemplates] = useState<PipelineTemplate[]>([]);
@@ -66,6 +69,8 @@ const Settings = () => {
   const [profileTitle, setProfileTitle] = useState('');
   const [profileCompany, setProfileCompany] = useState('');
   const [profileLinkedinUrl, setProfileLinkedinUrl] = useState('');
+  /** While saving campaign visibility prefs for a user (Team tab, admins only). */
+  const [campaignPrefsSavingUserId, setCampaignPrefsSavingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -120,6 +125,24 @@ const Settings = () => {
       });
     } catch {
       toast({ title: 'Failed to save profile', variant: 'destructive' });
+    }
+  };
+
+  const saveMemberCampaignVisibility = async (
+    targetUserId: string,
+    data: { forceShowInOrgTab: boolean }
+  ) => {
+    if (!isAdmin) return;
+    setCampaignPrefsSavingUserId(targetUserId);
+    try {
+      await userService.updateProfile(targetUserId, data);
+      await queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      await queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      toast({ title: 'Campaign settings updated' });
+    } catch {
+      toast({ title: 'Failed to save campaign settings', variant: 'destructive' });
+    } finally {
+      setCampaignPrefsSavingUserId(null);
     }
   };
 
@@ -853,6 +876,65 @@ const Settings = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              {isAdmin && (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle>Organization tab listing</CardTitle>
+                    <CardDescription>
+                      When forcing is on, all of a user’s org-shared campaigns appear under Organization. When forcing
+                      is off, they choose per campaign in the campaign editor (including after a campaign is live).
+                      &quot;Share with organization&quot; is always per campaign.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {teamLoading ? (
+                      <p className="text-muted-foreground">Loading team…</p>
+                    ) : teamError ? (
+                      <p className="text-destructive">Could not load team for campaign settings.</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {allProfiles.map((p) => {
+                          const name = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'Unknown';
+                          const busy = campaignPrefsSavingUserId === p.userId;
+                          return (
+                            <div
+                              key={`campaign-prefs-${p.id}`}
+                              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-border p-4"
+                            >
+                              <div>
+                                <div className="font-medium text-foreground">
+                                  {name}
+                                  {p.userId === userId && (
+                                    <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-muted-foreground">{p.email}</div>
+                              </div>
+                              <div className="flex items-center gap-3 sm:max-w-md sm:justify-end">
+                                <div className="space-y-0.5 min-w-0 text-right sm:text-left flex-1">
+                                  <Label className="text-sm sm:text-right sm:block">Force Organization listing</Label>
+                                  <p className="text-xs text-muted-foreground sm:text-right">
+                                    Off: per-campaign &quot;Also list under Organization&quot; in the editor.
+                                  </p>
+                                </div>
+                                <Switch
+                                  checked={p.forceShowInOrgTab !== false}
+                                  disabled={busy}
+                                  onCheckedChange={(checked) =>
+                                    saveMemberCampaignVisibility(p.userId, { forceShowInOrgTab: checked })
+                                  }
+                                  aria-label={`Force Organization tab listing for ${name}`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="security" className="mt-6">

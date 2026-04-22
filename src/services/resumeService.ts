@@ -4,26 +4,61 @@ import type { CandidateResume } from '@/types/Resume';
 const BUCKET = 'resumes';
 const SIGNED_URL_EXPIRY = 3600; // 1 hour
 
-/** App route segments - when first path segment is one of these, we're at origin (no base path). */
-const APP_ROUTE_SEGMENTS = new Set([
-  'talent', 'talent-pools', 'pipelines', 'campaigns', 'analytics', 'integrations', 'settings',
-  'candidates', 'dashboard', 'jobs', 'reports',
-]);
+/** If legacy rows include the bucket name in the path, strip it so storage API resolves correctly. */
+function normalizeStorageFilePath(filePath: string): string {
+  let p = filePath.trim();
+  if (p.startsWith('/')) p = p.slice(1);
+  if (p.startsWith(`${BUCKET}/`)) p = p.slice(BUCKET.length + 1);
+  return p;
+}
 
-/** Base URL for API routes (origin + basePath). Works with Webflow basePath. */
-function getApiBase(): string {
+/** Origin + optional `NEXT_PUBLIC_BASE_URL` (Next basePath, e.g. /crm) for same-origin API routes. */
+function getBrowserApiBase(): string {
   if (typeof window === 'undefined') return '';
-  let base = process.env.NEXT_PUBLIC_BASE_URL || '';
-  // Fallback: derive base path from current URL (e.g. /crm from .../crm/candidates/123)
-  if (!base && typeof window !== 'undefined') {
-    const segments = window.location.pathname.split('/').filter(Boolean);
-    const first = segments[0];
-    // If first segment is an app route, we're at origin (no base path like /crm)
-    if (first && !APP_ROUTE_SEGMENTS.has(first) && first !== 'api') {
-      base = `/${first}`;
-    }
+  const prefix = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  return `${window.location.origin}${prefix}`;
+}
+
+/**
+ * Supabase storage errors are often class instances: JSON.stringify(err) is "{}" and
+ * message can be empty. Unpack what we can for logs and toasts.
+ */
+function formatStorageError(err: unknown): string {
+  if (err == null) return '';
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) {
+    if (err.message?.trim()) return err.message.trim();
   }
-  return `${window.location.origin}${base.startsWith('/') ? base : base ? `/${base}` : ''}`;
+  if (typeof err === 'object') {
+    const o = err as Record<string, unknown>;
+    const bits: string[] = [];
+    for (const k of ['message', 'error', 'status', 'statusCode', 'code', 'name', 'details', 'hint'] as const) {
+      if (k in o && o[k] != null && String(o[k]).length > 0) {
+        bits.push(`${k}=${String(o[k])}`);
+      }
+    }
+    if (bits.length) return bits.join(' · ');
+    try {
+      const plain: Record<string, unknown> = {};
+      for (const k of Object.getOwnPropertyNames(err)) {
+        const v = (o as Record<string, unknown>)[k];
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+          plain[k] = v;
+        }
+      }
+      const s = JSON.stringify(plain);
+      if (s !== '{}') return s;
+    } catch {
+      /* ignore */
+    }
+    const ctorName = (o.constructor as { name?: string } | undefined)?.name;
+    if (ctorName && ctorName !== 'Object') return ctorName;
+  }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'Storage request failed';
+  }
 }
 
 const mapRowToResume = (row: any): CandidateResume => ({
@@ -138,31 +173,58 @@ export const resumeService = {
 
     if (fetchError || !resume) throw new Error('Resume not found');
 
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(resume.file_path, expiresIn);
+    const path = normalizeStorageFilePath(resume.file_path);
 
-    if (error) throw error;
-    if (!data?.signedUrl) throw new Error('Failed to create signed URL');
-    return data.signedUrl;
+    const { data: signed, error: signError } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(path, expiresIn);
+
+    if (!signError && signed?.signedUrl) {
+      return signed.signedUrl;
+    }
+
+    // Same session as upload — works if createSignedUrl fails but the object is readable.
+    const { data: blob, error: downloadError } = await supabase.storage
+      .from(BUCKET)
+      .download(path);
+    if (downloadError) {
+      const fromSign = formatStorageError(signError);
+      const fromDownload = formatStorageError(downloadError);
+      const detail = fromDownload || fromSign || 'Object not found';
+      // Pass raw error objects as extra args so DevTools shows full properties (stringify is often "{}" for SDK classes)
+      console.error(
+        '[resumeService] storage read failed',
+        { resumeId, path, detail },
+        { createSignedUrlError: signError, downloadError }
+      );
+      const hint =
+        detail.includes('not found') || detail.includes('Not found')
+          ? ' If this is a new upload, open Supabase → Storage → resumes and confirm a file exists at this path, and that the row in public.candidate_resumes matches.'
+          : '';
+      throw new Error(
+        `Could not open this resume (${detail}).${hint} Also confirm .env.local uses the same project URL and anon key as the dashboard, then restart the dev server.`
+      );
+    }
+    if (!blob) throw new Error('Empty file from storage');
+    return URL.createObjectURL(blob);
   },
 
   /**
-   * Get URL for viewing/downloading. Uses the app's API route (avoids CORS issues
-   * when hosted on Webflow) with the session token for auth.
+   * Get URL for viewing in an iframe or new tab. Prefer the same-origin `/api/resumes` route
+   * so the server can stream the file (and use a service-role fallback when the browser
+   * cannot read storage with the user JWT—same project as the dashboard, without exposing
+   * the service key to the client).
    */
   getResumeUrl: async (resumeId: string): Promise<string> => {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.access_token) {
       throw new Error('You must be signed in to view resumes. Please refresh the page and try again.');
     }
-    const base = getApiBase();
-    if (!base) {
-      // Fallback to signed URL when base not available (e.g. SSR)
-      return resumeService.getSignedUrl(resumeId);
+    if (typeof window !== 'undefined' && getBrowserApiBase()) {
+      const token = encodeURIComponent(session.access_token);
+      return `${getBrowserApiBase()}/api/resumes/${resumeId}?token=${token}`;
     }
-    const token = encodeURIComponent(session.access_token);
-    return `${base}/api/resumes/${resumeId}?token=${token}`;
+    return resumeService.getSignedUrl(resumeId);
   },
 
   /**
@@ -173,16 +235,64 @@ export const resumeService = {
     if (sessionError || !session?.access_token) {
       throw new Error('You must be signed in to download resumes. Please refresh the page and try again.');
     }
-    const base = getApiBase();
-    const url = base
-      ? `${base}/api/resumes/${resumeId}?token=${encodeURIComponent(session.access_token)}`
-      : await resumeService.getSignedUrl(resumeId);
+    if (typeof window !== 'undefined' && getBrowserApiBase()) {
+      const res = await fetch(
+        `${getBrowserApiBase()}/api/resumes/${resumeId}?token=${encodeURIComponent(session.access_token)}`
+      );
+      if (res.ok) return res.blob();
+    }
+    const url = await resumeService.getSignedUrl(resumeId);
     const res = await fetch(url);
     if (!res.ok) {
       const text = await res.text();
       throw new Error(text || `Failed to load file: ${res.status}`);
     }
     return res.blob();
+  },
+
+  /**
+   * AI-suggested tags from resume PDF text (gpt-4o-mini via `parse-resume` edge function, tags_only mode).
+   * Pass `excludeTags` so repeat requests ask the model for different labels (not in candidate or pending list).
+   */
+  suggestTagsFromResume: async (
+    resumeId: string,
+    options?: { excludeTags?: string[] },
+  ): Promise<string[]> => {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+    if (sessionError || !session?.access_token) {
+      throw new Error('You must be signed in to use resume tag suggestions. Please refresh and try again.');
+    }
+    if (typeof window === 'undefined' || !getBrowserApiBase()) {
+      throw new Error('Tag suggestions are only available in the app.');
+    }
+    const excludeTags = (options?.excludeTags ?? [])
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const res = await fetch(`${getBrowserApiBase()}/api/resumes/${resumeId}/suggest-tags`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ excludeTags }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      tags?: unknown;
+      error?: string;
+      detail?: string;
+    };
+    if (!res.ok) {
+      const msg = [data.error, data.detail]
+        .filter((x): x is string => typeof x === 'string' && x.length > 0)
+        .join(' — ');
+      throw new Error(msg || 'Could not suggest tags from resume');
+    }
+    return Array.isArray(data.tags)
+      ? data.tags.filter((t): t is string => typeof t === 'string').map((t) => t.trim()).filter(Boolean)
+      : [];
   },
 
   /**
@@ -222,7 +332,9 @@ export const resumeService = {
 
     if (fetchError || !resume) throw new Error('Resume not found');
 
-    await supabase.storage.from(BUCKET).remove([resume.file_path]);
+    await supabase.storage
+      .from(BUCKET)
+      .remove([normalizeStorageFilePath(resume.file_path)]);
 
     const { error: deleteError } = await supabase
       .from('candidate_resumes')

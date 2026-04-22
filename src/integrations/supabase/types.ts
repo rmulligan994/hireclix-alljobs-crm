@@ -172,6 +172,7 @@ export type Database = {
           name: string
           schedule_recurrence: Json | null
           scheduled_at: string | null
+          show_in_org_tab: boolean
           status: string
           type: string
           updated_at: string
@@ -189,6 +190,7 @@ export type Database = {
           name: string
           schedule_recurrence?: Json | null
           scheduled_at?: string | null
+          show_in_org_tab?: boolean
           status?: string
           type?: string
           updated_at?: string
@@ -206,6 +208,7 @@ export type Database = {
           name?: string
           schedule_recurrence?: Json | null
           scheduled_at?: string | null
+          show_in_org_tab?: boolean
           status?: string
           type?: string
           updated_at?: string
@@ -753,6 +756,7 @@ export type Database = {
           created_at: string
           email: string | null
           first_name: string | null
+          force_show_in_org_tab: boolean
           id: string
           last_name: string | null
           linkedin_url: string | null
@@ -768,6 +772,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           first_name?: string | null
+          force_show_in_org_tab?: boolean
           id?: string
           last_name?: string | null
           linkedin_url?: string | null
@@ -783,6 +788,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           first_name?: string | null
+          force_show_in_org_tab?: boolean
           id?: string
           last_name?: string | null
           linkedin_url?: string | null

@@ -6,6 +6,10 @@ export interface CampaignStats {
   pending: number;
   sent: number;
   scheduled: number;
+  /** Could not send (provider error, merge tags, etc.) */
+  failed: number;
+  /** Missing/invalid email — not attempted */
+  rejected: number;
   opened: number;
   clicked: number;
   responded: number;
@@ -20,6 +24,8 @@ export function useCampaignStats(campaignId: string) {
     pending: 0,
     sent: 0,
     scheduled: 0,
+    failed: 0,
+    rejected: 0,
     opened: 0,
     clicked: 0,
     responded: 0,
@@ -44,6 +50,8 @@ export function useCampaignStats(campaignId: string) {
     const pending = data.filter(r => r.status === 'pending').length;
     const scheduled = data.filter(r => r.status === 'scheduled').length;
     const sent = data.filter(r => r.status === 'sent').length;
+    const failed = data.filter(r => r.status === 'failed').length;
+    const rejected = data.filter(r => r.status === 'rejected').length;
     const opened = data.filter(r => r.status === 'opened' || r.status === 'clicked' || r.status === 'responded').length;
     const clicked = data.filter(r => r.status === 'clicked' || r.status === 'responded').length;
     const responded = data.filter(r => r.status === 'responded').length;
@@ -51,7 +59,20 @@ export function useCampaignStats(campaignId: string) {
     const openRate = recipients > 0 ? Math.round((opened / recipients) * 100) : 0;
     const clickRate = recipients > 0 ? Math.round((clicked / recipients) * 100) : 0;
 
-    setStats({ recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, openRate, clickRate });
+    setStats({
+      recipients,
+      pending,
+      sent,
+      scheduled,
+      failed,
+      rejected,
+      opened,
+      clicked,
+      responded,
+      responseRate,
+      openRate,
+      clickRate,
+    });
     setIsLoading(false);
   };
 
@@ -83,6 +104,65 @@ export function useCampaignStats(campaignId: string) {
   return { stats, isLoading };
 }
 
+const STATS_IN_CHUNK = 80;
+
+function emptyStats(): CampaignStats {
+  return {
+    recipients: 0,
+    pending: 0,
+    sent: 0,
+    scheduled: 0,
+    failed: 0,
+    rejected: 0,
+    opened: 0,
+    clicked: 0,
+    responded: 0,
+    responseRate: 0,
+    openRate: 0,
+    clickRate: 0,
+  };
+}
+
+function aggregateRowsForCampaigns(
+  campaignIds: string[],
+  rows: { campaign_id: string; status: string }[]
+): Record<string, CampaignStats> {
+  const newStatsMap: Record<string, CampaignStats> = {};
+  for (const campaignId of campaignIds) {
+    const campaignData = rows.filter((r) => r.campaign_id === campaignId);
+    const recipients = campaignData.length;
+    const pending = campaignData.filter((r) => r.status === 'pending').length;
+    const scheduled = campaignData.filter((r) => r.status === 'scheduled').length;
+    const sent = campaignData.filter((r) => r.status === 'sent').length;
+    const failed = campaignData.filter((r) => r.status === 'failed').length;
+    const rejected = campaignData.filter((r) => r.status === 'rejected').length;
+    const opened = campaignData.filter(
+      (r) => r.status === 'opened' || r.status === 'clicked' || r.status === 'responded'
+    ).length;
+    const clicked = campaignData.filter((r) => r.status === 'clicked' || r.status === 'responded').length;
+    const responded = campaignData.filter((r) => r.status === 'responded').length;
+    const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
+    const openRate = recipients > 0 ? Math.round((opened / recipients) * 100) : 0;
+    const clickRate = recipients > 0 ? Math.round((clicked / recipients) * 100) : 0;
+
+    newStatsMap[campaignId] = {
+      recipients,
+      pending,
+      sent,
+      scheduled,
+      failed,
+      rejected,
+      opened,
+      clicked,
+      responded,
+      responseRate,
+      openRate,
+      clickRate,
+    };
+  }
+  return newStatsMap;
+}
+
 export function useAllCampaignsStats(campaignIds: string[]) {
   const [statsMap, setStatsMap] = useState<Record<string, CampaignStats>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -93,35 +173,27 @@ export function useAllCampaignsStats(campaignIds: string[]) {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('campaign_recipients')
-      .select('campaign_id, status')
-      .in('campaign_id', campaignIds);
-
-    if (error) {
-      console.error('Error fetching campaign stats:', error);
-      return;
+    const merged: Record<string, CampaignStats> = {};
+    for (const id of campaignIds) {
+      merged[id] = emptyStats();
     }
 
-    const newStatsMap: Record<string, CampaignStats> = {};
+    for (let i = 0; i < campaignIds.length; i += STATS_IN_CHUNK) {
+      const chunk = campaignIds.slice(i, i + STATS_IN_CHUNK);
+      const { data, error } = await supabase
+        .from('campaign_recipients')
+        .select('campaign_id, status')
+        .in('campaign_id', chunk);
 
-    campaignIds.forEach(campaignId => {
-      const campaignData = data.filter(r => r.campaign_id === campaignId);
-      const recipients = campaignData.length;
-      const pending = campaignData.filter(r => r.status === 'pending').length;
-      const scheduled = campaignData.filter(r => r.status === 'scheduled').length;
-      const sent = campaignData.filter(r => r.status === 'sent').length;
-      const opened = campaignData.filter(r => r.status === 'opened' || r.status === 'clicked' || r.status === 'responded').length;
-      const clicked = campaignData.filter(r => r.status === 'clicked' || r.status === 'responded').length;
-      const responded = campaignData.filter(r => r.status === 'responded').length;
-      const responseRate = recipients > 0 ? Math.round((responded / recipients) * 100) : 0;
-      const openRate = recipients > 0 ? Math.round((opened / recipients) * 100) : 0;
-      const clickRate = recipients > 0 ? Math.round((clicked / recipients) * 100) : 0;
+      if (error) {
+        console.error('Error fetching campaign stats:', error);
+        continue;
+      }
+      const partial = aggregateRowsForCampaigns(chunk, data || []);
+      Object.assign(merged, partial);
+    }
 
-      newStatsMap[campaignId] = { recipients, pending, sent, scheduled, opened, clicked, responded, responseRate, openRate, clickRate };
-    });
-
-    setStatsMap(newStatsMap);
+    setStatsMap(merged);
     setIsLoading(false);
   };
 

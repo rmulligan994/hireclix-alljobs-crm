@@ -595,7 +595,7 @@ async function sendOneEmail(
     candidate_id: recipient.candidate_id,
     type: "email",
     subject: personalizedSubject,
-    content: personalizedHtml.replace(/<[^>]*>/g, "").slice(0, 500),
+    content: null,
     direction: "outbound",
     occurred_at: new Date().toISOString(),
     campaign_recipient_id: recipient.id,

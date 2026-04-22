@@ -1,6 +1,7 @@
 /**
  * Merge tag palette for the HTML email builder (keys without braces).
- * Aligned with supabase/functions/send-campaign-email replaceMergeTags + legacy aliases.
+ * Primary tokens for the picker; starter layouts may also use snake_case aliases listed in
+ * `merge-context-replacement-keys.ts` (same set the send pipeline resolves).
  */
 
 export type MergeTagCategory = 'Candidate' | 'Job' | 'Sender' | 'Campaign' | 'System';

@@ -39,10 +39,10 @@ export function buildEmailAIEditorContext(
     };
   }
 
-  if (formPayload.useBlocks && formPayload.blocks.length > 0) {
+  if (formPayload.blocks.length > 0) {
     return {
       composeKind: 'announcement_form',
-      useBlocks: true,
+      useBlocks: formPayload.useBlocks,
       subject,
       previewText,
       bodySummary: formPayload.blocks.map(summarizeBlock).filter(Boolean).join('\n'),

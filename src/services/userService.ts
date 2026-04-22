@@ -38,6 +38,7 @@ const mapRowToProfile = (row: any): Profile => ({
   linkedinUrl: row.linkedin_url,
   avatarUrl: row.avatar_url,
   role: row.role === 'admin' ? 'admin' : 'recruiter',
+  forceShowInOrgTab: row.force_show_in_org_tab !== false,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at),
 });
@@ -167,6 +168,9 @@ export const userService = {
     if (data.linkedinUrl !== undefined) updateData.linkedin_url = data.linkedinUrl;
     if (data.avatarUrl !== undefined) updateData.avatar_url = data.avatarUrl;
     if (data.role !== undefined) updateData.role = data.role;
+    if (data.forceShowInOrgTab !== undefined) {
+      updateData.force_show_in_org_tab = data.forceShowInOrgTab;
+    }
 
     const { data: result, error } = await supabase
       .from('profiles')

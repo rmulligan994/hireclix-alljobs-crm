@@ -53,10 +53,10 @@ export const MOCK_TEMPLATES: EmailTemplate[] = [
     id: 'tpl-1',
     site_id: 'site-1',
     name: 'Job Announcement',
-    subject: 'New Role: {{job_title}}',
-    html_body: '<h1>{{job_title}}</h1><p>Apply now at {{company_name}}</p>',
+    subject: 'New Role: {{jobTitle}}',
+    html_body: '<h1>{{jobTitle}}</h1><p>Apply now at {{senderCompany}}</p>',
     kind: 'announcement_form',
-    form_payload: { eyebrow: '', headline: '{{job_title}}', subhead: 'at {{company_name}}', message: 'We have an exciting new role for you.', messageRichHtml: null, useMessageRichHtml: false, previewText: '', buttonLabel: 'Apply Now', buttonUrl: '{{apply_url}}', signOff: '', blocks: [], useBlocks: false, complianceFooter: { ...DEFAULT_COMPLIANCE_FOOTER } },
+    form_payload: { eyebrow: '', headline: '{{jobTitle}}', subhead: 'at {{senderCompany}}', message: 'We have an exciting new role for you.', messageRichHtml: null, useMessageRichHtml: false, previewText: '', buttonLabel: 'Apply Now', buttonUrl: '{{jobUrl}}', signOff: '', blocks: [], useBlocks: false, complianceFooter: { ...DEFAULT_COMPLIANCE_FOOTER } },
     source: 'manual',
     webflow_asset_refs: [],
     created_by: 'user-1',
@@ -97,7 +97,7 @@ export const MOCK_TALENT_POOLS = [
 
 /* ---- 1. Job Announcement ---- */
 const jobAnnouncementHtml = emailShell(
-  'New role open at {{company_name}} — {{job_title}}. Apply today!',
+  'New role open at {{senderCompany}} — {{jobTitle}}. Apply today!',
   `<!-- Header -->
 <tr>
 <td style="padding:30px 40px 20px;background-color:#ffffff;border-radius:8px 8px 0 0;" class="padding-mobile">
@@ -109,45 +109,45 @@ const jobAnnouncementHtml = emailShell(
 <!-- Body -->
 <tr>
 <td style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:28px;line-height:34px;color:#1a1a2e;font-weight:bold;">{{job_title}}</h1>
-<p data-region="subheadline" style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#6b7280;">{{department}} &bull; {{location}} &bull; {{employment_type}}</p>
+<h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:28px;line-height:34px;color:#1a1a2e;font-weight:bold;">{{jobTitle}}</h1>
+<p data-region="subheadline" style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#6b7280;">{{jobDepartment}} &bull; {{jobLocation}} &bull; {{jobType}}</p>
 </td>
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We have an exciting new opportunity at <strong>{{company_name}}</strong> that matches your background. We're looking for a <strong>{{job_title}}</strong> to join our {{department}} team.</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We have an exciting new opportunity at <strong>{{senderCompany}}</strong> that matches your background. We're looking for a <strong>{{jobTitle}}</strong> to join our {{jobDepartment}} team.</p>
 <p style="margin:0 0 24px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">If you're interested — or know someone who'd be a great fit — we'd love to hear from you.</p>
 </td>
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;" class="padding-mobile">
-${ctaButton('View Role & Apply', '{{apply_url}}')}
+${ctaButton('View Role & Apply', '{{jobUrl}}')}
 </td>
 </tr>
 <!-- Sign-off -->
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Best,<br/>The {{company_name}} Recruiting Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Best,<br/>The {{senderCompany}} Recruiting Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 2. Event Invitation ---- */
 const eventInvitationHtml = emailShell(
-  'You\'re invited to {{event_name}} hosted by {{company_name}}.',
+  'You\'re invited to {{event_name}} hosted by {{senderCompany}}.',
   `<!-- Hero Banner -->
 <tr>
 <td style="padding:40px;background-color:#2563eb;border-radius:8px 8px 0 0;text-align:center;" class="padding-mobile">
 <p style="margin:0 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px;">You're Invited</p>
 <h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:32px;color:#ffffff;font-weight:bold;">{{event_name}}</h1>
-<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:rgba(255,255,255,0.85);">Hosted by {{company_name}}</p>
+<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:rgba(255,255,255,0.85);">Hosted by {{senderCompany}}</p>
 </td>
 </tr>
 <!-- Event Details -->
 <tr>
 <td data-region="body" style="padding:30px 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
+<p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
 <p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We'd love for you to join us at our upcoming event. Here are the details:</p>
 </td>
 </tr>
@@ -158,11 +158,11 @@ const eventInvitationHtml = emailShell(
 <tr><td style="padding:20px 24px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:6px;">DATE &amp; TIME</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">{{event_date}} at {{event_time}}</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">Thursday, June 12, 2026 at 4:00 PM PT</td></tr>
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:6px;">LOCATION</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">{{event_location}}</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">Virtual — link in calendar invite</td></tr>
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:6px;">FORMAT</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;font-weight:bold;">{{event_format}}</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;font-weight:bold;">Live webinar + Q&amp;A</td></tr>
 </table>
 </td></tr>
 </table>
@@ -175,26 +175,26 @@ ${ctaButton('RSVP Now', '{{rsvp_url}}')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We hope to see you there!<br/>{{company_name}} Talent Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We hope to see you there!<br/>{{senderCompany}} Talent Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 3. Candidate Newsletter ---- */
 const candidateNewsletterHtml = emailShell(
-  'Your monthly talent community update from {{company_name}}.',
+  'Your monthly talent community update from {{senderCompany}}.',
   `<!-- Header -->
 <tr>
 <td style="padding:30px 40px 20px;background-color:#ffffff;border-radius:8px 8px 0 0;" class="padding-mobile">
 <h1 data-region="headline" style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:24px;color:#1a1a2e;">Talent Community Update</h1>
-<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">{{newsletter_month}} {{newsletter_year}} &bull; {{company_name}}</p>
+<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">Monthly talent roundup &bull; {{senderCompany}}</p>
 </td>
 </tr>
 <!-- Intro -->
 <tr>
 <td data-region="body" style="padding:0 40px 20px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Here's what's new at {{company_name}} this month — from open roles to company highlights.</p>
+<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Here's what's new at {{senderCompany}} this month — from open roles to company highlights.</p>
 </td>
 </tr>
 <!-- Divider -->
@@ -222,21 +222,21 @@ ${ctaButton('View All Openings', '{{careers_url}}')}
 <tr>
 <td style="padding:20px 40px 10px;background-color:#ffffff;" class="padding-mobile">
 <p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#2563eb;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Company News</p>
-<h2 style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:18px;color:#1a1a2e;">{{news_headline}}</h2>
-<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">{{news_summary}}</p>
+<h2 style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:18px;color:#1a1a2e;">New office opening + product milestones</h2>
+<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We opened a new hub and shipped features customers asked for most — read the recap on our blog.</p>
 </td>
 </tr>
 <!-- Sign-off -->
 <tr>
 <td style="padding:20px 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Until next month,<br/>The {{company_name}} Talent Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Until next month,<br/>The {{senderCompany}} Talent Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 4. Interview Confirmation ---- */
 const interviewConfirmationHtml = emailShell(
-  'Your interview with {{company_name}} is confirmed for {{interview_date}}.',
+  'Your interview with {{senderCompany}} is confirmed for {{interview_date}}.',
   `<!-- Header -->
 <tr>
 <td style="padding:30px 40px 20px;background-color:#ffffff;border-radius:8px 8px 0 0;" class="padding-mobile">
@@ -252,8 +252,8 @@ const interviewConfirmationHtml = emailShell(
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Great news — your interview for <strong>{{job_title}}</strong> at {{company_name}} has been confirmed. Here's everything you need to know:</p>
+<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Great news — your interview for <strong>{{jobTitle}}</strong> at {{senderCompany}} has been confirmed. Here's everything you need to know:</p>
 </td>
 </tr>
 <!-- Details Card -->
@@ -263,13 +263,13 @@ const interviewConfirmationHtml = emailShell(
 <tr><td style="padding:20px 24px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:4px;">DATE</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">{{interview_date}}</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">Wednesday, June 18, 2026</td></tr>
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:4px;">TIME</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">{{interview_time}} ({{timezone}})</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">2:00 PM PT (Pacific Time)</td></tr>
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:4px;">INTERVIEWER</td></tr>
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">{{interviewer_name}}, {{interviewer_title}}</td></tr>
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:4px;">FORMAT</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;font-weight:bold;">{{interview_format}}</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;font-weight:bold;">Video call (link below)</td></tr>
 </table>
 </td></tr>
 </table>
@@ -285,7 +285,7 @@ ${ctaButton('Join / View Details', '{{interview_link}}', '#059669')}
 <td style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
 <h2 style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#1a1a2e;">How to Prepare</h2>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-<tr><td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#374151;">• Review the <a href="{{job_url}}" style="color:#2563eb;text-decoration:underline;">role description</a></td></tr>
+<tr><td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#374151;">• Review the <a href="{{jobUrl}}" style="color:#2563eb;text-decoration:underline;">role description</a></td></tr>
 <tr><td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#374151;">• Test your video / audio setup beforehand</td></tr>
 <tr><td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#374151;">• Prepare 2–3 questions for your interviewer</td></tr>
 <tr><td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#374151;">• Have a copy of your résumé handy</td></tr>
@@ -294,14 +294,14 @@ ${ctaButton('Join / View Details', '{{interview_link}}', '#059669')}
 </tr>
 <tr>
 <td style="padding:20px 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Need to reschedule? <a href="{{reschedule_url}}" style="color:#2563eb;text-decoration:underline;">Let us know</a>.<br/>Good luck!<br/>{{company_name}} Recruiting</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Need to reschedule? <a href="{{reschedule_url}}" style="color:#2563eb;text-decoration:underline;">Let us know</a>.<br/>Good luck!<br/>{{senderCompany}} Recruiting</p>
 </td>
 </tr>`
 );
 
 /* ---- 5. Referral Request ---- */
 const referralRequestHtml = emailShell(
-  '{{company_name}} is hiring — know someone great? Refer them today!',
+  '{{senderCompany}} is hiring — know someone great? Refer them today!',
   `<!-- Header -->
 <tr>
 <td style="padding:30px 40px 20px;background-color:#ffffff;border-radius:8px 8px 0 0;" class="padding-mobile">
@@ -311,9 +311,9 @@ const referralRequestHtml = emailShell(
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Great people know great people. We're expanding our <strong>{{department}}</strong> team and would love your help finding the right talent.</p>
-<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">If you know someone who'd thrive in the <strong>{{job_title}}</strong> role, send them our way. Successful referrals are rewarded with a <strong>{{referral_bonus}}</strong> bonus.</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Great people know great people. We're expanding our <strong>{{jobDepartment}}</strong> team and would love your help finding the right talent.</p>
+<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">If you know someone who'd thrive in the <strong>{{jobTitle}}</strong> role, send them our way. Successful referrals may qualify for a <strong>referral bonus</strong> (details in your employee handbook).</p>
 </td>
 </tr>
 <!-- How it works -->
@@ -338,25 +338,25 @@ ${ctaButton('Submit a Referral', '{{referral_url}}', '#7c3aed')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Thanks for helping us grow!<br/>{{company_name}} People Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Thanks for helping us grow!<br/>{{senderCompany}} People Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 6. Talent Pool Re-engagement ---- */
 const reEngagementHtml = emailShell(
-  'New opportunities at {{company_name}} — we\'d love to reconnect!',
+  'New opportunities at {{senderCompany}} — we\'d love to reconnect!',
   `<!-- Header -->
 <tr>
 <td style="padding:30px 40px 20px;background-color:#ffffff;border-radius:8px 8px 0 0;" class="padding-mobile">
 <h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:30px;color:#1a1a2e;">We'd Love to Reconnect</h1>
-<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">New opportunities are waiting at {{company_name}}</p>
+<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">New opportunities are waiting at {{senderCompany}}</p>
 </td>
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">It's been a while since we last connected, and a lot has changed at <strong>{{company_name}}</strong>. We've been growing, launching new initiatives, and opening exciting roles — and we think you might be a great fit.</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">It's been a while since we last connected, and a lot has changed at <strong>{{senderCompany}}</strong>. We've been growing, launching new initiatives, and opening exciting roles — and we think you might be a great fit.</p>
 <p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Here are a few highlights:</p>
 </td>
 </tr>
@@ -366,16 +366,16 @@ const reEngagementHtml = emailShell(
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
 <tr>
 <td style="padding:12px 16px;background-color:#eff6ff;border-radius:6px;margin-bottom:8px;">
-<p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#2563eb;font-weight:bold;">🚀 {{highlight_1_title}}</p>
-<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#374151;">{{highlight_1_description}}</p>
+<p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#2563eb;font-weight:bold;">🚀 New product launch</p>
+<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#374151;">We shipped a major release customers have been asking for — more on the blog.</p>
 </td>
 </tr>
 </table>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:8px;">
 <tr>
 <td style="padding:12px 16px;background-color:#eff6ff;border-radius:6px;">
-<p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#2563eb;font-weight:bold;">📈 {{highlight_2_title}}</p>
-<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#374151;">{{highlight_2_description}}</p>
+<p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#2563eb;font-weight:bold;">📈 Team growth</p>
+<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#374151;">We’re hiring across engineering and design — refer a friend or explore open roles.</p>
 </td>
 </tr>
 </table>
@@ -389,14 +389,14 @@ ${ctaButton('Explore Opportunities', '{{careers_url}}')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Looking forward to hearing from you,<br/>{{company_name}} Talent Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Looking forward to hearing from you,<br/>{{senderCompany}} Talent Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 7. Welcome to Talent Community ---- */
 const talentCommunityWelcomeHtml = emailShell(
-  'Welcome to the {{company_name}} talent community!',
+  'Welcome to the {{senderCompany}} talent community!',
   `<!-- Hero Banner -->
 <tr>
 <td style="padding:0;border-radius:8px 8px 0 0;overflow:hidden;">
@@ -410,8 +410,8 @@ const talentCommunityWelcomeHtml = emailShell(
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Thanks for joining the <strong>{{company_name}}</strong> talent community. You'll be the first to hear about new roles, events, and what it's like to work with us.</p>
+<p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Thanks for joining the <strong>{{senderCompany}}</strong> talent community. You'll be the first to hear about new roles, events, and what it's like to work with us.</p>
 <p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">In the meantime, here's what you can explore:</p>
 </td>
 </tr>
@@ -431,14 +431,14 @@ ${ctaButton('Explore Careers', '{{careers_url}}')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We're glad you're here,<br/>The {{company_name}} Talent Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We're glad you're here,<br/>The {{senderCompany}} Talent Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 8. Hiring Manager Introduction ---- */
 const hiringManagerIntroHtml = emailShell(
-  'Meet your potential future manager at {{company_name}}.',
+  'Meet your potential future manager at {{senderCompany}}.',
   `<!-- Header -->
 <tr>
 <td style="padding:30px 40px 20px;background-color:#ffffff;border-radius:8px 8px 0 0;" class="padding-mobile">
@@ -456,7 +456,7 @@ const hiringManagerIntroHtml = emailShell(
 </td>
 <td style="padding:20px 24px 20px 0;" valign="top">
 <p style="margin:0 0 2px;font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#1a1a2e;font-weight:bold;">{{manager_name}}</p>
-<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;">{{manager_title}} · {{company_name}}</p>
+<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;">{{manager_title}} · {{senderCompany}}</p>
 </td>
 </tr>
 </table>
@@ -464,8 +464,8 @@ const hiringManagerIntroHtml = emailShell(
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">I'm {{manager_name}}, and I lead the {{department}} team at {{company_name}}. I wanted to personally reach out because your background caught my attention.</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">I'm {{manager_name}}, and I lead the {{jobDepartment}} team at {{senderCompany}}. I wanted to personally reach out because your background caught my attention.</p>
 <p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We're building something exciting and I'd love to share more about the role and our team's mission. Would you be open to a quick conversation?</p>
 </td>
 </tr>
@@ -483,7 +483,7 @@ ${ctaButton('Schedule a Chat', '{{calendar_url}}')}
 
 /* ---- 9. Culture Spotlight ---- */
 const cultureSpotlightHtml = emailShell(
-  'See what it\'s like to work at {{company_name}}.',
+  'See what it\'s like to work at {{senderCompany}}.',
   `<!-- Hero Image -->
 <tr>
 <td style="padding:0;border-radius:8px 8px 0 0;overflow:hidden;">
@@ -492,14 +492,14 @@ const cultureSpotlightHtml = emailShell(
 </tr>
 <tr>
 <td style="padding:30px 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:32px;color:#1a1a2e;">Life at {{company_name}}</h1>
+<h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:32px;color:#1a1a2e;">Life at {{senderCompany}}</h1>
 <p data-region="subheadline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">A peek behind the scenes</p>
 </td>
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We believe great work happens when people feel valued, supported, and inspired. Here's a glimpse of what makes {{company_name}} a great place to build your career.</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We believe great work happens when people feel valued, supported, and inspired. Here's a glimpse of what makes {{senderCompany}} a great place to build your career.</p>
 </td>
 </tr>
 <!-- Team Photo -->
@@ -532,14 +532,14 @@ ${ctaButton('Explore Our Culture', '{{culture_url}}')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We'd love for you to be part of our story,<br/>{{company_name}} People Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We'd love for you to be part of our story,<br/>{{senderCompany}} People Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 10. Diversity & Inclusion Event ---- */
 const deiEventHtml = emailShell(
-  'Join us for {{event_name}} — a {{company_name}} D&I event.',
+  'Join us for {{event_name}} — a {{senderCompany}} D&I event.',
   `<!-- Hero Banner -->
 <tr>
 <td style="padding:0;border-radius:8px 8px 0 0;overflow:hidden;background:#7c3aed;">
@@ -550,12 +550,12 @@ const deiEventHtml = emailShell(
 <td style="padding:30px 40px 10px;background-color:#ffffff;" class="padding-mobile">
 <p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#7c3aed;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">D&I Event</p>
 <h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:30px;color:#1a1a2e;">{{event_name}}</h1>
-<p data-region="subheadline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">Hosted by {{company_name}}</p>
+<p data-region="subheadline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">Hosted by {{senderCompany}}</p>
 </td>
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
 <p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We're committed to building a workplace where everyone belongs. Join us for <strong>{{event_name}}</strong> to hear from leaders, share perspectives, and connect with our community.</p>
 </td>
 </tr>
@@ -566,9 +566,9 @@ const deiEventHtml = emailShell(
 <tr><td style="padding:20px 24px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:4px;">DATE & TIME</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">{{event_date}} at {{event_time}}</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;padding-bottom:14px;font-weight:bold;">Tuesday, Sept 9, 2026 at 12:00 PM PT</td></tr>
 <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;padding-bottom:4px;">LOCATION</td></tr>
-<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;font-weight:bold;">{{event_location}}</td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a2e;font-weight:bold;">HQ Auditorium + live stream</td></tr>
 </table>
 </td></tr>
 </table>
@@ -581,18 +581,18 @@ ${ctaButton('Register Now', '{{rsvp_url}}', '#7c3aed')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Together we're stronger,<br/>{{company_name}} D&I Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Together we're stronger,<br/>{{senderCompany}} D&I Team</p>
 </td>
 </tr>`
 );
 
 /* ---- 11. Passive Candidate Outreach ---- */
 const passiveOutreachHtml = emailShell(
-  '{{company_name}} — we think you\'d be a great fit.',
+  '{{senderCompany}} — we think you\'d be a great fit.',
   `<!-- Logo Header -->
 <tr>
 <td style="padding:30px 40px 20px;background-color:#ffffff;border-radius:8px 8px 0 0;text-align:center;" class="padding-mobile">
-<img src="https://via.placeholder.com/180x45/2563eb/ffffff?text={{company_name}}" alt="{{company_name}}" width="180" style="display:inline-block;max-height:45px;" />
+<img src="https://placehold.co/180x45/2563eb/ffffff/png?text=Your+logo" alt="{{senderCompany}}" width="180" style="display:inline-block;max-height:45px;" />
 </td>
 </tr>
 <tr>
@@ -602,9 +602,9 @@ const passiveOutreachHtml = emailShell(
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">I came across your profile and was impressed by your experience in <strong>{{skill_area}}</strong>. At <strong>{{company_name}}</strong>, we're solving interesting problems and building a team of exceptional people.</p>
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">I'm not reaching out about a specific role — I'd simply love to start a conversation about what you're looking for in your career and whether {{company_name}} might be a fit down the road.</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">I came across your profile and was impressed by your experience in <strong>{{skill_area}}</strong>. At <strong>{{senderCompany}}</strong>, we're solving interesting problems and building a team of exceptional people.</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">I'm not reaching out about a specific role — I'd simply love to start a conversation about what you're looking for in your career and whether {{senderCompany}} might be a fit down the road.</p>
 <p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">No pressure, no strings attached. Just a quick chat over coffee (virtual or in-person).</p>
 </td>
 </tr>
@@ -615,20 +615,20 @@ ${ctaButton('Let\'s Connect', '{{calendar_url}}')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Best,<br/>{{recruiter_name}}<br/>{{recruiter_title}}, {{company_name}}</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">Best,<br/>{{senderName}}<br/>{{senderTitle}}, {{senderCompany}}</p>
 </td>
 </tr>`
 );
 
 /* ---- 12. Employee Spotlight / Testimonial ---- */
 const employeeSpotlightHtml = emailShell(
-  'Hear from {{employee_name}} about life at {{company_name}}.',
+  'Hear from {{employee_name}} about life at {{senderCompany}}.',
   `<!-- Header -->
 <tr>
 <td style="padding:30px 40px 10px;background-color:#ffffff;border-radius:8px 8px 0 0;" class="padding-mobile">
 <p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#2563eb;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Employee Spotlight</p>
 <h1 data-region="headline" style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:30px;color:#1a1a2e;">Meet {{employee_name}}</h1>
-<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">{{employee_title}} at {{company_name}}</p>
+<p data-region="subheadline" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b7280;">{{employee_title}} at {{senderCompany}}</p>
 </td>
 </tr>
 <!-- Employee Photo -->
@@ -642,7 +642,7 @@ const employeeSpotlightHtml = emailShell(
 <td style="padding:10px 40px 20px;background-color:#ffffff;" class="padding-mobile">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-left:4px solid #2563eb;background:#f8fafc;border-radius:0 6px 6px 0;">
 <tr><td style="padding:16px 20px;">
-<p style="margin:0 0 8px;font-family:Georgia,serif;font-size:16px;line-height:26px;color:#374151;font-style:italic;">"{{employee_quote}}"</p>
+<p style="margin:0 0 8px;font-family:Georgia,serif;font-size:16px;line-height:26px;color:#374151;font-style:italic;">&ldquo;I get real ownership here — leadership trusts the team to ship and learn fast.&rdquo;</p>
 <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;">— {{employee_name}}, {{employee_title}}</p>
 </td></tr>
 </table>
@@ -650,8 +650,8 @@ const employeeSpotlightHtml = emailShell(
 </tr>
 <tr>
 <td data-region="body" style="padding:0 40px 10px;background-color:#ffffff;" class="padding-mobile">
-<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{member_name}},</p>
-<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We wanted to share {{employee_name}}'s story with you. At {{company_name}}, every person brings a unique perspective that makes our team stronger. Interested in writing your own story here?</p>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">Hi {{fullName}},</p>
+<p style="margin:0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#374151;">We wanted to share {{employee_name}}'s story with you. At {{senderCompany}}, every person brings a unique perspective that makes our team stronger. Interested in writing your own story here?</p>
 </td>
 </tr>
 <tr>
@@ -661,7 +661,7 @@ ${ctaButton('See Open Roles', '{{careers_url}}')}
 </tr>
 <tr>
 <td style="padding:0 40px 30px;background-color:#ffffff;border-radius:0 0 8px 8px;" class="padding-mobile">
-<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We'd love to meet you,<br/>{{company_name}} Talent Team</p>
+<p data-region="signoff" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6b7280;">We'd love to meet you,<br/>{{senderCompany}} Talent Team</p>
 </td>
 </tr>`
 );
@@ -676,16 +676,16 @@ export interface StarterTemplate {
 }
 
 export const STARTER_TEMPLATES: StarterTemplate[] = [
-  { id: 'starter-1', name: 'Job Announcement', description: 'Announce a new open role with title, team, location, and Apply CTA.', subject: 'Now Hiring: {{job_title}} at {{company_name}}', category: 'Sourcing', html: jobAnnouncementHtml },
-  { id: 'starter-2', name: 'Event Invitation', description: 'Invite candidates to a career fair, webinar, or recruiting event.', subject: 'You\'re Invited: {{event_name}} — {{company_name}}', category: 'Engagement', html: eventInvitationHtml },
-  { id: 'starter-3', name: 'Candidate Newsletter', description: 'Monthly talent community update with open roles and company news.', subject: '{{company_name}} Talent Update — {{newsletter_month}} {{newsletter_year}}', category: 'Engagement', html: candidateNewsletterHtml },
-  { id: 'starter-4', name: 'Interview Confirmation', description: 'Confirm interview details with date, time, interviewer, and prep tips.', subject: 'Interview Confirmed: {{job_title}} — {{interview_date}}', category: 'Scheduling', html: interviewConfirmationHtml },
-  { id: 'starter-5', name: 'Referral Request', description: 'Ask your network to refer great candidates with referral bonus info.', subject: 'Know Someone Great? Refer Them to {{company_name}}', category: 'Referrals', html: referralRequestHtml },
-  { id: 'starter-6', name: 'Talent Pool Re-engagement', description: 'Re-engage cold candidates with new opportunities and company highlights.', subject: 'New Opportunities at {{company_name}} — Let\'s Reconnect', category: 'Engagement', html: reEngagementHtml },
-  { id: 'starter-7', name: 'Welcome to Talent Community', description: 'Welcome new members to your talent community with links and resources.', subject: 'Welcome to the {{company_name}} Talent Community!', category: 'Engagement', html: talentCommunityWelcomeHtml },
-  { id: 'starter-8', name: 'Hiring Manager Introduction', description: 'Personal outreach from a hiring manager with headshot and calendar link.', subject: 'A Note from {{manager_name}} at {{company_name}}', category: 'Sourcing', html: hiringManagerIntroHtml },
-  { id: 'starter-9', name: 'Culture Spotlight', description: 'Showcase your company culture with photos, values, and team highlights.', subject: 'Life at {{company_name}} — See What We\'re About', category: 'Engagement', html: cultureSpotlightHtml },
-  { id: 'starter-10', name: 'D&I Event Invitation', description: 'Promote a diversity & inclusion event with details and registration.', subject: 'Join Us: {{event_name}} — {{company_name}}', category: 'Engagement', html: deiEventHtml },
-  { id: 'starter-11', name: 'Passive Candidate Outreach', description: 'Warm outreach to passive candidates — no specific role, just a conversation.', subject: 'Hi {{member_name}} — Let\'s Connect', category: 'Sourcing', html: passiveOutreachHtml },
-  { id: 'starter-12', name: 'Employee Spotlight', description: 'Share an employee testimonial with photo and quote to attract talent.', subject: 'Meet {{employee_name}} — Life at {{company_name}}', category: 'Engagement', html: employeeSpotlightHtml },
+  { id: 'starter-1', name: 'Job Announcement', description: 'Announce a new open role with title, team, location, and Apply CTA.', subject: 'Now Hiring: {{jobTitle}} at {{senderCompany}}', category: 'Sourcing', html: jobAnnouncementHtml },
+  { id: 'starter-2', name: 'Event Invitation', description: 'Invite candidates to a career fair, webinar, or recruiting event.', subject: 'You\'re Invited: {{event_name}} — {{senderCompany}}', category: 'Engagement', html: eventInvitationHtml },
+  { id: 'starter-3', name: 'Candidate Newsletter', description: 'Monthly talent community update with open roles and company news.', subject: '{{senderCompany}} Talent Update', category: 'Engagement', html: candidateNewsletterHtml },
+  { id: 'starter-4', name: 'Interview Confirmation', description: 'Confirm interview details with date, time, interviewer, and prep tips.', subject: 'Interview Confirmed: {{jobTitle}} — please review details inside', category: 'Scheduling', html: interviewConfirmationHtml },
+  { id: 'starter-5', name: 'Referral Request', description: 'Ask your network to refer great candidates with referral bonus info.', subject: 'Know Someone Great? Refer Them to {{senderCompany}}', category: 'Referrals', html: referralRequestHtml },
+  { id: 'starter-6', name: 'Talent Pool Re-engagement', description: 'Re-engage cold candidates with new opportunities and company highlights.', subject: 'New Opportunities at {{senderCompany}} — Let\'s Reconnect', category: 'Engagement', html: reEngagementHtml },
+  { id: 'starter-7', name: 'Welcome to Talent Community', description: 'Welcome new members to your talent community with links and resources.', subject: 'Welcome to the {{senderCompany}} Talent Community!', category: 'Engagement', html: talentCommunityWelcomeHtml },
+  { id: 'starter-8', name: 'Hiring Manager Introduction', description: 'Personal outreach from a hiring manager with headshot and calendar link.', subject: 'A Note from {{manager_name}} at {{senderCompany}}', category: 'Sourcing', html: hiringManagerIntroHtml },
+  { id: 'starter-9', name: 'Culture Spotlight', description: 'Showcase your company culture with photos, values, and team highlights.', subject: 'Life at {{senderCompany}} — See What We\'re About', category: 'Engagement', html: cultureSpotlightHtml },
+  { id: 'starter-10', name: 'D&I Event Invitation', description: 'Promote a diversity & inclusion event with details and registration.', subject: 'Join Us: {{event_name}} — {{senderCompany}}', category: 'Engagement', html: deiEventHtml },
+  { id: 'starter-11', name: 'Passive Candidate Outreach', description: 'Warm outreach to passive candidates — no specific role, just a conversation.', subject: 'Hi {{fullName}} — Let\'s Connect', category: 'Sourcing', html: passiveOutreachHtml },
+  { id: 'starter-12', name: 'Employee Spotlight', description: 'Share an employee testimonial with photo and quote to attract talent.', subject: 'Meet {{employee_name}} — Life at {{senderCompany}}', category: 'Engagement', html: employeeSpotlightHtml },
 ];

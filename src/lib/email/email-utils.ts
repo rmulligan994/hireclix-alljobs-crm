@@ -9,6 +9,7 @@ import type {
   ButtonBlock,
 } from '@/types/email-types';
 import { sanitizeEmailInlineHtml, stripHtmlToPlain } from './sanitize-email-inline-html';
+import { KNOWN_MERGE_TAG_KEYS } from '@/lib/email/merge-tags-validation';
 
 let _blockIdCounter = 0;
 export function genBlockId(): string {
@@ -113,6 +114,7 @@ export function escapeHtml(s: string): string {
  */
 export function resolveMergeTagsInString(text: string, map: Record<string, string | undefined>): string {
   return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (full, key: string) => {
+    if (!KNOWN_MERGE_TAG_KEYS.has(key)) return full;
     const v = map[key];
     if (v != null && String(v).trim() !== '') return String(v);
     return full;
@@ -190,6 +192,7 @@ export const CRM_PREVIEW_DEFAULTS: Record<string, string> = {
   skills: 'React, TypeScript',
   source: 'LinkedIn',
   linkedinUrl: 'https://linkedin.com/in/example',
+  linkedin_url: 'https://linkedin.com/in/example',
   campaignName: 'Sample Campaign',
   currentDate: '4/16/2026',
   currentTime: '9:00:00 AM',
@@ -240,6 +243,162 @@ export function buildCrmMergePreviewMap(
 /** HTML preview in the code editor tab — replaces {{tokens}} with sample data (Clarity + legacy keys). */
 export function applySampleMerge(html: string, _ignored?: Record<string, unknown>): string {
   return resolveMergeTagsInString(html, CRM_PREVIEW_DEFAULTS);
+}
+
+const PREVIEW_MERGE_SPAN_STYLE =
+  'background:rgba(254,243,199,0.55);border-bottom:1px dotted rgba(180,83,9,0.55);border-radius:2px;padding:0 2px;';
+
+const MERGE_TOKEN_IN_TEXT = /^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/;
+
+function previewSubstituteToken(key: string, context: 'text' | 'attr'): string | null {
+  if (!KNOWN_MERGE_TAG_KEYS.has(key)) return null;
+  const v = CRM_PREVIEW_DEFAULTS[key];
+  if (v == null || String(v).trim() === '') return null;
+  if (context === 'attr') {
+    return String(v)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+  const safe = escapeHtml(String(v));
+  const title = escapeHtml(`Sample: {{${key}}}`);
+  return `<span style="${PREVIEW_MERGE_SPAN_STYLE}" title="${title}" aria-label="${title}">${safe}</span>`;
+}
+
+/**
+ * Editor preview only: substitute known merge tokens. Text content gets subtle span wrappers;
+ * quoted attribute values (e.g. href="{{unsubscribeLink}}") get plain substitution so markup stays valid.
+ */
+export function applySampleMergeForPreview(html: string): string {
+  let out = '';
+  let i = 0;
+  let mode: 'text' | 'tag' | 'dq' | 'sq' = 'text';
+
+  while (i < html.length) {
+    if (mode === 'text') {
+      if (html[i] === '<') {
+        mode = 'tag';
+        out += html[i];
+        i++;
+        continue;
+      }
+      const m = MERGE_TOKEN_IN_TEXT.exec(html.slice(i));
+      if (m) {
+        const sub = previewSubstituteToken(m[1], 'text');
+        if (sub !== null) {
+          out += sub;
+          i += m[0].length;
+          continue;
+        }
+        out += m[0];
+        i += m[0].length;
+        continue;
+      }
+      out += html[i];
+      i++;
+      continue;
+    }
+
+    if (mode === 'tag') {
+      const ch = html[i];
+      if (ch === '>') {
+        mode = 'text';
+        out += ch;
+        i++;
+        continue;
+      }
+      if (ch === '=') {
+        out += ch;
+        i++;
+        while (i < html.length && /\s/.test(html[i])) {
+          out += html[i];
+          i++;
+        }
+        if (i < html.length) {
+          if (html[i] === '"') {
+            mode = 'dq';
+            out += html[i];
+            i++;
+            continue;
+          }
+          if (html[i] === "'") {
+            mode = 'sq';
+            out += html[i];
+            i++;
+            continue;
+          }
+        }
+        continue;
+      }
+      const tm = MERGE_TOKEN_IN_TEXT.exec(html.slice(i));
+      if (tm) {
+        const sub = previewSubstituteToken(tm[1], 'attr');
+        if (sub !== null) {
+          out += sub;
+          i += tm[0].length;
+          continue;
+        }
+        out += tm[0];
+        i += tm[0].length;
+        continue;
+      }
+      out += ch;
+      i++;
+      continue;
+    }
+
+    if (mode === 'dq') {
+      if (html[i] === '"') {
+        mode = 'tag';
+        out += html[i];
+        i++;
+        continue;
+      }
+      const m = MERGE_TOKEN_IN_TEXT.exec(html.slice(i));
+      if (m) {
+        const sub = previewSubstituteToken(m[1], 'attr');
+        if (sub !== null) {
+          out += sub;
+          i += m[0].length;
+          continue;
+        }
+        out += m[0];
+        i += m[0].length;
+        continue;
+      }
+      out += html[i];
+      i++;
+      continue;
+    }
+
+    if (mode === 'sq') {
+      if (html[i] === "'") {
+        mode = 'tag';
+        out += html[i];
+        i++;
+        continue;
+      }
+      const m = MERGE_TOKEN_IN_TEXT.exec(html.slice(i));
+      if (m) {
+        const sub = previewSubstituteToken(m[1], 'attr');
+        if (sub !== null) {
+          out += sub;
+          i += m[0].length;
+          continue;
+        }
+        out += m[0];
+        i += m[0].length;
+        continue;
+      }
+      out += html[i];
+      i++;
+      continue;
+    }
+  }
+
+  return out;
 }
 
 /** @deprecated Prefer buildCrmMergePreviewMap — headline/subhead are not CRM aliases. */
@@ -660,22 +819,23 @@ export function buildMergeTokenUsageReport(params: {
   crmMap: Record<string, string | undefined>;
 }): MergeTokenUsageRow[] {
   const { subject, form, htmlBody, crmMap } = params;
-  const blockMergeSources = form.useBlocks
-    ? form.blocks.flatMap((b): string[] => {
-        switch (b.type) {
-          case 'heading':
-            return [b.text, b.textHtml ?? ''];
-          case 'text':
-            return [b.content, b.contentHtml ?? ''];
-          case 'button':
-            return [b.label, b.url];
-          case 'image':
-            return [b.url, b.alt];
-          default:
-            return [];
-        }
-      })
-    : [];
+  const blockMergeSources =
+    form.blocks.length > 0
+      ? form.blocks.flatMap((b): string[] => {
+          switch (b.type) {
+            case 'heading':
+              return [b.text, b.textHtml ?? ''];
+            case 'text':
+              return [b.content, b.contentHtml ?? ''];
+            case 'button':
+              return [b.label, b.url];
+            case 'image':
+              return [b.url, b.alt];
+            default:
+              return [];
+          }
+        })
+      : [];
 
   const keys = extractMergeVars(
     subject,
@@ -691,23 +851,24 @@ export function buildMergeTokenUsageReport(params: {
     htmlBody,
     ...blockMergeSources,
   );
-  const blockSources: { label: string; text: string }[] = form.useBlocks
-    ? form.blocks.flatMap((b, i) => {
-        const label = `block_${i + 1}_${b.type}`;
-        switch (b.type) {
-          case 'heading':
-            return [{ label, text: `${b.text}\n${b.textHtml ?? ''}` }];
-          case 'text':
-            return [{ label, text: `${b.content}\n${b.contentHtml ?? ''}` }];
-          case 'button':
-            return [{ label, text: `${b.label}\n${b.url}` }];
-          case 'image':
-            return [{ label, text: `${b.url}\n${b.alt}` }];
-          default:
-            return [];
-        }
-      })
-    : [];
+  const blockSources: { label: string; text: string }[] =
+    form.blocks.length > 0
+      ? form.blocks.flatMap((b, i) => {
+          const label = `block_${i + 1}_${b.type}`;
+          switch (b.type) {
+            case 'heading':
+              return [{ label, text: `${b.text}\n${b.textHtml ?? ''}` }];
+            case 'text':
+              return [{ label, text: `${b.content}\n${b.contentHtml ?? ''}` }];
+            case 'button':
+              return [{ label, text: `${b.label}\n${b.url}` }];
+            case 'image':
+              return [{ label, text: `${b.url}\n${b.alt}` }];
+            default:
+              return [];
+          }
+        })
+      : [];
 
   const sources: { label: string; text: string }[] = [
     { label: 'subjectLine', text: subject },
@@ -888,7 +1049,7 @@ export function blocksToClassicAnnouncementFields(
   return {
     ...prev,
     useBlocks: false,
-    blocks: [],
+    blocks: blocks.map((b) => ({ ...b }) as ContentBlock),
     eyebrow,
     headline,
     subhead,
@@ -901,6 +1062,141 @@ export function blocksToClassicAnnouncementFields(
     buttonTextColor,
     signOff,
   };
+}
+
+function cloneContentBlock(b: ContentBlock): ContentBlock {
+  return { ...b } as ContentBlock;
+}
+
+function patchTextBlockInArray(arr: ContentBlock[], idx: number, content: string, contentHtml: string | null) {
+  const t = arr[idx] as TextBlock;
+  arr[idx] = { ...t, content, contentHtml };
+}
+
+/**
+ * Push simple-form field values into the block list while `useBlocks` is false, preserving
+ * images/dividers/spacers and order. Call after each classic-field edit when `blocks.length > 0`.
+ */
+export function syncClassicAnnouncementFieldsIntoBlocks(form: AnnouncementForm): AnnouncementForm {
+  if (form.useBlocks || form.blocks.length === 0) return form;
+
+  const next = form.blocks.map(cloneContentBlock);
+  let i = 0;
+
+  if (!form.eyebrow.trim()) {
+    while (i < next.length && next[i].type === 'text') {
+      patchTextBlockInArray(next, i, '', null);
+      i++;
+    }
+  } else {
+    const lines = form.eyebrow.split('\n');
+    let li = 0;
+    while (i < next.length && next[i].type === 'text' && li < lines.length) {
+      patchTextBlockInArray(next, i, lines[li], null);
+      li++;
+      i++;
+    }
+    while (li < lines.length) {
+      next.splice(i, 0, { type: 'text', id: genBlockId(), content: lines[li], contentHtml: null });
+      li++;
+      i++;
+    }
+    while (i < next.length && next[i].type === 'text') {
+      patchTextBlockInArray(next, i, '', null);
+      i++;
+    }
+  }
+
+  i = skipDecorativeBlocks(next, i);
+
+  if (i < next.length && next[i].type === 'heading') {
+    const h = next[i] as HeadingBlock;
+    next[i] = { ...h, text: form.headline, textHtml: null };
+    i++;
+  } else if (form.headline.trim()) {
+    next.splice(i, 0, { type: 'heading', id: genBlockId(), text: form.headline, level: 2 });
+    i++;
+  }
+
+  i = skipDecorativeBlocks(next, i);
+
+  if (i < next.length && next[i].type === 'text') {
+    patchTextBlockInArray(next, i, form.subhead, null);
+    i++;
+  } else if (form.subhead.trim()) {
+    next.splice(i, 0, { type: 'text', id: genBlockId(), content: form.subhead, contentHtml: null });
+    i++;
+  }
+
+  i = skipDecorativeBlocks(next, i);
+
+  const msgStart = i;
+  if (form.useMessageRichHtml && (form.messageRichHtml ?? '').trim()) {
+    const html = sanitizeEmailInlineHtml(form.messageRichHtml ?? '');
+    const plain = form.message.trim() || stripHtmlToPlain(html);
+    while (i < next.length && next[i].type === 'text') i++;
+    const msgEnd = i;
+    if (msgStart < msgEnd) {
+      const t0 = next[msgStart] as TextBlock;
+      next[msgStart] = { ...t0, content: plain, contentHtml: html || null };
+      for (let j = msgStart + 1; j < msgEnd; j++) {
+        patchTextBlockInArray(next, j, '', null);
+      }
+    } else if (plain.trim() || html.trim()) {
+      next.splice(msgStart, 0, { type: 'text', id: genBlockId(), content: plain, contentHtml: html || null });
+      i = msgStart + 1;
+    } else {
+      i = msgStart;
+    }
+  } else {
+    const raw = form.message ?? '';
+    const parts = raw.length === 0 ? [] : raw.split(/\n\n/);
+    let pi = 0;
+    while (i < next.length && next[i].type === 'text') {
+      const content = pi < parts.length ? parts[pi] : '';
+      patchTextBlockInArray(next, i, content, null);
+      pi++;
+      i++;
+    }
+    while (pi < parts.length && parts[pi].trim()) {
+      next.splice(i, 0, { type: 'text', id: genBlockId(), content: parts[pi], contentHtml: null });
+      i++;
+      pi++;
+    }
+  }
+
+  i = skipDecorativeBlocks(next, i);
+
+  if (i < next.length && next[i].type === 'button') {
+    const b = next[i] as ButtonBlock;
+    next[i] = {
+      ...b,
+      label: form.buttonLabel,
+      url: form.buttonUrl,
+      bgColor: form.buttonBgColor,
+      textColor: form.buttonTextColor,
+    };
+    i++;
+  }
+
+  i = skipDecorativeBlocks(next, i);
+
+  const rawSign = form.signOff ?? '';
+  const soParts = rawSign.length === 0 ? [] : rawSign.split(/\n\n/);
+  let si = 0;
+  while (i < next.length && next[i].type === 'text') {
+    const content = si < soParts.length ? soParts[si] : '';
+    patchTextBlockInArray(next, i, content, null);
+    si++;
+    i++;
+  }
+  while (si < soParts.length && soParts[si].trim()) {
+    next.splice(i, 0, { type: 'text', id: genBlockId(), content: soParts[si], contentHtml: null });
+    i++;
+    si++;
+  }
+
+  return { ...form, blocks: next };
 }
 
 /** Create an empty announcement form */
@@ -922,6 +1218,19 @@ export function emptyAnnouncementForm(): AnnouncementForm {
   };
 }
 
+/** True when flat/simple announcement fields carry visible copy (AI classic mode, simple form, etc.). */
+export function announcementFormHasClassicBodyContent(form: AnnouncementForm): boolean {
+  if (form.eyebrow?.trim()) return true;
+  if (form.headline?.trim()) return true;
+  if (form.subhead?.trim()) return true;
+  if (form.message?.trim()) return true;
+  if ((form.messageRichHtml ?? '').trim()) return true;
+  if (form.buttonLabel?.trim()) return true;
+  if (form.buttonUrl?.trim()) return true;
+  if (form.signOff?.trim()) return true;
+  return false;
+}
+
 /** Convert announcement form to JSON payload */
 export function announcementFormToPayload(form: AnnouncementForm): AnnouncementForm {
   return { ...form };
@@ -930,7 +1239,7 @@ export function announcementFormToPayload(form: AnnouncementForm): AnnouncementF
 /** Convert payload back to announcement form */
 export function payloadToAnnouncementForm(payload: unknown): AnnouncementForm {
   const p = payload as Partial<AnnouncementForm> | null;
-  return {
+  const base: AnnouncementForm = {
     eyebrow: p?.eyebrow ?? '',
     headline: p?.headline ?? '',
     subhead: p?.subhead ?? '',
@@ -947,10 +1256,15 @@ export function payloadToAnnouncementForm(payload: unknown): AnnouncementForm {
     useBlocks: p?.useBlocks ?? false,
     complianceFooter: normalizeComplianceFooter(p?.complianceFooter as Partial<ComplianceFooter> | null),
   };
+  if (!base.useBlocks && base.blocks.length > 0) {
+    return blocksToClassicAnnouncementFields(base.blocks, base);
+  }
+  return base;
 }
 
 /** Check if announcement form is valid for saving (requires headline or blocks) */
 export function isValidAnnouncementForSave(form: AnnouncementForm): boolean {
+  if (form.blocks.length > 0) return true;
   if (form.useBlocks) return form.blocks.length > 0;
   return form.headline.trim().length > 0;
 }
@@ -1300,9 +1614,16 @@ export function renderBlocksToHTML(
   siteConfig: { siteName: string },
   brand?: BrandSettings,
   complianceFooter?: ComplianceFooter,
+  /** When set (e.g. from announcement simple form), used for hidden preheader like flat Visual mode. */
+  previewText?: string,
 ): string {
   const firstHeading = blocks.find(b => b.type === 'heading');
-  const preheader = firstHeading?.type === 'heading' ? firstHeading.text : siteConfig.siteName;
+  const preheaderRaw = previewText?.trim()
+    ? previewText.trim()
+    : firstHeading?.type === 'heading'
+      ? firstHeading.text
+      : siteConfig.siteName;
+  const preheader = preheaderRaw.replace(/</g, '&lt;');
 
   const logoRow = brand?.logoUrl
     ? `<tr><td style="padding:20px 40px 10px;background-color:#ffffff;border-radius:8px 8px 0 0;text-align:center;" class="padding-mobile">
@@ -1338,9 +1659,13 @@ export function renderAnnouncementToHTML(
   siteConfig: { siteName: string; memberName?: string },
   brand?: BrandSettings
 ): string {
-  // Block layout (including empty — preview/shell only until user adds blocks)
-  if (form.useBlocks) {
-    return renderBlocksToHTML(form.blocks, siteConfig, brand, form.complianceFooter);
+  // Block layout when there are blocks, or explicit blocks mode with no classic body (empty shell / footer-only).
+  // If useBlocks was set without blocks but classic fields are filled (e.g. regressed EmailComposer sync), use flat layout.
+  if (form.blocks.length > 0) {
+    return renderBlocksToHTML(form.blocks, siteConfig, brand, form.complianceFooter, form.previewText);
+  }
+  if (form.useBlocks && !announcementFormHasClassicBodyContent(form)) {
+    return renderBlocksToHTML(form.blocks, siteConfig, brand, form.complianceFooter, form.previewText);
   }
 
   const { headline, subhead, message, messageRichHtml, useMessageRichHtml, previewText, buttonLabel, buttonUrl, signOff } = form;
@@ -1392,15 +1717,25 @@ ${legacyComplianceFooterRow(form.complianceFooter, font)}
 </html>`;
 }
 
+export type EmailEditorPreviewOptions = {
+  /** When false, leave `{{merge}}` tokens as written in the preview. When true, substitute sample values with highlight styling. Default true. */
+  mergeHighlights?: boolean;
+};
+
 /** Unified preview HTML for Visual vs Code mode (email editor / live preview pane). */
 export function getEmailEditorPreviewHtml(
   composeKind: ComposeKind,
   formPayload: AnnouncementForm,
   htmlBody: string,
   siteName: string,
+  options?: EmailEditorPreviewOptions,
 ): string {
-  if (composeKind === 'announcement_form') {
-    return applySampleMerge(renderAnnouncementToHTML(formPayload, { siteName }), {});
+  const raw =
+    composeKind === 'announcement_form'
+      ? renderAnnouncementToHTML(formPayload, { siteName })
+      : htmlBody;
+  if (options?.mergeHighlights === false) {
+    return raw;
   }
-  return applySampleMerge(htmlBody, {});
+  return applySampleMergeForPreview(raw);
 }

@@ -412,7 +412,7 @@ async function sendWelcomeEmailIfConfigured(
       candidate_id: candidateId,
       type: "email",
       subject: personalizedSubject,
-      content: personalizedHtml.replace(/<[^>]*>/g, "").slice(0, 500),
+      content: null,
       direction: "outbound",
       occurred_at: new Date().toISOString(),
       campaign_recipient_id: null,

@@ -20,6 +20,8 @@ export interface Campaign {
   job_id?: string | null;
   folder_id?: string | null;
   is_organization_campaign?: boolean;
+  /** When org-shared: if your admin has not forced listing, controls your campaign in the Organization tab. */
+  show_in_org_tab?: boolean;
   archived_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -97,6 +99,7 @@ export interface CreateCampaignInput {
   job_id?: string | null;
   folder_id?: string | null;
   is_organization_campaign?: boolean;
+  show_in_org_tab?: boolean;
 }
 
 export interface UpdateCampaignInput {
@@ -110,6 +113,7 @@ export interface UpdateCampaignInput {
   job_id?: string | null;
   folder_id?: string | null;
   is_organization_campaign?: boolean;
+  show_in_org_tab?: boolean;
   archived_at?: string | null;
 }
 

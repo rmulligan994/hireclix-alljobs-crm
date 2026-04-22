@@ -15,6 +15,8 @@ import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 import { format, addDays, differenceInDays, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { isUuid } from '@/lib/isUuid';
+import { findUnknownMergeTagsInStrings, formatUnknownMergeTagsMessage } from '@/lib/email/merge-tags-validation';
+import { toast } from 'sonner';
 
 type ScheduleType = 'custom' | 'daily' | 'weekly' | 'monthly' | 'specific_dates';
 
@@ -37,6 +39,8 @@ interface SequenceBuilderProps {
   campaignJobId?: string | null;
   /** Scopes AI chat persistence in the email editor to this campaign. */
   campaignId?: string | null;
+  /** Draft AI chat scope when `campaignId` is not set yet (from CampaignBuilder). */
+  emailDraftChatSessionId?: string | null;
   /** When editing, pre-populate steps from campaign_emails */
   initialSteps?: Partial<CampaignEmail>[];
 }
@@ -72,6 +76,7 @@ export const SequenceBuilder = ({
   onContinue,
   campaignJobId,
   campaignId,
+  emailDraftChatSessionId = null,
   initialSteps,
 }: SequenceBuilderProps) => {
   const [sendImmediately, setSendImmediately] = useState(true);
@@ -222,6 +227,11 @@ export const SequenceBuilder = ({
     compose_kind: ComposeKind;
     form_payload: AnnouncementForm | null;
   }) => {
+    const bad = findUnknownMergeTagsInStrings(payload.subject, payload.html);
+    if (bad.length) {
+      toast.error(formatUnknownMergeTagsMessage(bad));
+      return;
+    }
     if (editingStep) {
       setSteps(steps.map(s =>
         s.id === editingStep
@@ -268,7 +278,20 @@ export const SequenceBuilder = ({
     return { delayDays, delayHours };
   };
 
+  const unknownMergeTagsAcrossSteps = (): string[] => {
+    const acc = new Set<string>();
+    for (const step of steps) {
+      for (const k of findUnknownMergeTagsInStrings(step.subject, step.htmlContent ?? '')) acc.add(k);
+    }
+    return [...acc].sort();
+  };
+
   const handleContinue = () => {
+    const mergeBad = unknownMergeTagsAcrossSteps();
+    if (mergeBad.length) {
+      toast.error(formatUnknownMergeTagsMessage(mergeBad));
+      return;
+    }
     if (scheduleType === 'specific_dates') {
       const hasInvalidDates = steps.some((step, i) => {
         if (i === 0) return false;
@@ -330,6 +353,7 @@ export const SequenceBuilder = ({
   };
 
   const canContinue = () => {
+    if (unknownMergeTagsAcrossSteps().length > 0) return false;
     if (!sendImmediately) {
       if (scheduleType === 'specific_dates') {
         if (!firstSendDate) return false;
@@ -451,6 +475,7 @@ export const SequenceBuilder = ({
           <DialogTitle className="sr-only">Edit sequence email</DialogTitle>
           <HtmlCampaignEmailEditor
             key={editingStep ?? 'closed'}
+            editorSeed={`${emailDraftChatSessionId}-${editingStep ?? ''}`}
             initialSubject={editingStepData?.subject ?? ''}
             initialHtmlContent={editingStepData?.htmlContent}
             initialComposeKind={editingStepData?.composeKind ?? 'announcement_form'}
@@ -459,6 +484,8 @@ export const SequenceBuilder = ({
             onCancel={() => setEditingStep(null)}
             campaignJobId={campaignJobId}
             campaignId={campaignId}
+            draftChatSessionId={emailDraftChatSessionId}
+            aiChatScopeSuffix={editingStep}
           />
         </DialogContent>
       </Dialog>

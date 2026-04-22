@@ -53,6 +53,7 @@ function mapCampaignRow(c: CampaignRow): Campaign {
     job_id: c.job_id,
     folder_id: c.folder_id,
     is_organization_campaign: c.is_organization_campaign ?? undefined,
+    show_in_org_tab: c.show_in_org_tab ?? true,
     archived_at: c.archived_at,
     created_at: c.created_at,
     updated_at: c.updated_at,
@@ -99,6 +100,7 @@ export const campaignService = {
       job_id: input.job_id ?? null,
       folder_id: input.folder_id ?? null,
       is_organization_campaign: input.is_organization_campaign ?? false,
+      show_in_org_tab: input.show_in_org_tab ?? true,
     };
     if (input.schedule_recurrence !== undefined) {
       insertData.schedule_recurrence = input.schedule_recurrence as Json;
@@ -125,6 +127,7 @@ export const campaignService = {
     if (input.job_id !== undefined) updateData.job_id = input.job_id;
     if (input.folder_id !== undefined) updateData.folder_id = input.folder_id;
     if (input.is_organization_campaign !== undefined) updateData.is_organization_campaign = input.is_organization_campaign;
+    if (input.show_in_org_tab !== undefined) updateData.show_in_org_tab = input.show_in_org_tab;
     if (input.archived_at !== undefined) updateData.archived_at = input.archived_at;
 
     const { data, error } = await supabase
@@ -395,7 +398,7 @@ export const campaignService = {
     return candidates.length;
   },
 
-  // Get campaigns filtered by scope (my vs org)
+  // Get campaigns you own (not archived). Org-shared ones stay here; Organization tab is separate.
   async getMyCampaigns(): Promise<Campaign[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
@@ -409,7 +412,13 @@ export const campaignService = {
     return (data || []).map(mapCampaignRow);
   },
 
-  async getOrgCampaigns(): Promise<Campaign[]> {
+  /**
+   * Organization tab: all org-shared campaigns, then apply listing rules for your own rows.
+   * @param forceShowInOrgTab — from profile: when true, your org campaigns always list here; when false, uses each campaign’s show_in_org_tab.
+   */
+  async getOrgCampaigns(options: { forceShowInOrgTab: boolean }): Promise<Campaign[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
     const { data, error } = await supabase
       .from('campaigns')
       .select('*')
@@ -417,7 +426,36 @@ export const campaignService = {
       .is('archived_at', null)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map(mapCampaignRow);
+    const rows = (data || []).map(mapCampaignRow);
+    return rows.filter((c) => {
+      if (c.user_id !== user.id) return true;
+      if (options.forceShowInOrgTab) return true;
+      return c.show_in_org_tab !== false;
+    });
+  },
+
+  /**
+   * Earliest send time per sequence step, from `scheduled_emails` (status = sent).
+   * Step 1 on “Launch now” may not create these rows, so a step can be missing from the map.
+   */
+  async getFirstSentAtByCampaignEmailId(campaignId: string): Promise<Record<string, string>> {
+    const { data, error } = await supabase
+      .from('scheduled_emails')
+      .select('campaign_email_id, sent_at')
+      .eq('campaign_id', campaignId)
+      .eq('status', 'sent')
+      .not('sent_at', 'is', null);
+    if (error) throw error;
+    const map: Record<string, string> = {};
+    for (const row of data || []) {
+      const eid = row.campaign_email_id;
+      const t = row.sent_at;
+      if (typeof eid !== 'string' || typeof t !== 'string') continue;
+      if (!map[eid] || new Date(t) < new Date(map[eid])) {
+        map[eid] = t;
+      }
+    }
+    return map;
   },
 
   async getArchivedCampaigns(): Promise<Campaign[]> {
@@ -658,6 +696,7 @@ export const campaignService = {
       goal: campaign.goal,
       audience_filter: campaign.audience_filter,
       folder_id: campaign.folder_id ?? undefined,
+      is_organization_campaign: false,
     });
     for (const e of emails) {
       await this.createEmail({

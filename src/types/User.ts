@@ -21,6 +21,8 @@ export interface Profile {
   linkedinUrl?: string;
   avatarUrl?: string;
   role?: UserRole;
+  /** Admins (Team): when true, all of this user’s org-shared campaigns appear in Organization; when false, each campaign can opt in. */
+  forceShowInOrgTab?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

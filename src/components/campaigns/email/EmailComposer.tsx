@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Upload, Clipboard, BookOpen, Globe, ChevronDown, Monitor, Smartphone, Plus, X, Image, Type, Heading, MousePointerClick, Minus, FolderOpen, Info, ArrowDownToLine, LayoutList, GripVertical, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { AnnouncementForm, ComposeKind, ContentBlock, ComplianceFooter } from '@/types/email-types';
 import {
   emptyAnnouncementForm,
@@ -20,11 +21,13 @@ import {
   getEmailEditorPreviewHtml,
   classicAnnouncementFieldsToBlocks,
   blocksToClassicAnnouncementFields,
+  syncClassicAnnouncementFieldsIntoBlocks,
   payloadToAnnouncementForm,
   normalizeComplianceFooter,
   normalizeEmailHexColor,
   resolveButtonBlockColors,
   resolveSimpleFormCtaColors,
+  announcementFormHasClassicBodyContent,
 } from '@/lib/email/email-utils';
 import {
   buildFormPayloadFromImportedHtml,
@@ -41,8 +44,13 @@ import { DndContext, DragEndEvent, KeyboardSensor, PointerSensor, closestCenter,
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { RichTextInlineEditor } from './RichTextInlineEditor';
+import { Switch } from '@/components/ui/switch';
 import { EmailTemplatePickerDialog } from './EmailTemplatePickerDialog';
 import type { EmailTemplate } from '@/services/emailTemplateService';
+import {
+  findUnknownMergeTagsInStrings,
+  formatUnknownMergeTagsMessage,
+} from '@/lib/email/merge-tags-validation';
 
 interface EmailComposerProps {
   /** Shown in previews and in rendered HTML (brand / site label). */
@@ -162,11 +170,14 @@ function ImageBlockWidthField({
 /** Explains blocks vs simple form vs templates vs toolbar imports — one place so users aren’t lost. */
 function VisualLayoutHelpPanel({
   mode,
+  simpleDisabled,
   onLoadSavedTemplate,
   onSwitchToBlocks,
   onSwitchToSimple,
 }: {
   mode: 'blocks' | 'simple';
+  /** Simple form only flattens an existing block layout — no separate “preset” form. */
+  simpleDisabled: boolean;
   onLoadSavedTemplate: () => void;
   onSwitchToBlocks: () => void;
   onSwitchToSimple: () => void;
@@ -183,31 +194,58 @@ function VisualLayoutHelpPanel({
         <p className="text-[11px] text-muted-foreground leading-snug">
           {mode === 'blocks'
             ? 'Sections you can reorder and add to. Use when you want images, spacing, or a custom order.'
-            : 'One field per part of the email (headline, message, button…). Use when you want a quick, linear layout.'}
+            : 'The same email as Blocks, shown as linear fields (headline, message, button…). Edits stay synced with your blocks.'}
         </p>
       </div>
-      <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto justify-center" onClick={onLoadSavedTemplate}>
+      <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-stretch">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full sm:w-auto justify-center border-2 border-sunrise/60 bg-transparent"
+          onClick={onLoadSavedTemplate}
+        >
           <LayoutList className="h-4 w-4 mr-2 shrink-0" />
           Load from your templates
         </Button>
-        {mode === 'blocks' ? (
-          <Button type="button" variant="ghost" size="sm" className="w-full sm:w-auto justify-center text-muted-foreground" onClick={onSwitchToSimple}>
-            Switch to simple form
-          </Button>
-        ) : (
-          <Button type="button" variant="ghost" size="sm" className="w-full sm:w-auto justify-center text-muted-foreground" onClick={onSwitchToBlocks}>
-            Switch to blocks
-          </Button>
-        )}
+        <div className="flex w-full sm:min-w-[220px] sm:flex-1 sm:max-w-md rounded-md gap-1.5">
+          <button
+            type="button"
+            onClick={onSwitchToBlocks}
+            className={cn(
+              'flex-1 rounded-md border-2 border-sunrise px-3 py-2 text-xs font-medium transition-colors',
+              mode === 'blocks' ? 'bg-sunrise text-slate-900' : 'bg-transparent text-foreground',
+            )}
+          >
+            Blocks
+          </button>
+          <button
+            type="button"
+            title={simpleDisabled ? 'Add at least one content block first' : undefined}
+            disabled={simpleDisabled}
+            onClick={() => {
+              if (!simpleDisabled) onSwitchToSimple();
+            }}
+            className={cn(
+              'flex-1 rounded-md border-2 border-sunrise px-3 py-2 text-xs font-medium transition-colors',
+              mode === 'simple' ? 'bg-sunrise text-slate-900' : 'bg-transparent text-foreground',
+              simpleDisabled && 'opacity-50 cursor-not-allowed',
+            )}
+          >
+            Simple form
+          </button>
+        </div>
       </div>
+      {simpleDisabled ? (
+        <p className="text-[10px] text-muted-foreground">Add a block first — simple form is the same layout flattened into fields.</p>
+      ) : null}
       <p className="text-[10px] text-muted-foreground border-t border-border/70 pt-2.5 leading-relaxed">
         <span className="font-medium text-foreground/90">Saved templates</span> are emails you stored in Clarity — loading one replaces this draft’s
         subject and body.
         <span className="block mt-1.5">
           <span className="font-medium text-foreground/90">Starters</span> (book icon in the toolbar) are built-in layouts.{' '}
-          <span className="font-medium text-foreground/90">Import / Paste</span> bring your own HTML. Switching between blocks and simple form keeps
-          your text — it is copied, not deleted.
+          <span className="font-medium text-foreground/90">Import / Paste</span> bring your own HTML. Simple form is not a different template — it
+          solidifies your current blocks into fields; images and extra blocks remain in the layout.
         </span>
       </p>
     </div>
@@ -229,15 +267,15 @@ function AddBlockMenuItems({ onPick }: { onPick: (t: ContentBlock['type']) => vo
 
 function BlockInsertRow({ onInsert }: { onInsert: (type: ContentBlock['type']) => void }) {
   return (
-    <div className="group relative flex items-center justify-center py-1.5 min-h-[32px] -my-0.5">
-      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border/60 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+    <div className="group email-block-insert-shake relative flex items-center justify-center py-1.5 min-h-[32px] -my-0.5">
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border/60 opacity-40 group-hover:opacity-100 transition-opacity pointer-events-none" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
             variant="outline"
             size="icon"
-            className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100 transition-all z-10 bg-background shadow-sm border-dashed"
+            className="h-7 w-7 rounded-full z-10 bg-background shadow-sm border-dashed scale-100 group-hover:scale-105 transition-transform"
             aria-label="Add block here"
           >
             <Plus className="h-4 w-4" />
@@ -443,7 +481,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenAssetPicker }: {
         <div className="flex items-start gap-2 p-2 border rounded-md bg-muted/20">
           <div className="flex-1 space-y-1">
             <Label className="text-xs text-muted-foreground">Text</Label>
-            <p className="text-[10px] text-muted-foreground mb-1">Toolbar: bold, italic, underline, color.</p>
+            <p className="text-[10px] text-muted-foreground mb-1">Toolbar: bold, italic, color.</p>
             <RichTextInlineEditor
               editorKey={block.id}
               valuePlain={block.content}
@@ -573,6 +611,17 @@ export function EmailComposer({
   const [regionReviewOpen, setRegionReviewOpen] = useState(false);
   const [regionReviewPrepare, setRegionReviewPrepare] = useState<PrepareRegionMappingResult | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [previewMergeHighlights, setPreviewMergeHighlights] = useState(true);
+
+  useEffect(() => {
+    if (
+      !formPayload.useBlocks &&
+      formPayload.blocks.length === 0 &&
+      !announcementFormHasClassicBodyContent(formPayload)
+    ) {
+      onFormPayloadChange({ ...formPayload, useBlocks: true });
+    }
+  }, [formPayload, onFormPayloadChange]);
 
   const SIGN_OFF_IMPORT_DEFAULT = 'Best,\nYour Team';
 
@@ -586,36 +635,62 @@ export function EmailComposer({
     });
   };
 
-  const finalizeRegionalHtml = (html: string, toastMsg?: string) => {
+  /** Simple-form edits must update underlying blocks when a block list is retained (blocks/simple toggle). */
+  const patchSimpleClassicFields = (patch: Partial<AnnouncementForm>) => {
+    const merged = { ...formPayload, ...patch };
+    if (merged.useBlocks || merged.blocks.length === 0) {
+      onFormPayloadChange(merged);
+      return;
+    }
+    onFormPayloadChange(syncClassicAnnouncementFieldsIntoBlocks(merged));
+  };
+
+  const finalizeRegionalHtml = (html: string, toastMsg?: string): boolean => {
+    const bad = findUnknownMergeTagsInStrings(subject, html);
+    if (bad.length) {
+      toast.error(formatUnknownMergeTagsMessage(bad));
+      return false;
+    }
     onHtmlBodyChange(html);
     onComposeKindChange('raw_html');
     onFormPayloadChange(buildFormPayloadFromImportedHtml(html, SIGN_OFF_IMPORT_DEFAULT));
     if (toastMsg) toast.success(toastMsg);
+    return true;
   };
 
-  const beginHtmlImport = (raw: string) => {
+  const beginHtmlImport = (raw: string): boolean => {
     const plan = planScratchEmailHtmlImport(raw);
     if (plan.kind === 'empty') {
       toast.error(SCRATCH_HTML_IMPORT_COPY.noHtmlToImport);
-      return;
+      return false;
     }
     if (plan.kind === 'assignable_regions') {
-      finalizeRegionalHtml(plan.html, SCRATCH_HTML_IMPORT_COPY.toastAssignableRegions);
-      return;
+      return finalizeRegionalHtml(plan.html, SCRATCH_HTML_IMPORT_COPY.toastAssignableRegions);
     }
     if (plan.kind === 'static_html') {
+      const bad = findUnknownMergeTagsInStrings(subject, plan.html);
+      if (bad.length) {
+        toast.error(formatUnknownMergeTagsMessage(bad));
+        return false;
+      }
       onHtmlBodyChange(plan.html);
       onComposeKindChange('raw_html');
       toast.message(SCRATCH_HTML_IMPORT_COPY.toastStaticFallback);
-      return;
+      return true;
     }
     setRegionReviewPrepare(plan.prep);
     setRegionReviewOpen(true);
+    return true;
   };
 
   // Parse HTML into blocks and switch to visual mode
   const applyHtmlWithParsing = (html: string) => {
     const clean = stripEmailScripts(html);
+    const bad = findUnknownMergeTagsInStrings(subject, clean);
+    if (bad.length) {
+      toast.error(formatUnknownMergeTagsMessage(bad));
+      return;
+    }
     onHtmlBodyChange(clean);
     const blocks = parseHtmlToBlocks(clean);
     if (blocks.length > 0) {
@@ -636,8 +711,9 @@ export function EmailComposer({
     }
     const reader = new FileReader();
     reader.onload = () => {
-      beginHtmlImport(String(reader.result || ''));
-      toast.success('HTML file loaded');
+      if (beginHtmlImport(String(reader.result || ''))) {
+        toast.success('HTML file loaded');
+      }
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -648,7 +724,7 @@ export function EmailComposer({
       toast.error(SCRATCH_HTML_IMPORT_COPY.pasteEmptyError);
       return;
     }
-    beginHtmlImport(pasteHtml);
+    if (!beginHtmlImport(pasteHtml)) return;
     setPasteHtml('');
     setPasteOpen(false);
   };
@@ -668,6 +744,11 @@ export function EmailComposer({
     } else if (kind === 'announcement_form' && composeKind === 'raw_html') {
       // Code → Visual: parse HTML into blocks
       if (htmlBody.trim()) {
+        const bad = findUnknownMergeTagsInStrings(subject, htmlBody);
+        if (bad.length) {
+          toast.error(formatUnknownMergeTagsMessage(bad));
+          return;
+        }
         const blocks = parseHtmlToBlocks(htmlBody);
         if (blocks.length > 0) {
           onFormPayloadChange({ ...emptyAnnouncementForm(), blocks, useBlocks: true });
@@ -734,7 +815,9 @@ export function EmailComposer({
     });
   };
 
-  const previewHtml = getEmailEditorPreviewHtml(composeKind, formPayload, htmlBody, siteLabel);
+  const previewHtml = getEmailEditorPreviewHtml(composeKind, formPayload, htmlBody, siteLabel, {
+    mergeHighlights: previewMergeHighlights,
+  });
   const simpleFormCtaFallback = resolveSimpleFormCtaColors(formPayload, undefined);
 
   const applyLoadedTemplate = (template: EmailTemplate | null) => {
@@ -797,11 +880,17 @@ export function EmailComposer({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 justify-between sm:justify-end">
-              <TabsList className="h-9">
-                <TabsTrigger value="announcement_form" className="text-xs sm:text-sm">
+              <TabsList className="h-9 sm:h-10 bg-transparent p-0 gap-1.5">
+                <TabsTrigger
+                  value="announcement_form"
+                  className="rounded-md border-2 border-sunrise px-3 py-1.5 text-xs sm:text-sm font-medium shadow-none data-[state=active]:bg-sunrise data-[state=active]:text-slate-900 data-[state=active]:border-sunrise data-[state=inactive]:bg-transparent"
+                >
                   Visual
                 </TabsTrigger>
-                <TabsTrigger value="raw_html" className="text-xs sm:text-sm">
+                <TabsTrigger
+                  value="raw_html"
+                  className="rounded-md border-2 border-sunrise px-3 py-1.5 text-xs sm:text-sm font-medium shadow-none data-[state=active]:bg-sunrise data-[state=active]:text-slate-900 data-[state=active]:border-sunrise data-[state=inactive]:bg-transparent"
+                >
                   Code
                 </TabsTrigger>
               </TabsList>
@@ -860,12 +949,16 @@ export function EmailComposer({
         <TabsContent value="announcement_form" className="space-y-3">
           <VisualLayoutHelpPanel
             mode={formPayload.useBlocks ? 'blocks' : 'simple'}
+            simpleDisabled={formPayload.blocks.length === 0}
             onLoadSavedTemplate={() => setTemplatePickerOpen(true)}
             onSwitchToBlocks={() =>
               onFormPayloadChange({
                 ...formPayload,
                 useBlocks: true,
-                blocks: classicAnnouncementFieldsToBlocks(formPayload),
+                blocks:
+                  formPayload.blocks.length > 0
+                    ? formPayload.blocks.map((b) => ({ ...b }) as ContentBlock)
+                    : classicAnnouncementFieldsToBlocks(formPayload),
               })
             }
             onSwitchToSimple={() =>
@@ -876,7 +969,7 @@ export function EmailComposer({
             <>
               {formPayload.blocks.length === 0 && (
                 <p className="text-xs text-muted-foreground border border-dashed rounded-md p-3">
-                  Hover a line to add a block, or use Add block at the bottom. Drag the grip to reorder.
+                  Use the + between sections to add a block, or Add block at the bottom. Drag the grip to reorder.
                 </p>
               )}
               {formPayload.blocks.length === 0 ? (
@@ -917,44 +1010,43 @@ export function EmailComposer({
               </DropdownMenu>
             </>
           ) : (
-            /* Legacy flat-field form */
+            /* Structured fields — same content as blocks, synced via syncClassicAnnouncementFieldsIntoBlocks */
             <>
               <div className="space-y-2">
                 <Label>Eyebrow</Label>
                 <Input
                   value={formPayload.eyebrow}
-                  onChange={e => onFormPayloadChange({ ...formPayload, eyebrow: e.target.value })}
+                  onChange={e => patchSimpleClassicFields({ eyebrow: e.target.value })}
                   placeholder="Short label above the headline (optional)"
                 />
               </div>
               <div className="space-y-2">
                 <Label>Headline *</Label>
-                <Input value={formPayload.headline} onChange={e => onFormPayloadChange({ ...formPayload, headline: e.target.value })} placeholder="Main headline" />
+                <Input value={formPayload.headline} onChange={e => patchSimpleClassicFields({ headline: e.target.value })} placeholder="Main headline" />
               </div>
               <div className="space-y-2">
                 <Label>Subhead</Label>
-                <Input value={formPayload.subhead} onChange={e => onFormPayloadChange({ ...formPayload, subhead: e.target.value })} placeholder="Optional subheadline" />
+                <Input value={formPayload.subhead} onChange={e => patchSimpleClassicFields({ subhead: e.target.value })} placeholder="Optional subheadline" />
               </div>
               <div className="space-y-2">
                 <Label>Message</Label>
-                <Textarea value={formPayload.message} onChange={e => onFormPayloadChange({ ...formPayload, message: e.target.value })} placeholder="Email body text" rows={5} />
+                <Textarea value={formPayload.message} onChange={e => patchSimpleClassicFields({ message: e.target.value })} placeholder="Email body text" rows={5} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Button Label</Label>
-                  <Input value={formPayload.buttonLabel} onChange={e => onFormPayloadChange({ ...formPayload, buttonLabel: e.target.value })} placeholder="e.g. Apply Now" />
+                  <Input value={formPayload.buttonLabel} onChange={e => patchSimpleClassicFields({ buttonLabel: e.target.value })} placeholder="e.g. Apply Now" />
                 </div>
                 <div className="space-y-2">
                   <Label>Button URL</Label>
-                  <Input value={formPayload.buttonUrl} onChange={e => onFormPayloadChange({ ...formPayload, buttonUrl: e.target.value })} placeholder="https://..." />
+                  <Input value={formPayload.buttonUrl} onChange={e => patchSimpleClassicFields({ buttonUrl: e.target.value })} placeholder="https://..." />
                 </div>
               </div>
               <ButtonCtaStyleFields
                 bgColor={formPayload.buttonBgColor}
                 textColor={formPayload.buttonTextColor}
                 onPatch={(patch) =>
-                  onFormPayloadChange({
-                    ...formPayload,
+                  patchSimpleClassicFields({
                     ...('bgColor' in patch ? { buttonBgColor: patch.bgColor } : {}),
                     ...('textColor' in patch ? { buttonTextColor: patch.textColor } : {}),
                   })
@@ -967,7 +1059,7 @@ export function EmailComposer({
               />
               <div className="space-y-2">
                 <Label>Sign-off</Label>
-                <Input value={formPayload.signOff} onChange={e => onFormPayloadChange({ ...formPayload, signOff: e.target.value })} placeholder="e.g. Best regards, The Team" />
+                <Input value={formPayload.signOff} onChange={e => patchSimpleClassicFields({ signOff: e.target.value })} placeholder="e.g. Best regards, The Team" />
               </div>
             </>
           )}
@@ -1043,13 +1135,26 @@ export function EmailComposer({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="flex gap-1 mb-2">
-              <Button variant={viewport === 'desktop' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewport('desktop')}>
-                <Monitor className="h-4 w-4" />
-              </Button>
-              <Button variant={viewport === 'mobile' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewport('mobile')}>
-                <Smartphone className="h-4 w-4" />
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <div className="flex gap-1">
+                <Button variant={viewport === 'desktop' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewport('desktop')}>
+                  <Monitor className="h-4 w-4" />
+                </Button>
+                <Button variant={viewport === 'mobile' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewport('mobile')}>
+                  <Smartphone className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="composer-preview-merge-highlights"
+                  checked={previewMergeHighlights}
+                  onCheckedChange={setPreviewMergeHighlights}
+                  aria-label="Show sample values for merge tags in preview"
+                />
+                <Label htmlFor="composer-preview-merge-highlights" className="text-[10px] text-muted-foreground font-normal cursor-pointer">
+                  Show sample merge values
+                </Label>
+              </div>
             </div>
             <div className="flex justify-center w-full">
               <div
@@ -1077,9 +1182,10 @@ export function EmailComposer({
         }}
         prepare={regionReviewPrepare}
         onConfirm={(html) => {
-          finalizeRegionalHtml(html, SCRATCH_HTML_IMPORT_COPY.toastRegionMapped);
-          setRegionReviewOpen(false);
-          setRegionReviewPrepare(null);
+          if (finalizeRegionalHtml(html, SCRATCH_HTML_IMPORT_COPY.toastRegionMapped)) {
+            setRegionReviewOpen(false);
+            setRegionReviewPrepare(null);
+          }
         }}
       />
 

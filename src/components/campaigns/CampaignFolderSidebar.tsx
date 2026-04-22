@@ -43,34 +43,38 @@ export const CampaignFolderSidebar = ({
   if (!isMyCampaigns) return null;
 
   return (
-    <div className="w-48 shrink-0 space-y-2">
+    <div className="w-64 min-w-[16rem] shrink-0 space-y-2">
       <Label className="text-xs text-muted-foreground">Folders</Label>
       <div className="space-y-1">
         <button
           type="button"
           onClick={() => onSelectFolder(null)}
           className={cn(
-            'w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between',
+            'w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-start justify-between gap-2',
             selectedFolderId === null
               ? 'bg-sky-blue/20 text-sky-blue font-medium'
               : 'hover:bg-muted text-muted-foreground'
           )}
         >
-          All
-          <span className="text-xs text-muted-foreground tabular-nums">{campaigns.length}</span>
+          <span className="min-w-0 break-words whitespace-normal" title="All campaigns">
+            All
+          </span>
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0">{campaigns.length}</span>
         </button>
         <button
           type="button"
           onClick={() => onSelectFolder('uncategorized')}
           className={cn(
-            'w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between',
+            'w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-start justify-between gap-2',
             selectedFolderId === 'uncategorized'
               ? 'bg-sky-blue/20 text-sky-blue font-medium'
               : 'hover:bg-muted text-muted-foreground'
           )}
         >
-          Uncategorized
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="min-w-0 break-words whitespace-normal" title="Uncategorized">
+            Uncategorized
+          </span>
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
             {campaigns.filter((c) => !c.folder_id).length}
           </span>
         </button>
@@ -84,18 +88,19 @@ export const CampaignFolderSidebar = ({
                 key={folder.id}
                 type="button"
                 onClick={() => onSelectFolder(folder.id)}
+                title={folder.name}
                 className={cn(
-                  'w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between gap-2',
+                  'w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-start justify-between gap-2',
                   selectedFolderId === folder.id
                     ? 'bg-sky-blue/20 text-sky-blue font-medium'
                     : 'hover:bg-muted text-muted-foreground'
                 )}
               >
-                <span className="flex items-center gap-2 min-w-0">
-                  <FolderPlus className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{folder.name}</span>
+                <span className="flex items-start gap-2 min-w-0 flex-1">
+                  <FolderPlus className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span className="min-w-0 break-words line-clamp-2 whitespace-normal text-left">{folder.name}</span>
                 </span>
-                <span className="text-xs text-muted-foreground tabular-nums shrink-0">{count}</span>
+                <span className="text-xs text-muted-foreground tabular-nums shrink-0 pt-0.5">{count}</span>
               </button>
             );
           })

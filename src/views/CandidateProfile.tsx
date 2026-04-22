@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
@@ -50,6 +50,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -59,6 +66,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { UploadResumeDialog } from '@/components/candidates/UploadResumeDialog';
 import { CandidateTagEditor } from '@/components/candidates/CandidateTagEditor';
 import { useCandidateWithAssociations } from '@/hooks/useCandidates';
@@ -68,6 +76,151 @@ import { useResumes, useUploadResume, useSetPrimaryResume, useDeleteResume } fro
 import { resumeService } from '@/services';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { htmlToPlainTextForCommunicationLog } from '@/lib/email/html-plain-text-for-log';
+import { cn } from '@/lib/utils';
+import type { CandidateResume } from '@/types/Resume';
+
+/** Campaign / welcome emails: we only store & show the subject line (header), not body text. */
+function isSystemSentEmailComm(comm: {
+  type: string;
+  externalMessageId?: string | null;
+  campaignRecipientId?: string | null;
+}): boolean {
+  return (
+    comm.type === 'email' &&
+    Boolean(comm.externalMessageId || comm.campaignRecipientId)
+  );
+}
+
+function ResumePreviewPanel({
+  resumes,
+  resumesLoading,
+  primaryResume,
+  previewUrl,
+  previewingResumeId,
+  onPreviewResume,
+  onClosePreview,
+  onViewResume,
+  onDownloadResume,
+  onUploadClick,
+  iframeMinHeightClassName = 'min-h-[min(65vh,720px)]',
+}: {
+  resumes: CandidateResume[];
+  resumesLoading: boolean;
+  primaryResume: CandidateResume | undefined;
+  previewUrl: string | null;
+  previewingResumeId: string | null;
+  onPreviewResume: (id: string) => void | Promise<void>;
+  onClosePreview: () => void;
+  onViewResume: (id: string) => void | Promise<void>;
+  onDownloadResume: (id: string, fileName: string) => void | Promise<void>;
+  onUploadClick: () => void;
+  iframeMinHeightClassName?: string;
+}) {
+  const meta = resumes.find((r) => r.id === previewingResumeId) ?? primaryResume;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2 text-sky-blue">
+          <FileText className="h-5 w-5 shrink-0" />
+          <h2 className="text-lg font-semibold leading-none tracking-tight">Resume preview</h2>
+          {previewUrl &&
+            previewingResumeId &&
+            resumes.find((r) => r.id === previewingResumeId)?.isPrimary && (
+              <Badge variant="secondary" className="text-xs font-normal">
+                Primary
+              </Badge>
+            )}
+        </div>
+        {resumes.length > 1 && (
+          <Select
+            value={previewingResumeId ?? primaryResume?.id ?? resumes[0]?.id ?? ''}
+            onValueChange={(v) => void onPreviewResume(v)}
+          >
+            <SelectTrigger className="w-full border-border bg-background sm:w-[220px]">
+              <SelectValue placeholder="Version" />
+            </SelectTrigger>
+            <SelectContent>
+              {resumes.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  v{r.version} · {r.fileName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      {meta && previewUrl ? (
+        <div className="flex shrink-0 flex-wrap gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 border-border"
+            onClick={() => void onViewResume(meta.id)}
+          >
+            <ExternalLink className="mr-1 h-4 w-4" />
+            Open
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 border-border"
+            onClick={() => void onDownloadResume(meta.id, meta.fileName)}
+          >
+            <Download className="mr-1 h-4 w-4" />
+            Download
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8" onClick={onClosePreview}>
+            <X className="mr-1 h-4 w-4" />
+            Hide
+          </Button>
+        </div>
+      ) : null}
+      <div className="flex min-h-0 flex-1 flex-col">
+        {resumesLoading ? (
+          <Skeleton className={cn('h-[min(70vh,800px)] w-full min-h-[280px] rounded-lg')} />
+        ) : resumes.length === 0 ? (
+          <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-border p-6 text-center">
+            <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No resume to preview</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={onUploadClick}>
+              <Upload className="mr-1 h-4 w-4" />
+              Upload resume
+            </Button>
+          </div>
+        ) : !previewUrl ? (
+          <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-border p-6 text-center">
+            <Eye className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+            <p className="mb-3 text-sm text-muted-foreground">Preview hidden</p>
+            {primaryResume && (
+              <Button
+                size="sm"
+                className="bg-sky-blue hover:bg-sky-blue/90"
+                onClick={() => void onPreviewResume(primaryResume.id)}
+              >
+                Show primary resume
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              'flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border',
+              iframeMinHeightClassName,
+            )}
+          >
+            <iframe
+              src={previewUrl}
+              className={cn('h-full w-full flex-1 bg-muted/20', iframeMinHeightClassName)}
+              title="Resume preview"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const CandidateProfile = ({ id }: { id: string }) => {
   const router = useRouter();
@@ -79,6 +232,8 @@ const CandidateProfile = ({ id }: { id: string }) => {
   const [logCommOpen, setLogCommOpen] = useState(false);
   const [uploadResumeOpen, setUploadResumeOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewingResumeId, setPreviewingResumeId] = useState<string | null>(null);
+  const [resumeOnlyPreviewOpen, setResumeOnlyPreviewOpen] = useState(false);
   const [resumeToDelete, setResumeToDelete] = useState<{ id: string; fileName: string } | null>(null);
 
   // Fetch real candidate data
@@ -97,6 +252,36 @@ const CandidateProfile = ({ id }: { id: string }) => {
   const setPrimaryResume = useSetPrimaryResume(id || '');
   const deleteResume = useDeleteResume(id || '');
   const primaryResume = resumes.find((r) => r.isPrimary) ?? resumes[0];
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewUrl((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPreviewingResumeId(null);
+  }, []);
+
+  const handlePreviewResume = useCallback(async (resumeId: string) => {
+    try {
+      const url = await resumeService.getResumeUrl(resumeId);
+      setPreviewUrl((prev) => {
+        if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+        return url;
+      });
+      setPreviewingResumeId(resumeId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load preview');
+    }
+  }, []);
+
+  useEffect(() => {
+    setPreviewUrl((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPreviewingResumeId(null);
+    setResumeOnlyPreviewOpen(false);
+  }, [id]);
 
   // Candidate list navigation
   const { getNextCandidateId, getPreviousCandidateId, getCurrentIndex, getTotalCount } = useCandidateListContext();
@@ -137,21 +322,6 @@ const CandidateProfile = ({ id }: { id: string }) => {
         toast.error(e instanceof Error ? e.message : 'Failed to download resume');
       }
     }
-  };
-
-  const handlePreviewResume = async (resumeId: string) => {
-    try {
-      if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-      const url = await resumeService.getResumeUrl(resumeId);
-      setPreviewUrl(url);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load preview');
-    }
-  };
-
-  const handleClosePreview = () => {
-    if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
   };
 
   const getCommIcon = (type: string) => {
@@ -475,23 +645,43 @@ const CandidateProfile = ({ id }: { id: string }) => {
             </CardContent>
           </Card>
 
-          {/* Tags & Skills - Full Width */}
-          <Card className="mb-6 bg-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sky-blue">
-                <Tag className="w-5 h-5" />
-                Tags & Skills
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CandidateTagEditor candidateId={candidate.id} tags={candidate.tags ?? []} />
-            </CardContent>
-          </Card>
+          {/* Tags & Skills + Resume Versions (equal height on large screens) */}
+          <div className="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-2 lg:items-stretch">
+            <Card className="flex h-full flex-col bg-card border-border">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sky-blue">
+                  <Tag className="w-5 h-5" />
+                  Tags & Skills
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-1 flex-col">
+                <CandidateTagEditor
+                  candidateId={candidate.id}
+                  tags={candidate.tags ?? []}
+                  suggestTagsResumeId={primaryResume?.id ?? null}
+                  resumePreviewSlot={
+                    <ResumePreviewPanel
+                      resumes={resumes}
+                      resumesLoading={resumesLoading}
+                      primaryResume={primaryResume}
+                      previewUrl={previewUrl}
+                      previewingResumeId={previewingResumeId}
+                      onPreviewResume={handlePreviewResume}
+                      onClosePreview={handleClosePreview}
+                      onViewResume={handleViewResume}
+                      onDownloadResume={handleDownloadResume}
+                      onUploadClick={() => setUploadResumeOpen(true)}
+                    />
+                  }
+                  onTagModalOpenChange={(open) => {
+                    if (open && primaryResume) void handlePreviewResume(primaryResume.id);
+                    if (!open) handleClosePreview();
+                  }}
+                />
+              </CardContent>
+            </Card>
 
-          {/* Resume Versions + Recruiter Notes - Side by Side */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {/* Resume Versions */}
-            <Card className="bg-card border-border">
+            <Card className="flex h-full flex-col bg-card border-border">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-sky-blue">
@@ -511,7 +701,7 @@ const CandidateProfile = ({ id }: { id: string }) => {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="flex min-h-0 flex-1 flex-col space-y-3">
                 {resumesLoading ? (
                   <div className="space-y-2">
                     <Skeleton className="h-12 w-full" />
@@ -556,7 +746,10 @@ const CandidateProfile = ({ id }: { id: string }) => {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={() => handlePreviewResume(resume.id)}
+                            onClick={() => {
+                              setResumeOnlyPreviewOpen(true);
+                              void handlePreviewResume(resume.id);
+                            }}
                             title="Preview"
                           >
                             <Eye className="w-4 h-4" />
@@ -626,29 +819,50 @@ const CandidateProfile = ({ id }: { id: string }) => {
                         </Button>
                       )}
                     </div>
-
-                    {previewUrl && (
-                      <div className="mt-4 border border-border rounded-lg overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border">
-                          <span className="text-sm font-medium">Preview</span>
-                          <Button variant="ghost" size="sm" onClick={handleClosePreview}>
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <iframe
-                          src={previewUrl}
-                          className="w-full h-96"
-                          title="Resume preview"
-                        />
-                      </div>
-                    )}
                   </>
                 )}
               </CardContent>
             </Card>
+          </div>
 
-            {/* Recruiter Notes */}
-            <Card className="bg-card border-border">
+          <Dialog
+            open={resumeOnlyPreviewOpen}
+            onOpenChange={(o) => {
+              setResumeOnlyPreviewOpen(o);
+              if (!o) handleClosePreview();
+            }}
+          >
+            <DialogContent
+              className={cn(
+                'flex max-h-[90vh] w-[95vw] max-w-4xl flex-col gap-4 overflow-y-auto p-6',
+                'left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%]',
+              )}
+            >
+              <DialogHeader className="sr-only">
+                <DialogTitle>Resume preview</DialogTitle>
+              </DialogHeader>
+              <ResumePreviewPanel
+                resumes={resumes}
+                resumesLoading={resumesLoading}
+                primaryResume={primaryResume}
+                previewUrl={previewUrl}
+                previewingResumeId={previewingResumeId}
+                onPreviewResume={handlePreviewResume}
+                onClosePreview={handleClosePreview}
+                onViewResume={handleViewResume}
+                onDownloadResume={handleDownloadResume}
+                onUploadClick={() => {
+                  setResumeOnlyPreviewOpen(false);
+                  handleClosePreview();
+                  setUploadResumeOpen(true);
+                }}
+                iframeMinHeightClassName="min-h-[min(70vh,800px)]"
+              />
+            </DialogContent>
+          </Dialog>
+
+          {/* Recruiter Notes — full width */}
+          <Card className="bg-card border-border mb-6">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-sky-blue">
@@ -697,9 +911,8 @@ const CandidateProfile = ({ id }: { id: string }) => {
                 )}
               </CardContent>
             </Card>
-          </div>
 
-          {/* Communication History - Full Width */}
+          {/* Communication History — full width */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -754,10 +967,24 @@ const CandidateProfile = ({ id }: { id: string }) => {
                         )}
                       </div>
                       {comm.subject && (
-                        <p className="text-foreground text-sm font-medium">{comm.subject}</p>
+                        <p className="text-foreground text-sm font-medium break-words">
+                          {comm.type === 'email'
+                            ? htmlToPlainTextForCommunicationLog(comm.subject, 500)
+                            : comm.subject}
+                        </p>
                       )}
-                      {comm.content && (
-                        <p className="text-foreground text-sm mt-1 whitespace-pre-wrap">{comm.content}</p>
+                      {comm.content && !(comm.type === 'email' && isSystemSentEmailComm(comm)) && (
+                        <p
+                          className={
+                            comm.type === 'email'
+                              ? 'text-foreground text-sm mt-1 whitespace-normal break-words'
+                              : 'text-foreground text-sm mt-1 whitespace-pre-wrap break-words'
+                          }
+                        >
+                          {comm.type === 'email'
+                            ? htmlToPlainTextForCommunicationLog(comm.content, 2000)
+                            : comm.content}
+                        </p>
                       )}
                       {!comm.subject && !comm.content && (
                         <p className="text-sm text-muted-foreground italic">No details</p>

@@ -23,6 +23,8 @@ const mapRowToCommunication = (row: any): Communication => ({
   occurredAt: new Date(row.occurred_at),
   createdAt: new Date(row.created_at),
   createdBy: row.created_by,
+  campaignRecipientId: row.campaign_recipient_id ?? null,
+  externalMessageId: row.external_message_id ?? null,
 });
 
 const mapRowToNote = (row: any): Note => ({

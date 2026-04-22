@@ -6,26 +6,33 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { CampaignBuilder } from '@/components/campaigns/CampaignBuilder';
 import { TemplateLibrary } from '@/components/campaigns/TemplateLibrary';
-import { CampaignScheduledQueue } from '@/components/campaigns/CampaignScheduledQueue';
+import { HtmlCampaignEmailEditor } from '@/components/campaigns/email/HtmlCampaignEmailEditor';
+import { newEmailDraftSessionId } from '@/lib/email/email-ai-chat-storage-key';
+import { emailTemplateService } from '@/services/emailTemplateService';
+import { Json } from '@/integrations/supabase/types';
+import { useQueryClient } from '@tanstack/react-query';
 import { CampaignSearchBar } from '@/components/campaigns/CampaignSearchBar';
 import { CampaignFolderSidebar } from '@/components/campaigns/CampaignFolderSidebar';
 import { UpcomingSendsTab } from '@/components/campaigns/UpcomingSendsTab';
 import { AddRecipientsModal } from '@/components/campaigns/AddRecipientsModal';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Play, Pause, Mail, Calendar, TrendingUp, Users, Trash2, Send, Loader2, Pencil, ChevronDown, ChevronUp, Copy, UserPlus, Archive, ArchiveRestore, MoreVertical, Folder, FolderOpen, RotateCcw } from 'lucide-react';
+import { Plus, Mail, Calendar, TrendingUp, Users, ChevronDown, ChevronUp, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { useMyCampaigns, useOrgCampaigns, useArchivedCampaigns, useCampaign, useUpdateCampaign, useDeleteCampaign, useDuplicateCampaign } from '@/hooks/useCampaigns';
+import { useCurrentUser, useAllProfiles } from '@/hooks/useAuth';
+import { CampaignListRow } from '@/components/campaigns/CampaignListRow';
+import { profileDisplayName } from '@/lib/profileDisplayName';
+import { Virtuoso } from 'react-virtuoso';
+import { Label } from '@/components/ui/label';
+import type { Profile } from '@/types/User';
 import { useCampaignFolders } from '@/hooks/useCampaignFolders';
-import { useAllCampaignsStats } from '@/hooks/useCampaignStats';
+import { useAllCampaignsStats, type CampaignStats } from '@/hooks/useCampaignStats';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import type { Campaign } from '@/types/Campaign';
 import type { EmailTemplate } from '@/services/emailTemplateService';
@@ -40,6 +47,44 @@ const SORT_OPTIONS = [
   { value: 'open-rate', label: 'Open rate' },
   { value: 'click-rate', label: 'Click rate' },
 ] as const;
+const ORG_ONLY_SORT: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'creator-az', label: 'Creator A–Z' },
+  { value: 'creator-za', label: 'Creator Z–A' },
+];
+
+/** When the campaign is/was "active" on the calendar: scheduled send time if set, else created. */
+function getCampaignActiveTimeMs(c: Campaign): number {
+  if (c.scheduled_at) return new Date(c.scheduled_at).getTime();
+  return new Date(c.created_at).getTime();
+}
+
+/** Compare two campaigns in the same org group (per-user list). */
+function compareCampaignsForOrgSubgroup(
+  a: Campaign,
+  b: Campaign,
+  sortBy: string,
+  statsMap: Record<string, CampaignStats>
+): number {
+  switch (sortBy) {
+    case 'newest':
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    case 'oldest':
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    case 'name-az':
+      return (a.name || '').localeCompare(b.name || '');
+    case 'name-za':
+      return (b.name || '').localeCompare(a.name || '');
+    case 'open-rate':
+      return (statsMap[b.id]?.openRate ?? 0) - (statsMap[a.id]?.openRate ?? 0);
+    case 'click-rate':
+      return (statsMap[b.id]?.clickRate ?? 0) - (statsMap[a.id]?.clickRate ?? 0);
+    case 'creator-az':
+    case 'creator-za':
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    default:
+      return 0;
+  }
+}
 
 const Campaigns = () => {
   const router = useRouter();
@@ -52,7 +97,12 @@ const Campaigns = () => {
   const [sendingCampaignId, setSendingCampaignId] = useState<string | null>(null);
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [expandedQueueCampaignId, setExpandedQueueCampaignId] = useState<string | null>(null);
-  const [selectedTemplateForCampaign, setSelectedTemplateForCampaign] = useState<EmailTemplate | null | undefined>(undefined);
+  /** Standalone template editor (Template Library) — not part of campaign creation. */
+  const [templateEditorSession, setTemplateEditorSession] = useState<null | {
+    seed: string;
+    initialWorkspaceTab: 'editor' | 'ai';
+    libraryRecord: EmailTemplate | null;
+  }>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('newest');
@@ -60,9 +110,28 @@ const Campaigns = () => {
   const [addRecipientsCampaignId, setAddRecipientsCampaignId] = useState<string | null>(null);
   const [duplicatingCampaignId, setDuplicatingCampaignId] = useState<string | null>(null);
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
+  /** Organization tab: filter to a single creator (user_id), or "" for all */
+  const [orgCreatorUserId, setOrgCreatorUserId] = useState<string>('');
+  const [summaryOpen, setSummaryOpen] = useState(true);
+  /** Filter by a single "active time" (scheduled at if set, else created at). */
+  const [activeTimeFrom, setActiveTimeFrom] = useState<string>('');
+  const [activeTimeTo, setActiveTimeTo] = useState<string>('');
   const { data: campaignForView, isLoading: loadingCampaignForView } = useCampaign(viewCampaignId || '');
+  const [sendSuccess, setSendSuccess] = useState<{
+    campaignId: string;
+    campaignName: string;
+    kind: 'launch' | 'schedule';
+    description?: string;
+  } | null>(null);
 
   const handledOpenQueryRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (scopeTab === 'org') return;
+    setSortBy((s) => (s === 'creator-az' || s === 'creator-za' ? 'newest' : s));
+    setOrgCreatorUserId('');
+  }, [scopeTab]);
+
   useEffect(() => {
     const openId = searchParams.get('open');
     if (!openId) {
@@ -71,16 +140,56 @@ const Campaigns = () => {
     }
     if (handledOpenQueryRef.current === openId) return;
     handledOpenQueryRef.current = openId;
+    setEditingCampaign(null);
     setViewCampaignId(openId);
     setShowCampaignBuilder(true);
     router.replace('/campaigns', { scroll: false });
   }, [searchParams, router]);
 
+  const { data: currentUser } = useCurrentUser();
+  const currentUserId = currentUser?.id ?? '';
+  const forceShowInOrgTab = currentUser?.profile?.forceShowInOrgTab !== false;
+
   const { data: myCampaigns, isLoading: loadingMy, refetch: refetchMy } = useMyCampaigns();
-  const { data: orgCampaigns, isLoading: loadingOrg, refetch: refetchOrg } = useOrgCampaigns();
+  const { data: orgCampaigns, isLoading: loadingOrg, refetch: refetchOrg } = useOrgCampaigns(forceShowInOrgTab);
+  const { data: allProfiles = [] } = useAllProfiles(scopeTab === 'org');
+  const profileByUserId = useMemo(() => {
+    const m = new Map<string, Profile>();
+    for (const p of allProfiles) m.set(p.userId, p);
+    return m;
+  }, [allProfiles]);
+
+  /** Creators present in org campaigns — for the Organization tab filter dropdown */
+  const orgCreatorOptions = useMemo(() => {
+    if (scopeTab !== 'org') return [];
+    const list = orgCampaigns ?? [];
+    const ids = [...new Set(list.map((c) => c.user_id))];
+    return ids
+      .map((id) => ({
+        id,
+        label: id === currentUserId ? 'You' : profileDisplayName(profileByUserId.get(id), id),
+      }))
+      .sort((a, b) => {
+        if (a.id === currentUserId) return -1;
+        if (b.id === currentUserId) return 1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [scopeTab, orgCampaigns, currentUserId, profileByUserId]);
+
+  useEffect(() => {
+    if (scopeTab !== 'org' || !orgCreatorUserId) return;
+    if (!orgCreatorOptions.some((o) => o.id === orgCreatorUserId)) {
+      setOrgCreatorUserId('');
+    }
+  }, [scopeTab, orgCreatorUserId, orgCreatorOptions]);
   const { data: archivedCampaigns, isLoading: loadingArchived, refetch: refetchArchived } = useArchivedCampaigns();
 
-  const campaigns = scopeTab === 'my' ? myCampaigns : scopeTab === 'org' ? orgCampaigns : scopeTab === 'archived' ? archivedCampaigns : [];
+  const campaigns = useMemo((): Campaign[] => {
+    if (scopeTab === 'my') return myCampaigns ?? [];
+    if (scopeTab === 'org') return orgCampaigns ?? [];
+    if (scopeTab === 'archived') return archivedCampaigns ?? [];
+    return [];
+  }, [scopeTab, myCampaigns, orgCampaigns, archivedCampaigns]);
   const isLoading = scopeTab === 'my' ? loadingMy : scopeTab === 'org' ? loadingOrg : scopeTab === 'archived' ? loadingArchived : false;
   const refetch = () => { refetchMy(); refetchOrg(); refetchArchived(); };
 
@@ -89,6 +198,7 @@ const Campaigns = () => {
   const duplicateCampaign = useDuplicateCampaign();
   const { data: folders } = useCampaignFolders();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const handleMoveToFolder = async (campaignId: string, folderId: string | null) => {
     try {
@@ -100,23 +210,56 @@ const Campaigns = () => {
     }
   };
 
-  const campaignIds = useMemo(() => campaigns?.map(c => c.id) || [], [campaigns]);
+  const campaignIds = useMemo(() => campaigns.map((c) => c.id), [campaigns]);
   const { statsMap } = useAllCampaignsStats(campaignIds);
 
-  const filteredCampaigns = campaigns?.filter(campaign => {
-    if (activeTab !== 'all' && campaign.status !== activeTab) return false;
-    if (typeFilter !== 'all' && campaign.type !== typeFilter) return false;
-    if (selectedFolderId === 'uncategorized' && campaign.folder_id) return false;
-    if (selectedFolderId && selectedFolderId !== 'uncategorized' && campaign.folder_id !== selectedFolderId) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matches = (campaign.name?.toLowerCase().includes(q)) ||
-        (campaign.type?.toLowerCase().includes(q)) ||
-        (campaign.goal?.toLowerCase().includes(q));
-      if (!matches) return false;
-    }
-    return true;
-  }) || [];
+  const filteredCampaigns = useMemo(() => {
+    return campaigns.filter((campaign) => {
+      if (scopeTab === 'org' && orgCreatorUserId && campaign.user_id !== orgCreatorUserId) {
+        return false;
+      }
+      if (activeTab !== 'all' && campaign.status !== activeTab) return false;
+      if (typeFilter !== 'all' && campaign.type !== typeFilter) return false;
+      if (selectedFolderId === 'uncategorized' && campaign.folder_id) return false;
+      if (selectedFolderId && selectedFolderId !== 'uncategorized' && campaign.folder_id !== selectedFolderId) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const fields = [campaign.name, campaign.type, campaign.goal, campaign.status].map((s) =>
+          (s ?? '').toLowerCase()
+        );
+        if (!fields.some((f) => f.includes(q))) return false;
+      }
+      if (activeTimeFrom || activeTimeTo) {
+        const t = getCampaignActiveTimeMs(campaign);
+        if (activeTimeFrom) {
+          const st = new Date(`${activeTimeFrom}T00:00:00`).getTime();
+          if (t < st) return false;
+        }
+        if (activeTimeTo) {
+          const en = new Date(`${activeTimeTo}T23:59:59.999`).getTime();
+          if (t > en) return false;
+        }
+      }
+      return true;
+    });
+  }, [
+    campaigns,
+    scopeTab,
+    orgCreatorUserId,
+    activeTab,
+    typeFilter,
+    selectedFolderId,
+    searchQuery,
+    activeTimeFrom,
+    activeTimeTo,
+  ]);
+
+  const sortOptions = useMemo(
+    () => (scopeTab === 'org' ? [...SORT_OPTIONS, ...ORG_ONLY_SORT] : [...SORT_OPTIONS]),
+    [scopeTab]
+  );
 
   const sortedCampaigns = useMemo(() => {
     const arr = [...filteredCampaigns];
@@ -127,9 +270,25 @@ const Campaigns = () => {
       case 'name-za': return arr.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
       case 'open-rate': return arr.sort((a, b) => (statsMap[b.id]?.openRate ?? 0) - (statsMap[a.id]?.openRate ?? 0));
       case 'click-rate': return arr.sort((a, b) => (statsMap[b.id]?.clickRate ?? 0) - (statsMap[a.id]?.clickRate ?? 0));
+      case 'creator-az':
+        return arr.sort((a, b) => {
+          const la = profileDisplayName(profileByUserId.get(a.user_id), a.user_id);
+          const lb = profileDisplayName(profileByUserId.get(b.user_id), b.user_id);
+          const c = la.localeCompare(lb);
+          if (c !== 0) return c;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+      case 'creator-za':
+        return arr.sort((a, b) => {
+          const la = profileDisplayName(profileByUserId.get(a.user_id), a.user_id);
+          const lb = profileDisplayName(profileByUserId.get(b.user_id), b.user_id);
+          const c = lb.localeCompare(la);
+          if (c !== 0) return c;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
       default: return arr;
     }
-  }, [filteredCampaigns, sortBy, statsMap]);
+  }, [filteredCampaigns, sortBy, statsMap, profileByUserId]);
 
   // Calculate aggregate stats
   const totalRecipients = Object.values(statsMap).reduce((sum, s) => sum + s.recipients, 0);
@@ -138,10 +297,61 @@ const Campaigns = () => {
   const overallOpenRate = totalRecipients > 0 ? Math.round((totalOpened / totalRecipients) * 100) : 0;
   const overallClickRate = totalRecipients > 0 ? Math.round((totalClicked / totalRecipients) * 100) : 0;
 
-  const displayCampaigns = scopeTab === 'upcoming' ? [] : sortedCampaigns;
+  const displayCampaigns = useMemo(
+    () => (scopeTab === 'upcoming' ? [] : sortedCampaigns),
+    [scopeTab, sortedCampaigns]
+  );
+
+  type VirtRow =
+    | { kind: 'header'; id: string; label: string }
+    | { kind: 'campaign'; id: string; campaign: Campaign };
+
+  const listRows: VirtRow[] = useMemo(() => {
+    if (scopeTab !== 'org' || !currentUserId) {
+      return displayCampaigns.map((c) => ({ kind: 'campaign' as const, id: c.id, campaign: c }));
+    }
+    const byUser = new Map<string, Campaign[]>();
+    for (const c of displayCampaigns) {
+      const arr = byUser.get(c.user_id) || [];
+      arr.push(c);
+      byUser.set(c.user_id, arr);
+    }
+    const uids = [...byUser.keys()].sort((a, b) => {
+      // "You" first when your org campaigns appear in this tab, then by creator (matches creator-az/za when selected).
+      if (sortBy === 'creator-az' || sortBy === 'creator-za') {
+        if (a === currentUserId) return -1;
+        if (b === currentUserId) return 1;
+        const la = profileDisplayName(profileByUserId.get(a), a);
+        const lb = profileDisplayName(profileByUserId.get(b), b);
+        if (sortBy === 'creator-az') return la.localeCompare(lb);
+        return lb.localeCompare(la);
+      }
+      if (a === currentUserId) return -1;
+      if (b === currentUserId) return 1;
+      return profileDisplayName(profileByUserId.get(a), a).localeCompare(
+        profileDisplayName(profileByUserId.get(b), b)
+      );
+    });
+    const rows: VirtRow[] = [];
+    for (const uid of uids) {
+      const label =
+        uid === currentUserId
+          ? 'You'
+          : profileDisplayName(profileByUserId.get(uid), uid);
+      rows.push({ kind: 'header', id: `h-${uid}`, label });
+      const list = [...(byUser.get(uid) || [])].sort((a, b) =>
+        compareCampaignsForOrgSubgroup(a, b, sortBy, statsMap)
+      );
+      for (const c of list) {
+        rows.push({ kind: 'campaign', id: c.id, campaign: c });
+      }
+    }
+    return rows;
+  }, [displayCampaigns, scopeTab, currentUserId, profileByUserId, sortBy, statsMap]);
+
   const stats = {
-    active: campaigns?.filter(c => c.status === 'active').length || 0,
-    total: campaigns?.length || 0,
+    active: campaigns.filter((c) => c.status === 'active').length,
+    total: campaigns.length,
     totalRecipients,
     openRate: overallOpenRate,
     clickRate: overallClickRate,
@@ -191,10 +401,11 @@ const Campaigns = () => {
         });
       }
       refetch();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error occurred';
       toast({ 
         title: 'Failed to launch campaign', 
-        description: err.message || 'Unknown error occurred',
+        description: message,
         variant: 'destructive' 
       });
     } finally {
@@ -211,8 +422,9 @@ const Campaigns = () => {
     }
   };
 
-  const handleEditCampaign = (campaign: Campaign) => {
-    setEditingCampaign(campaign);
+  const handleViewCampaign = (campaign: Campaign) => {
+    setEditingCampaign(null);
+    setViewCampaignId(campaign.id);
     setShowCampaignBuilder(true);
   };
 
@@ -220,27 +432,37 @@ const Campaigns = () => {
     setShowCampaignBuilder(false);
     setEditingCampaign(null);
     setViewCampaignId(null);
-    setSelectedTemplateForCampaign(undefined);
   };
 
-  const handleTemplateLibrarySelect = (template: EmailTemplate | null) => {
-    setSelectedTemplateForCampaign(template);
+  const handleTemplateLibrarySelect = (template: EmailTemplate | null, options?: { initialAiTab?: boolean }) => {
+    setTemplateEditorSession({
+      seed: newEmailDraftSessionId(),
+      initialWorkspaceTab: options?.initialAiTab ? 'ai' : 'editor',
+      libraryRecord: template,
+    });
     setShowTemplateLibrary(false);
-    setShowCampaignBuilder(true);
   };
+
+  const closeTemplateEditorSession = () => setTemplateEditorSession(null);
+
+  const templateSessionRef = useRef(templateEditorSession);
+  templateSessionRef.current = templateEditorSession;
 
   const handleDuplicateCampaign = async (campaign: Campaign) => {
+    setDuplicatingCampaignId(campaign.id);
     try {
       const newCampaign = await duplicateCampaign.mutateAsync({
         campaignId: campaign.id,
         newName: `${campaign.name} (Copy)`,
       });
-      setDuplicatingCampaignId(null);
       toast({ title: 'Campaign duplicated', description: 'Add audience and launch.' });
+      setViewCampaignId(null);
       setEditingCampaign(newCampaign);
       setShowCampaignBuilder(true);
     } catch {
       toast({ title: 'Failed to duplicate', variant: 'destructive' });
+    } finally {
+      setDuplicatingCampaignId(null);
     }
   };
 
@@ -308,9 +530,13 @@ const Campaigns = () => {
                 >
                   Template Library
                 </Button>
-                <Button 
+                <Button
                   className="bg-gradient-primary hover:opacity-90"
-                  onClick={() => setShowCampaignBuilder(true)}
+                  onClick={() => {
+                    setViewCampaignId(null);
+                    setEditingCampaign(null);
+                    setShowCampaignBuilder(true);
+                  }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   New Campaign
@@ -319,53 +545,66 @@ const Campaigns = () => {
             </div>
           </div>
 
-          {/* Campaign Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Card className="border-sky-blue/20">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-foreground">{stats.active}</div>
-                    <div className="text-sm text-muted-foreground">Active Campaigns</div>
-                  </div>
-                  <Mail className="w-8 h-8 text-sky-blue" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-sky-blue/20">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-foreground">{stats.total}</div>
-                    <div className="text-sm text-muted-foreground">Total Campaigns</div>
-                  </div>
-                  <Users className="w-8 h-8 text-sky-blue" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-sky-blue/20">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-foreground">{stats.openRate}%</div>
-                    <div className="text-sm text-muted-foreground">Open Rate</div>
-                  </div>
-                  <TrendingUp className="w-8 h-8 text-sunrise" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-sky-blue/20">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-foreground">{stats.clickRate}%</div>
-                    <div className="text-sm text-muted-foreground">Click Rate</div>
-                  </div>
-                  <Calendar className="w-8 h-8 text-sunrise" />
-                </div>
-              </CardContent>
-            </Card>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setSummaryOpen((s) => !s)}
+            >
+              {summaryOpen ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
+              {summaryOpen ? 'Hide' : 'Show'} summary
+            </Button>
           </div>
+          {summaryOpen && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <Card className="border-sky-blue/20">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-bold text-foreground">{stats.active}</div>
+                      <div className="text-xs text-muted-foreground">Active</div>
+                    </div>
+                    <Mail className="w-6 h-6 text-sky-blue" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-sky-blue/20">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-bold text-foreground">{stats.total}</div>
+                      <div className="text-xs text-muted-foreground">Total in tab</div>
+                    </div>
+                    <Users className="w-6 h-6 text-sky-blue" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-sky-blue/20">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-bold text-foreground">{stats.openRate}%</div>
+                      <div className="text-xs text-muted-foreground">Open rate</div>
+                    </div>
+                    <TrendingUp className="w-6 h-6 text-sunrise" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-sky-blue/20">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-bold text-foreground">{stats.clickRate}%</div>
+                      <div className="text-xs text-muted-foreground">Click rate</div>
+                    </div>
+                    <Calendar className="w-6 h-6 text-sunrise" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Primary scope tabs */}
           <Tabs value={scopeTab} onValueChange={(v) => setScopeTab(v as typeof scopeTab)} className="w-full">
@@ -378,45 +617,97 @@ const Campaigns = () => {
 
             {scopeTab === 'upcoming' ? (
               <div className="mt-6">
-                <UpcomingSendsTab onViewCampaign={(id) => { setViewCampaignId(id); setShowCampaignBuilder(true); }} />
+                <UpcomingSendsTab
+                  onViewCampaign={(id) => {
+                    setEditingCampaign(null);
+                    setViewCampaignId(id);
+                    setShowCampaignBuilder(true);
+                  }}
+                />
               </div>
             ) : (
               <>
-                {/* Search, filters, sort - only for campaign lists */}
-                <div className="flex flex-wrap items-center gap-4 mb-4">
-                  <div className="w-64">
+                <div className="space-y-3 mb-4">
+                  <div className="w-full min-w-0">
                     <CampaignSearchBar value={searchQuery} onChange={setSearchQuery} />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Type:</span>
-                    <Select value={typeFilter} onValueChange={setTypeFilter}>
-                      <SelectTrigger className="w-36">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All types</SelectItem>
-                        {CAMPAIGN_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Sort:</span>
-                    <Select value={sortBy} onValueChange={setSortBy}>
-                      <SelectTrigger className="w-36">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SORT_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+                    {scopeTab === 'org' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">Creator</span>
+                        <Select
+                          value={orgCreatorUserId || 'all'}
+                          onValueChange={(v) => setOrgCreatorUserId(v === 'all' ? '' : v)}
+                        >
+                          <SelectTrigger className="w-[min(100%,14rem)] h-9">
+                            <SelectValue placeholder="All creators" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All creators</SelectItem>
+                            {orgCreatorOptions.map((o) => (
+                              <SelectItem key={o.id} value={o.id}>
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">Type</span>
+                      <Select value={typeFilter} onValueChange={setTypeFilter}>
+                        <SelectTrigger className="w-[9.5rem] h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All types</SelectItem>
+                          {CAMPAIGN_TYPES.map((t) => (
+                            <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">Sort</span>
+                      <Select value={sortBy} onValueChange={setSortBy}>
+                        <SelectTrigger className="w-[9.5rem] h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sortOptions.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-wrap items-end gap-2 sm:ml-auto">
+                      <div className="space-y-1 min-w-0">
+                        <Label className="text-xs text-muted-foreground">
+                          Active time (scheduled, or created if not scheduled)
+                        </Label>
+                        <div className="flex flex-wrap items-end gap-2">
+                          <Input
+                            type="date"
+                            className="h-9 w-36"
+                            value={activeTimeFrom}
+                            onChange={(e) => setActiveTimeFrom(e.target.value)}
+                            aria-label="Active time from"
+                          />
+                          <span className="text-xs text-muted-foreground pb-2">to</span>
+                          <Input
+                            type="date"
+                            className="h-9 w-36"
+                            value={activeTimeTo}
+                            onChange={(e) => setActiveTimeTo(e.target.value)}
+                            aria-label="Active time to"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex gap-6">
+                <div className="flex gap-8">
                   {(scopeTab === 'my' || scopeTab === 'org') && (
                     <CampaignFolderSidebar
                       selectedFolderId={selectedFolderId}
@@ -425,7 +716,7 @@ const Campaigns = () => {
                       campaigns={campaigns}
                     />
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 pl-1 md:pl-3">
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
                       <TabsList className="bg-muted mb-4">
                         <TabsTrigger value="all">All</TabsTrigger>
@@ -436,316 +727,112 @@ const Campaigns = () => {
                         <TabsTrigger value="completed">Completed</TabsTrigger>
                       </TabsList>
 
-                      <TabsContent value={activeTab} className="mt-0 space-y-4">
-              {isLoading ? (
-                <>
-                  {[1, 2, 3].map((i) => (
-                    <Card key={i}>
-                      <CardHeader>
-                        <Skeleton className="h-6 w-48" />
-                        <Skeleton className="h-4 w-32 mt-2" />
-                      </CardHeader>
-                      <CardContent>
-                        <Skeleton className="h-12 w-full" />
-                      </CardContent>
-                    </Card>
-                  ))}
-                </>
-              ) : displayCampaigns.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-foreground mb-2">
-                      {campaigns && campaigns.length > 0 ? 'No campaigns match your filters' : 'No campaigns yet'}
-                    </h3>
-                    <p className="text-muted-foreground mb-4">
-                      {campaigns && campaigns.length > 0
-                        ? 'Try adjusting your search, type filter, or folder to see more campaigns.'
-                        : 'Create your first campaign to start engaging with candidates.'}
-                    </p>
-                    <Button
-                      onClick={() => {
-                        if (campaigns && campaigns.length > 0) {
-                          setSearchQuery('');
-                          setTypeFilter('all');
-                          setSortBy('newest');
-                          setSelectedFolderId(null);
-                          setActiveTab('all');
-                        } else {
-                          setShowCampaignBuilder(true);
-                        }
-                      }}
-                      className="bg-gradient-primary"
-                    >
-                      {campaigns && campaigns.length > 0 ? (
-                        <>
-                          <RotateCcw className="w-4 h-4 mr-2" />
-                          Clear filters
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-4 h-4 mr-2" />
-                          Create Campaign
-                        </>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                displayCampaigns.map((campaign) => (
-                  <Card key={campaign.id} className="hover:border-sky-blue/50 transition-colors">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center space-x-3 mb-2">
-                            <CardTitle className="text-lg">{campaign.name}</CardTitle>
-                            <Badge className={getStatusBadgeClass(campaign.status)}>
-                              {campaign.status}
-                            </Badge>
-                            <Badge variant="secondary">{campaign.type}</Badge>
+                      <TabsContent value={activeTab} className="mt-0">
+                        {isLoading ? (
+                          <div className="space-y-3">
+                            {[1, 2, 3].map((i) => (
+                              <Card key={i}>
+                                <CardContent className="p-4">
+                                  <Skeleton className="h-5 w-48 mb-2" />
+                                  <Skeleton className="h-4 w-32" />
+                                </CardContent>
+                              </Card>
+                            ))}
                           </div>
-                          <CardDescription>
-                            Created {format(new Date(campaign.created_at), 'PPP')}
-                            {campaign.scheduled_at && (
-                              <> · Scheduled for {format(new Date(campaign.scheduled_at), 'PPP p')}</>
-                            )}
-                          </CardDescription>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {/* Show Send Pending button for active campaigns with pending recipients */}
-                          {campaign.status === 'active' && (statsMap[campaign.id]?.pending ?? 0) > 0 && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
-                              onClick={() => handleLaunchCampaign(campaign.id)}
-                              disabled={sendingCampaignId === campaign.id}
-                            >
-                              {sendingCampaignId === campaign.id ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              ) : (
-                                <Send className="w-4 h-4 mr-2" />
-                              )}
-                              {sendingCampaignId === campaign.id ? 'Sending...' : `Send ${statsMap[campaign.id]?.pending} Pending`}
-                            </Button>
-                          )}
-                          {campaign.status === 'active' && (statsMap[campaign.id]?.pending ?? 0) === 0 ? (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-sunrise text-sunrise hover:bg-sunrise hover:text-white"
-                              onClick={() => handlePauseCampaign(campaign.id)}
-                            >
-                              <Pause className="w-4 h-4 mr-2" />
-                              Pause
-                            </Button>
-                          ) : campaign.status === 'draft' ? (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
-                              onClick={() => handleLaunchCampaign(campaign.id)}
-                              disabled={sendingCampaignId === campaign.id}
-                            >
-                              {sendingCampaignId === campaign.id ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              ) : (
-                                <Send className="w-4 h-4 mr-2" />
-                              )}
-                              {sendingCampaignId === campaign.id ? 'Sending...' : 'Launch'}
-                            </Button>
-                          ) : campaign.status === 'scheduled' && (statsMap[campaign.id]?.pending ?? 0) > 0 ? (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
-                              onClick={() => handleLaunchCampaign(campaign.id)}
-                              disabled={sendingCampaignId === campaign.id}
-                            >
-                              {sendingCampaignId === campaign.id ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              ) : (
-                                <Send className="w-4 h-4 mr-2" />
-                              )}
-                              {sendingCampaignId === campaign.id ? 'Sending...' : `Send ${statsMap[campaign.id]?.pending} Pending`}
-                            </Button>
-                          ) : campaign.status === 'paused' ? (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
-                              onClick={() => handleResumeCampaign(campaign.id)}
-                            >
-                              <Play className="w-4 h-4 mr-2" />
-                              Resume
-                            </Button>
-                          ) : null}
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleEditCampaign(campaign)}
-                          >
-                            <Pencil className="w-4 h-4 mr-2" />
-                            Edit
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-card border-border">
-                              {['draft', 'paused', 'completed'].includes(campaign.status) && (
-                                <DropdownMenuItem
-                                  onClick={() => handleDuplicateCampaign(campaign)}
-                                  disabled={duplicatingCampaignId === campaign.id}
-                                  className="cursor-pointer"
-                                >
-                                {duplicatingCampaignId === campaign.id ? (
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : displayCampaigns.length === 0 ? (
+                          <Card>
+                            <CardContent className="py-12 text-center">
+                              <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                              <h3 className="text-lg font-semibold text-foreground mb-2">
+                                {campaigns.length > 0
+                                  ? 'No campaigns match your filters'
+                                  : scopeTab === 'org'
+                                    ? 'No organization campaigns yet'
+                                    : 'No campaigns yet'}
+                              </h3>
+                              <p className="text-muted-foreground mb-4">
+                                {campaigns.length > 0
+                                  ? 'Try adjusting search, type, folder, or date filters.'
+                                  : scopeTab === 'org'
+                                    ? 'Teammate campaigns show here when an admin turns on Share with organization. Yours can appear here too for org-shared campaigns — either your admin forces Organization listing in Settings → Team, or you enable “Also list under Organization” on each campaign.'
+                                    : 'Create your first campaign to start engaging with candidates.'}
+                              </p>
+                              <Button
+                                onClick={() => {
+                                  if (campaigns.length > 0) {
+                                    setSearchQuery('');
+                                    setTypeFilter('all');
+                                    setSortBy('newest');
+                                    setOrgCreatorUserId('');
+                                    setSelectedFolderId(null);
+                                    setActiveTab('all');
+                                    setActiveTimeFrom('');
+                                    setActiveTimeTo('');
+                                  } else {
+                                    setViewCampaignId(null);
+                                    setEditingCampaign(null);
+                                    setShowCampaignBuilder(true);
+                                  }
+                                }}
+                                className="bg-gradient-primary"
+                              >
+                                {campaigns.length > 0 ? (
+                                  <>
+                                    <RotateCcw className="w-4 h-4 mr-2" />
+                                    Clear filters
+                                  </>
                                 ) : (
-                                  <Copy className="w-4 h-4 mr-2" />
+                                  <>
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    Create Campaign
+                                  </>
                                 )}
-                                Duplicate
-                              </DropdownMenuItem>
-                              )}
-                              {(campaign.status === 'active' || campaign.status === 'scheduled') && (
-                                <DropdownMenuItem
-                                  onClick={() => setAddRecipientsCampaignId(campaign.id)}
-                                  className="cursor-pointer"
-                                >
-                                  <UserPlus className="w-4 h-4 mr-2" />
-                                  Add recipients
-                                </DropdownMenuItem>
-                              )}
-                              {scopeTab === 'my' && (
-                                <DropdownMenuSub>
-                                  <DropdownMenuSubTrigger className="cursor-pointer">
-                                    <Folder className="w-4 h-4 mr-2" />
-                                    Move to folder
-                                  </DropdownMenuSubTrigger>
-                                  <DropdownMenuSubContent>
-                                    <DropdownMenuItem
-                                      onClick={() => handleMoveToFolder(campaign.id, null)}
-                                      className="cursor-pointer"
-                                    >
-                                      No folder
-                                    </DropdownMenuItem>
-                                    {folders?.map((f) => (
-                                      <DropdownMenuItem
-                                        key={f.id}
-                                        onClick={() => handleMoveToFolder(campaign.id, f.id)}
-                                        className="cursor-pointer"
-                                      >
-                                        <FolderOpen className="w-4 h-4 mr-2" />
-                                        {f.name}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                              )}
-                              <DropdownMenuSeparator />
-                              {scopeTab !== 'archived' ? (
-                                <DropdownMenuItem
-                                  onClick={() => handleArchiveCampaign(campaign.id)}
-                                  className="cursor-pointer"
-                                >
-                                  <Archive className="w-4 h-4 mr-2" />
-                                  Archive
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem
-                                  onClick={() => handleUnarchiveCampaign(campaign.id)}
-                                  className="cursor-pointer"
-                                >
-                                  <ArchiveRestore className="w-4 h-4 mr-2" />
-                                  Restore
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          {(campaign.status === 'draft' || campaign.status === 'paused') && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <Trash2 className="w-4 h-4 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete "{campaign.name}"? This action cannot be undone.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    onClick={() => handleDeleteCampaign(campaign.id)}
-                                  >
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-6 gap-4">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.recipients ?? 0}</div>
-                          <div className="text-xs text-muted-foreground">Recipients</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.sent ?? 0}</div>
-                          <div className="text-xs text-muted-foreground">Sent</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-sunrise">{statsMap[campaign.id]?.scheduled ?? 0}</div>
-                          <div className="text-xs text-muted-foreground">Scheduled</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-sky-blue">{statsMap[campaign.id]?.opened ?? 0}</div>
-                          <div className="text-xs text-muted-foreground">Opened</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-sunrise">{statsMap[campaign.id]?.clicked ?? 0}</div>
-                          <div className="text-xs text-muted-foreground">Clicked</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-foreground">{statsMap[campaign.id]?.clickRate ?? 0}%</div>
-                          <div className="text-xs text-muted-foreground">Click Rate</div>
-                        </div>
-                      </div>
-                      {(statsMap[campaign.id]?.scheduled ?? 0) > 0 && campaign.status === 'scheduled' && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="mt-3 text-sunrise hover:text-sunrise"
-                            onClick={() => setExpandedQueueCampaignId(expandedQueueCampaignId === campaign.id ? null : campaign.id)}
-                          >
-                            {expandedQueueCampaignId === campaign.id ? (
-                              <ChevronUp className="w-4 h-4 mr-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 mr-1" />
-                            )}
-                            {expandedQueueCampaignId === campaign.id ? 'Hide queue' : 'View queue'}
-                          </Button>
-                          <CampaignScheduledQueue
-                            campaignId={campaign.id}
-                            scheduledAt={campaign.scheduled_at ?? null}
-                            isExpanded={expandedQueueCampaignId === campaign.id}
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          <Virtuoso
+                            className="rounded-lg border border-border"
+                            style={{ height: 'min(70vh, 720px)' }}
+                            data={listRows}
+                            itemContent={(_, item) => {
+                              if (item.kind === 'header') {
+                                return (
+                                  <div className="bg-muted/80 px-3 py-2 text-sm font-medium text-foreground border-b border-border">
+                                    {item.label}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="p-1.5 sm:p-2">
+                                  <CampaignListRow
+                                    campaign={item.campaign}
+                                    stats={statsMap[item.campaign.id]}
+                                    scopeTab={scopeTab === 'archived' ? 'archived' : scopeTab}
+                                    currentUserId={currentUserId}
+                                    folders={folders}
+                                    density="comfortable"
+                                    sendingCampaignId={sendingCampaignId}
+                                    duplicatingCampaignId={duplicatingCampaignId}
+                                    expandedQueueCampaignId={expandedQueueCampaignId}
+                                    onExpandQueue={setExpandedQueueCampaignId}
+                                    onView={handleViewCampaign}
+                                    onDuplicate={handleDuplicateCampaign}
+                                    onLaunch={handleLaunchCampaign}
+                                    onPause={handlePauseCampaign}
+                                    onResume={handleResumeCampaign}
+                                    onAddRecipients={setAddRecipientsCampaignId}
+                                    onMoveToFolder={handleMoveToFolder}
+                                    onArchive={handleArchiveCampaign}
+                                    onUnarchive={handleUnarchiveCampaign}
+                                    onDelete={handleDeleteCampaign}
+                                    getStatusBadgeClass={getStatusBadgeClass}
+                                  />
+                                </div>
+                              );
+                            }}
                           />
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))
-              )}
+                        )}
                       </TabsContent>
                     </Tabs>
                   </div>
@@ -756,19 +843,184 @@ const Campaigns = () => {
         </main>
       </div>
 
-      <CampaignBuilder 
+      <CampaignBuilder
         open={showCampaignBuilder}
         onOpenChange={handleCloseBuilder}
         editingCampaign={editingCampaign || (viewCampaignId && campaignForView ? campaignForView : null)}
-        initialTemplate={selectedTemplateForCampaign}
         isLoadingCampaign={!!viewCampaignId && loadingCampaignForView}
+        readOnly={viewCampaignId !== null && editingCampaign === null}
+        onSendSuccess={setSendSuccess}
       />
+
+      <Dialog
+        open={!!templateEditorSession}
+        onOpenChange={(open) => {
+          if (!open) closeTemplateEditorSession();
+        }}
+      >
+        <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0 border-0 rounded-none sm:max-w-[100vw]">
+          <DialogTitle className="sr-only">Edit email template</DialogTitle>
+          {templateEditorSession ? (
+            <HtmlCampaignEmailEditor
+              key={templateEditorSession.seed}
+              editorSeed={templateEditorSession.seed}
+              initialSubject={templateEditorSession.libraryRecord?.subject ?? ''}
+              initialHtmlContent={templateEditorSession.libraryRecord?.html_content ?? null}
+              initialComposeKind={
+                templateEditorSession.libraryRecord?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form'
+              }
+              initialFormPayload={templateEditorSession.libraryRecord?.form_payload ?? undefined}
+              initialWorkspaceTab={templateEditorSession.initialWorkspaceTab}
+              draftChatSessionId={templateEditorSession.seed}
+              aiChatScopeSuffix="standalone-template"
+              showCampaignContinue={false}
+              onContinue={() => {}}
+              onCancel={closeTemplateEditorSession}
+              loadedTemplate={
+                templateEditorSession.libraryRecord
+                  ? {
+                      id: templateEditorSession.libraryRecord.id,
+                      name: templateEditorSession.libraryRecord.name,
+                    }
+                  : null
+              }
+              onRenameTemplate={async (templateId, newName) => {
+                try {
+                  const updated = await emailTemplateService.update(templateId, { name: newName.trim() });
+                  setTemplateEditorSession((s) => (s ? { ...s, libraryRecord: updated } : null));
+                  queryClient.invalidateQueries({ queryKey: ['email-templates'] });
+                  toast({ title: 'Template renamed' });
+                } catch (e) {
+                  toast({
+                    title: 'Rename failed',
+                    description: (e as Error).message,
+                    variant: 'destructive',
+                  });
+                }
+              }}
+              onSaveTemplate={
+                templateEditorSession.libraryRecord
+                  ? async (payload) => {
+                      const s = templateSessionRef.current;
+                      if (!s?.libraryRecord) return;
+                      try {
+                        const updated = await emailTemplateService.update(s.libraryRecord.id, {
+                          bee_json: null,
+                          html_content: payload.html,
+                          subject: payload.subject,
+                          compose_kind: payload.compose_kind,
+                          form_payload: payload.form_payload as Json | null,
+                        });
+                        setTemplateEditorSession((cur) => (cur ? { ...cur, libraryRecord: updated } : null));
+                        queryClient.invalidateQueries({ queryKey: ['email-templates'] });
+                        toast({ title: 'Template saved' });
+                      } catch (e) {
+                        toast({
+                          title: 'Save failed',
+                          description: (e as Error).message,
+                          variant: 'destructive',
+                        });
+                      }
+                    }
+                  : undefined
+              }
+              onSaveAsTemplate={
+                templateEditorSession.libraryRecord
+                  ? undefined
+                  : async (payload, name) => {
+                      try {
+                        const created = await emailTemplateService.create({
+                          name: name.trim() || payload.subject.trim() || 'Untitled template',
+                          category: 'custom',
+                          subject: payload.subject,
+                          bee_json: null,
+                          html_content: payload.html,
+                          compose_kind: payload.compose_kind,
+                          form_payload: payload.form_payload as Json | null,
+                        });
+                        setTemplateEditorSession((cur) => (cur ? { ...cur, libraryRecord: created } : null));
+                        queryClient.invalidateQueries({ queryKey: ['email-templates'] });
+                        toast({
+                          title: 'Template created',
+                          description: `"${created.name}" is in your library.`,
+                        });
+                      } catch (e) {
+                        toast({
+                          title: 'Save failed',
+                          description: (e as Error).message,
+                          variant: 'destructive',
+                        });
+                      }
+                    }
+              }
+              defaultSaveAsTemplateName={
+                templateEditorSession.libraryRecord?.subject?.trim() || 'New template'
+              }
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!sendSuccess}
+        onOpenChange={(open) => {
+          if (!open) setSendSuccess(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-8 w-8 text-green-600 shrink-0" aria-hidden />
+              <DialogTitle className="text-xl">
+                {sendSuccess?.kind === 'schedule' ? 'Campaign scheduled' : 'Campaign launched'}
+              </DialogTitle>
+            </div>
+            <DialogDescription asChild>
+              <div className="space-y-2 pt-2 text-left">
+                {sendSuccess?.campaignName ? (
+                  <p className="text-sm font-medium text-foreground">{sendSuccess.campaignName}</p>
+                ) : null}
+                {sendSuccess?.description ? (
+                  <p className="text-sm text-muted-foreground">{sendSuccess.description}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {sendSuccess?.kind === 'schedule'
+                      ? 'Your campaign is on the calendar. You can manage sends from Upcoming Sends.'
+                      : 'Your campaign is active and emails will begin sending.'}
+                  </p>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setSendSuccess(null)}>
+              Done
+            </Button>
+            <Button
+              type="button"
+              className="bg-gradient-primary hover:opacity-90"
+              onClick={() => {
+                if (!sendSuccess) return;
+                const id = sendSuccess.campaignId;
+                setSendSuccess(null);
+                setEditingCampaign(null);
+                setViewCampaignId(id);
+                setShowCampaignBuilder(true);
+              }}
+            >
+              View campaign
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showTemplateLibrary} onOpenChange={setShowTemplateLibrary}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Template Library</DialogTitle>
-            <DialogDescription>Choose a template to start your campaign</DialogDescription>
+            <DialogDescription>
+              Create and edit saved email designs. To send mail, use New Campaign and pick a template there.
+            </DialogDescription>
           </DialogHeader>
           <TemplateLibrary onSelectTemplate={handleTemplateLibrarySelect} />
         </DialogContent>

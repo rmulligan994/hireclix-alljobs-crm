@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { emailAiRequest, type EmailAIEditorContext } from '@/lib/email/email-ai-api-client';
 import type { AIEmailAssistantResult } from '@/lib/email/email-ai-adapter';
 import { cn } from '@/lib/utils';
-import { Sparkles, Send, PanelRight, MessageSquarePlus, Undo2, User, ChevronDown } from 'lucide-react';
+import { Brain, Send, PanelRight, MessageSquarePlus, Undo2, User, ChevronDown } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 
@@ -31,8 +31,8 @@ export type AiEmailUndoSnapshot = {
 };
 
 const INTRO =
-  "I'm your recruiting email partner for Clarity — I help you draft candidate-facing CRM emails in a polished, professional style (formal marketing / employer-brand tone by default).\n\n" +
-  'Describe the email you want (new or a revision). I can output Visual blocks, simple fields, or full HTML in Code. Turn on “Include current email” below when you want edits that match what is already in your draft.';
+  "I'm your recruiting email assistant — I help you write polished candidate outreach in a professional, employer-brand tone.\n\n" +
+  'Describe the email you want (new or a revision). I can work in the visual editor (sections or fields) or the HTML editor. Turn on “Include current email” below when you want changes that match what is already in your draft.';
 
 export function createDefaultEmailAIMessages(): ChatMessage[] {
   return [{ id: 'intro', role: 'assistant', content: INTRO }];
@@ -111,13 +111,13 @@ function buildAssistantSummary(f: AIEmailAssistantResult): string {
   let bodyHint = '';
   if (f.delivery_mode === 'raw_html') {
     bodyHint =
-      'The body is in Code as full HTML — glance at the live preview on the right, then tell me what to tighten.';
+      'The body is in the HTML editor — check the live preview on the right, then tell me what to tighten.';
   } else if (f.delivery_mode === 'visual_blocks') {
     bodyHint =
-      'The body is in Visual as sections you can reorder — say if you want a different structure or tone.';
+      'The body is in the visual editor as sections you can reorder — say if you want a different structure or tone.';
   } else {
     bodyHint =
-      'The body is in simple fields for a fast edit — we can switch to blocks anytime if you prefer.';
+      'The body is shown as structured fields for a quick edit — you can switch to sections in the editor anytime.';
   }
 
   return `${subjLine}\n\n${bodyHint}\n\nWhat should we refine next?`;
@@ -126,7 +126,8 @@ function buildAssistantSummary(f: AIEmailAssistantResult): string {
 interface EmailAIChatPanelProps {
   companyName: string;
   editorContext: EmailAIEditorContext | null;
-  onApply: (result: AIEmailAssistantResult) => void;
+  /** Returns whether draft state was applied (merge validation passed). */
+  onApply: (result: AIEmailAssistantResult) => boolean;
   onOpenEditor?: () => void;
   className?: string;
   messages: ChatMessage[];
@@ -197,11 +198,20 @@ export function EmailAIChatPanel({
       const followups = f.suggested_followups?.length
         ? f.suggested_followups
         : [...FALLBACK_LLM_CHIPS];
+      const applied = onApply(f);
+      if (!applied) {
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next.length && next[next.length - 1]?.role === 'user') next.pop();
+          return next;
+        });
+        setInput(trimmed);
+        return;
+      }
       setLlmSuggestions(followups);
       const summary = buildAssistantSummary(f);
       setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: summary }]);
       onRegisterUndo(undoSnapshot);
-      requestAnimationFrame(() => onApply(f));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'AI request failed');
       setMessages((prev) => {
@@ -230,13 +240,13 @@ export function EmailAIChatPanel({
       <div className="px-3 sm:px-4 py-2.5 border-b border-border bg-gradient-to-b from-muted/40 to-muted/10 shrink-0">
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/20">
-              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary" aria-hidden />
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-sky-blue/10 ring-1 ring-sky-blue/25">
+              <Brain className="h-4 w-4 sm:h-5 sm:w-5 text-sky-blue" aria-hidden />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground leading-tight">Email assistant</h3>
               <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
-                Messages scroll in the middle · controls stay here
+                New chat clears this conversation. Undo restores your previous draft.
               </p>
             </div>
           </div>
@@ -248,7 +258,7 @@ export function EmailAIChatPanel({
               className="h-8 text-[11px] gap-1 px-2.5 sm:px-3"
               onClick={onNewConversation}
               disabled={busy}
-              title="Clear messages and start fresh"
+              title="Start a new conversation"
             >
               <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
               New chat
@@ -260,7 +270,7 @@ export function EmailAIChatPanel({
               className="h-8 text-[11px] gap-1 px-2.5 sm:px-3"
               onClick={onUndo}
               disabled={busy || !canUndo}
-              title="Undo last reply and restore your previous draft"
+              title="Undo the last assistant reply and restore your draft"
             >
               <Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
               Undo
@@ -272,7 +282,7 @@ export function EmailAIChatPanel({
                 size="sm"
                 className="h-8 text-[11px] gap-1 px-2.5 sm:px-3"
                 onClick={onOpenEditor}
-                title="Open the manual editor tab"
+                title="Open the editor tab"
               >
                 <PanelRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Editor
@@ -313,11 +323,11 @@ export function EmailAIChatPanel({
                   'flex h-8 w-8 shrink-0 rounded-full items-center justify-center border text-[10px] font-medium',
                   m.role === 'user'
                     ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-muted border-border text-muted-foreground',
+                    : 'bg-sky-blue/10 border-sky-blue/25 text-sky-blue',
                 )}
                 aria-hidden
               >
-                {m.role === 'user' ? <User className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                {m.role === 'user' ? <User className="h-4 w-4" /> : <Brain className="h-4 w-4 shrink-0" />}
               </div>
               <div
                 className={cn(
@@ -336,8 +346,8 @@ export function EmailAIChatPanel({
           ))}
           {busy && (
             <div className="flex gap-2 items-end justify-start">
-              <div className="flex h-8 w-8 shrink-0 rounded-full items-center justify-center border border-border bg-muted text-muted-foreground">
-                <Sparkles className="h-4 w-4 animate-pulse" aria-hidden />
+              <div className="flex h-8 w-8 shrink-0 rounded-full items-center justify-center border border-sky-blue/25 bg-sky-blue/10 text-sky-blue">
+                <Brain className="h-4 w-4 shrink-0 animate-pulse" aria-hidden />
               </div>
               <div className="rounded-2xl rounded-bl-md border border-border/80 bg-muted/40 px-3.5 py-3 text-xs text-muted-foreground">
                 Drafting your email…

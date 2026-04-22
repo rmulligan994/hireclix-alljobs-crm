@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { HtmlCampaignEmailEditor } from './email/HtmlCampaignEmailEditor';
 import { ArrowLeft, Save, Send, Calendar as CalendarIcon, Users, Loader2, Search, AlertTriangle, Mail, Folder } from 'lucide-react';
 import { useEmailTemplates } from '@/hooks/useEmailTemplates';
 import { useCreateCampaign, useUpdateCampaign, useRecipientCount, useFilteredCandidates, useAddCampaignRecipients } from '@/hooks/useCampaigns';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
 import { useCampaignFolders } from '@/hooks/useCampaignFolders';
@@ -39,20 +39,79 @@ import {
   formatUnknownMergeTagsMessage,
 } from '@/lib/email/merge-tags-validation';
 import { buildCampaignLaunchDescription } from '@/lib/campaignSendToast';
+import { newEmailDraftSessionId } from '@/lib/email/email-ai-chat-storage-key';
+import { ensureCampaignNameWithPeriod } from '@/lib/campaignNamePeriod';
+import { useCurrentUser } from '@/hooks/useAuth';
+import { useCampaignStats } from '@/hooks/useCampaignStats';
+
+function campaignStatusBadgeClass(status: string): string {
+  switch (status) {
+    case 'active':
+      return 'bg-sky-blue/20 text-sky-blue border-sky-blue';
+    case 'scheduled':
+      return 'bg-sunrise/20 text-sunrise border-sunrise';
+    case 'paused':
+      return 'bg-muted text-muted-foreground border-border';
+    case 'completed':
+      return 'bg-green-500/20 text-green-600 border-green-500';
+    default:
+      return 'bg-muted text-muted-foreground border-border';
+  }
+}
+
+/** Shown in read-only View: recipient rows that could not be delivered. */
+function ReadOnlyDeliveryIssues({ campaignId }: { campaignId: string }) {
+  const { stats, isLoading } = useCampaignStats(campaignId);
+  if (isLoading) {
+    return (
+      <div className="text-xs text-muted-foreground flex items-center gap-2">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        Loading send results…
+      </div>
+    );
+  }
+  const n = stats.failed + stats.rejected;
+  if (n <= 0) return null;
+  return (
+    <Alert className="border-destructive/40 bg-destructive/5">
+      <AlertTriangle className="h-4 w-4 text-destructive" />
+      <AlertTitle>Not delivered</AlertTitle>
+      <AlertDescription className="text-foreground/90">
+        <span className="font-medium text-destructive">{n}</span> message{n !== 1 ? 's' : ''} could not
+        be sent — invalid or missing address, or provider error ({stats.failed} failed, {stats.rejected}{' '}
+        rejected before send).
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 interface CampaignBuilderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingCampaign?: Campaign | null;
-  initialTemplate?: EmailTemplate | null;
   isLoadingCampaign?: boolean;
+  /** When true, show a read-only summary (e.g. opened from View on the campaigns list). */
+  readOnly?: boolean;
+  /** Called after a successful launch or schedule; parent can show a success screen (toast is skipped when set). */
+  onSendSuccess?: (payload: {
+    campaignId: string;
+    campaignName: string;
+    kind: 'launch' | 'schedule';
+    description?: string;
+  }) => void;
 }
 
-export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTemplate, isLoadingCampaign }: CampaignBuilderProps) => {
+export const CampaignBuilder = ({
+  open,
+  onOpenChange,
+  editingCampaign,
+  isLoadingCampaign,
+  readOnly = false,
+  onSendSuccess,
+}: CampaignBuilderProps) => {
   const [currentStep, setCurrentStep] = useState<'details' | 'template' | 'editor' | 'sequence' | 'audience' | 'review'>('details');
   const [campaignName, setCampaignName] = useState('');
   const [campaignType, setCampaignType] = useState('');
-  const [campaignGoal, setCampaignGoal] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [templateComposeKind, setTemplateComposeKind] = useState<ComposeKind>('announcement_form');
   const [templateFormPayload, setTemplateFormPayload] = useState<unknown | null>(null);
@@ -64,13 +123,24 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const [sequenceBuilderNonce, setSequenceBuilderNonce] = useState(0);
   /** Highest step index (0–4) the user has reached; enables step pill navigation. */
   const [furthestStepIndex, setFurthestStepIndex] = useState(0);
+  /** Editor vs AI tab when the full-screen email editor opens. */
+  const [editorInitialWorkspaceTab, setEditorInitialWorkspaceTab] = useState<'editor' | 'ai'>('editor');
+  /** Scopes AI chat for new campaigns (no `campaignId` yet) so each composition starts with a fresh conversation. */
+  const [emailDraftChatSessionId, setEmailDraftChatSessionId] = useState(() => newEmailDraftSessionId());
+
+  const mainScrollRef = useRef<HTMLDivElement>(null);
+  const [validationActionPending, setValidationActionPending] = useState(false);
+
+  useEffect(() => {
+    const el = mainScrollRef.current;
+    if (el) el.scrollTop = 0;
+  }, [currentStep]);
 
   // Initialize from editing campaign
   useEffect(() => {
     if (editingCampaign) {
       setCampaignName(editingCampaign.name ?? '');
       setCampaignType(editingCampaign.type ?? '');
-      setCampaignGoal(editingCampaign.goal ?? '');
       setCampaignId(editingCampaign.id);
       setSelectedFolderId(editingCampaign.folder_id ?? null);
       setSelectedJobId(editingCampaign.job_id ?? null);
@@ -106,7 +176,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     if (editingCampaign) {
       setFurthestStepIndex(4);
     }
-  }, [editingCampaign?.id]);
+  }, [editingCampaign]);
 
   // Load campaign emails when editing (template, sequence content)
   useEffect(() => {
@@ -143,22 +213,6 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     return () => { cancelled = true; };
   }, [editingCampaign?.id]);
 
-  // When opening with initialTemplate (from Template Library), go straight to editor
-  useEffect(() => {
-    if (open && !editingCampaign && initialTemplate !== undefined) {
-      setSelectedTemplate(initialTemplate ?? null);
-      const ck = initialTemplate?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form';
-      setTemplateComposeKind(ck);
-      setTemplateFormPayload(initialTemplate?.form_payload ?? null);
-      setTemplateEditorSubject(initialTemplate?.subject ?? '');
-      setTemplateHtml(initialTemplate?.html_content ?? null);
-      setEmailSteps([]);
-      setSequenceBuilderNonce((n) => n + 1);
-      setFurthestStepIndex(1);
-      setCurrentStep('editor');
-    }
-  }, [open, editingCampaign, initialTemplate]);
-  
   // Audience state
   const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>({});
   const [selectedTalentPools, setSelectedTalentPools] = useState<string[]>([]);
@@ -189,11 +243,93 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   const { data: talentPools } = useTalentPools();
   const { data: pipelines } = usePipelines();
   const { data: folders } = useCampaignFolders();
+  const { data: currentUser } = useCurrentUser();
   const userRole = useCurrentUserRole();
+  const isAdmin = userRole === 'admin';
+  /** Admins (Team) can require all org-shared campaigns to appear in the Organization tab — no per-campaign toggle. */
+  const orgTabListingForced = currentUser?.profile?.forceShowInOrgTab !== false;
+  const [shareWithOrganization, setShareWithOrganization] = useState(false);
+  /** When admin has not set “force” on your profile, controls Organization tab listing for this org-shared campaign. */
+  const [showInOrgTab, setShowInOrgTab] = useState(true);
+
+  const orgListFields = useMemo(() => {
+    if (!isAdmin) {
+      return { is_organization_campaign: false, show_in_org_tab: true };
+    }
+    if (!shareWithOrganization) {
+      return { is_organization_campaign: false, show_in_org_tab: true };
+    }
+    return {
+      is_organization_campaign: true,
+      show_in_org_tab: orgTabListingForced ? true : showInOrgTab,
+    };
+  }, [isAdmin, shareWithOrganization, orgTabListingForced, showInOrgTab]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (editingCampaign) {
+      setShareWithOrganization(!!editingCampaign.is_organization_campaign);
+      setShowInOrgTab(editingCampaign.show_in_org_tab !== false);
+    } else {
+      setShareWithOrganization(false);
+      setShowInOrgTab(true);
+    }
+  }, [open, editingCampaign]);
+
   const { settings: orgSettings } = useOrganizationSettings();
   const { data: campaignJobs } = useJobsForCampaign(jobSearch);
   const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
   const { data: recipientCount } = useRecipientCount(audienceFilter);
+
+  const getSendBlocker = useCallback(
+    (kind: 'launch' | 'schedule'): string | null => {
+      if (!orgSettings?.base_url?.trim()) {
+        return 'Set Base URL in Settings → Organization so unsubscribe links work.';
+      }
+      if (!campaignName.trim()) {
+        return 'Enter a campaign name.';
+      }
+      if (!campaignType) {
+        return 'Select a campaign type.';
+      }
+      if (emailSteps.length === 0) {
+        return 'Add at least one email in your sequence.';
+      }
+      for (let i = 0; i < emailSteps.length; i++) {
+        const step = emailSteps[i];
+        if (!(step.subject ?? '').trim()) {
+          return `Step ${i + 1}: add an email subject.`;
+        }
+        if (!(step.html_content ?? '').trim()) {
+          return `Step ${i + 1}: add email body content.`;
+        }
+      }
+      const unknownMerge = findUnknownMergeTagsInCampaignSteps(emailSteps);
+      if (unknownMerge.length > 0) {
+        return formatUnknownMergeTagsMessage(unknownMerge);
+      }
+      if (!filteredCandidates || filteredCandidates.length === 0) {
+        return 'Select at least one recipient in the Audience step.';
+      }
+      if (recipientCount !== undefined && recipientCount > 0 && isOverRecipientLimit(userRole, recipientCount)) {
+        return 'Recipient count exceeds your role limit. Narrow your audience or ask an Admin to send.';
+      }
+      if (kind === 'schedule' && !sequenceMetadata?.firstSendDate) {
+        return 'Choose a scheduled date in the Sequence step.';
+      }
+      return null;
+    },
+    [
+      orgSettings?.base_url,
+      campaignName,
+      campaignType,
+      emailSteps,
+      filteredCandidates,
+      recipientCount,
+      userRole,
+      sequenceMetadata?.firstSendDate,
+    ],
+  );
 
   /** Persists sequence to DB and refreshes local ids from the server (insert/update/delete). */
   const persistCampaignEmails = async (cid: string) => {
@@ -223,7 +359,8 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     });
   }, [selectedTalentPools, selectedPipelines, selectedTags, selectedLeadStatus]);
 
-  const handleTemplateSelect = (template: EmailTemplate | null) => {
+  const handleTemplateSelect = (template: EmailTemplate | null, options?: { initialAiTab?: boolean }) => {
+    setEditorInitialWorkspaceTab(options?.initialAiTab ? 'ai' : 'editor');
     setSelectedTemplate(template);
     const ck = template?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form';
     setTemplateComposeKind(ck);
@@ -234,6 +371,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setSequenceBuilderNonce((n) => n + 1);
     // New template body invalidates sequence/audience/review until the user goes through editor → sequence again.
     setFurthestStepIndex(1);
+    setEmailDraftChatSessionId(newEmailDraftSessionId());
     setCurrentStep('editor');
   };
 
@@ -260,7 +398,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setCurrentStep('sequence');
   };
 
-  const handleEditorSaveTemplate = async (payload: {
+  const handleSaveTemplate = async (payload: {
     html: string;
     subject: string;
     compose_kind: ComposeKind;
@@ -293,9 +431,44 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       queryClient.invalidateQueries({ queryKey: ['email-templates'] });
       toast({
         title: 'Template saved',
-        description: 'You can reuse it anytime from your template library.',
+        description: 'Your library template was updated. Continue when you are ready.',
       });
-      setCurrentStep('template');
+    } catch (err) {
+      toast({
+        title: 'Failed to save template',
+        description: (err as Error)?.message ?? 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveAsTemplate = async (
+    payload: {
+      html: string;
+      subject: string;
+      compose_kind: ComposeKind;
+      form_payload: AnnouncementForm | null;
+    },
+    name: string,
+  ) => {
+    applyEditorPayloadToTemplateState(payload);
+
+    try {
+      const created = await emailTemplateService.create({
+        name: name.trim() || campaignName || 'Untitled Template',
+        category: campaignType || 'custom',
+        subject: payload.subject,
+        bee_json: null,
+        html_content: payload.html,
+        compose_kind: payload.compose_kind,
+        form_payload: payload.form_payload as Json | null,
+      });
+      setSelectedTemplate(created);
+      queryClient.invalidateQueries({ queryKey: ['email-templates'] });
+      toast({
+        title: 'Template created',
+        description: `"${created.name}" was added to your template library.`,
+      });
     } catch (err) {
       toast({
         title: 'Failed to save template',
@@ -306,6 +479,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   };
 
   const handleEditorCancel = () => {
+    setEditorInitialWorkspaceTab('editor');
     setCurrentStep('template');
   };
 
@@ -351,12 +525,13 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
       let testCampaignId = campaignId;
       if (!testCampaignId) {
         const campaign = await createCampaign.mutateAsync({
-          name: campaignName || 'Test',
+          name: ensureCampaignNameWithPeriod(campaignName || 'Test'),
           type: campaignType,
-          goal: campaignGoal,
           audience_filter: audienceFilter,
           job_id: campaignType === 'job_alert' ? selectedJobId : null,
           folder_id: selectedFolderId,
+          is_organization_campaign: orgListFields.is_organization_campaign,
+          show_in_org_tab: orgListFields.show_in_org_tab,
         });
         setCampaignId(campaign.id);
         testCampaignId = campaign.id;
@@ -378,20 +553,24 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   };
 
   const runWithValidation = (action: 'launch' | 'schedule') => {
-    if (!filteredCandidates || filteredCandidates.length === 0) {
-      if (action === 'launch') handleLaunchCampaign();
-      else handleScheduleCampaign();
+    const blocker = getSendBlocker(action);
+    if (blocker) {
+      toast({
+        title: 'Cannot send yet',
+        description: blocker,
+        variant: 'destructive',
+      });
       return;
     }
-    const candidateIds = filteredCandidates.map(c => c.id);
+    const candidateIds = filteredCandidates!.map((c) => c.id);
     campaignService.getRecipientValidation(campaignId || '', candidateIds).then((v) => {
       if (v.noEmail > 0 || v.unsubscribed > 0) {
         setValidationData(v);
         setPendingAction(action);
         setShowValidationDialog(true);
       } else {
-        if (action === 'launch') handleLaunchCampaign();
-        else handleScheduleCampaign();
+        if (action === 'launch') void handleLaunchCampaign();
+        else void handleScheduleCampaign();
       }
     });
   };
@@ -400,12 +579,13 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     try {
       if (!campaignId) {
         const campaign = await createCampaign.mutateAsync({
-          name: campaignName,
+          name: ensureCampaignNameWithPeriod(campaignName),
           type: campaignType,
-          goal: campaignGoal,
           audience_filter: audienceFilter,
           job_id: campaignType === 'job_alert' ? selectedJobId : null,
           folder_id: selectedFolderId,
+          is_organization_campaign: orgListFields.is_organization_campaign,
+          show_in_org_tab: orgListFields.show_in_org_tab,
         });
         setCampaignId(campaign.id);
         
@@ -424,11 +604,16 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           input: {
             name: campaignName,
             type: campaignType,
-            goal: campaignGoal,
             status: 'draft',
             audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
+            ...(isAdmin
+              ? {
+                  is_organization_campaign: orgListFields.is_organization_campaign,
+                  show_in_org_tab: orgListFields.show_in_org_tab,
+                }
+              : {}),
           },
         });
         await persistCampaignEmails(campaignId);
@@ -455,28 +640,18 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   };
 
   const handleScheduleCampaign = async () => {
-    const firstDate = sequenceMetadata?.firstSendDate;
-    const scheduleTime = sequenceMetadata?.scheduleTime ?? '09:00';
-    if (!firstDate) {
+    const scheduleBlocker = getSendBlocker('schedule');
+    if (scheduleBlocker) {
       toast({
-        title: 'Schedule required',
-        description: 'Please set a scheduled date in the Sequence step.',
+        title: 'Cannot schedule yet',
+        description: scheduleBlocker,
         variant: 'destructive',
       });
       return;
     }
 
-    if (emailSteps.length > 0) {
-      const unknownMerge = findUnknownMergeTagsInCampaignSteps(emailSteps);
-      if (unknownMerge.length > 0) {
-        toast({
-          title: 'Invalid merge tags',
-          description: formatUnknownMergeTagsMessage(unknownMerge),
-          variant: 'destructive',
-        });
-        return;
-      }
-    }
+    const firstDate = sequenceMetadata!.firstSendDate!;
+    const scheduleTime = sequenceMetadata?.scheduleTime ?? '09:00';
 
     try {
       const scheduledAt = new Date(firstDate);
@@ -488,14 +663,15 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
       if (!campaignId) {
         const campaign = await createCampaign.mutateAsync({
-          name: campaignName,
+          name: ensureCampaignNameWithPeriod(campaignName),
           type: campaignType,
-          goal: campaignGoal,
           audience_filter: audienceFilter,
           scheduled_at: scheduledAtIso,
           schedule_recurrence: sequenceMetadata?.scheduleRecurrence ?? null,
           job_id: campaignType === 'job_alert' ? selectedJobId : null,
           folder_id: selectedFolderId,
+          is_organization_campaign: orgListFields.is_organization_campaign,
+          show_in_org_tab: orgListFields.show_in_org_tab,
         });
         setCampaignId(campaign.id);
         finalCampaignId = campaign.id;
@@ -519,13 +695,18 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           input: {
             name: campaignName,
             type: campaignType,
-            goal: campaignGoal,
             status: 'scheduled',
             scheduled_at: scheduledAtIso,
             schedule_recurrence: sequenceMetadata?.scheduleRecurrence ?? null,
             audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
+            ...(isAdmin
+              ? {
+                  is_organization_campaign: orgListFields.is_organization_campaign,
+                  show_in_org_tab: orgListFields.show_in_org_tab,
+                }
+              : {}),
           },
         });
         await persistCampaignEmails(campaignId);
@@ -537,25 +718,57 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         }
       }
 
-      // Queue emails with Mailgun via o:deliverytime
-      const { data, error } = await supabase.functions.invoke('send-campaign-email', {
-        body: { campaignId: finalCampaignId, scheduledAt: scheduledAtIso },
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      const queued = data?.sent ?? 0;
-
+      const cid = finalCampaignId!;
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
 
-      toast({
-        title: 'Campaign scheduled',
-        description: `${queued} emails queued for ${format(scheduledAt, 'PPP')} at ${scheduleTime}.`,
+      // Don’t await send-campaign-email: it queues one row per recipient and can take a long time.
+      const scheduleDescription = `Your campaign is scheduled for ${format(scheduledAt, 'PPP')} at ${scheduleTime}. Sends are finishing queueing in the background—check Upcoming Sends for status.`;
+      onSendSuccess?.({
+        campaignId: cid,
+        campaignName: campaignName.trim(),
+        kind: 'schedule',
+        description: scheduleDescription,
       });
+      if (!onSendSuccess) {
+        toast({
+          title: 'Campaign scheduled',
+          description: scheduleDescription,
+        });
+      }
       handleClose();
+
+      void supabase.functions
+        .invoke('send-campaign-email', {
+          body: { campaignId: cid, scheduledAt: scheduledAtIso },
+        })
+        .then(({ data, error }) => {
+          queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+          queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
+          if (error) {
+            toast({
+              title: 'Scheduling may be incomplete',
+              description: error.message,
+              variant: 'destructive',
+            });
+            return;
+          }
+          if (data?.error) {
+            toast({
+              title: 'Scheduling may be incomplete',
+              description: String(data.error),
+              variant: 'destructive',
+            });
+            return;
+          }
+          const skippedNoEmail = typeof data?.skippedNoEmail === 'number' ? data.skippedNoEmail : 0;
+          if (skippedNoEmail > 0) {
+            toast({
+              title: 'Schedule ready',
+              description: `${data?.sent ?? 0} queued; ${skippedNoEmail} skipped (no email on file).`,
+            });
+          }
+        });
     } catch (err) {
       toast({
         title: 'Schedule failed',
@@ -566,16 +779,14 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   };
 
   const handleLaunchCampaign = async () => {
-    if (emailSteps.length > 0) {
-      const unknownMerge = findUnknownMergeTagsInCampaignSteps(emailSteps);
-      if (unknownMerge.length > 0) {
-        toast({
-          title: 'Invalid merge tags',
-          description: formatUnknownMergeTagsMessage(unknownMerge),
-          variant: 'destructive',
-        });
-        return;
-      }
+    const launchBlocker = getSendBlocker('launch');
+    if (launchBlocker) {
+      toast({
+        title: 'Cannot launch yet',
+        description: launchBlocker,
+        variant: 'destructive',
+      });
+      return;
     }
 
     try {
@@ -583,13 +794,14 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
       if (!campaignId) {
         const campaign = await createCampaign.mutateAsync({
-          name: campaignName,
+          name: ensureCampaignNameWithPeriod(campaignName),
           type: campaignType,
-          goal: campaignGoal,
           audience_filter: audienceFilter,
           schedule_recurrence: sequenceMetadata?.scheduleRecurrence ?? null,
           job_id: campaignType === 'job_alert' ? selectedJobId : null,
           folder_id: selectedFolderId,
+          is_organization_campaign: orgListFields.is_organization_campaign,
+          show_in_org_tab: orgListFields.show_in_org_tab,
         });
         setCampaignId(campaign.id);
         finalCampaignId = campaign.id;
@@ -598,7 +810,17 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
         await updateCampaign.mutateAsync({
           id: campaign.id,
-          input: { status: 'active', job_id: campaignType === 'job_alert' ? selectedJobId : null, folder_id: selectedFolderId },
+          input: {
+            status: 'active',
+            job_id: campaignType === 'job_alert' ? selectedJobId : null,
+            folder_id: selectedFolderId,
+            ...(isAdmin
+              ? {
+                  is_organization_campaign: orgListFields.is_organization_campaign,
+                  show_in_org_tab: orgListFields.show_in_org_tab,
+                }
+              : {}),
+          },
         });
 
         if (filteredCandidates && filteredCandidates.length > 0) {
@@ -613,11 +835,16 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           input: {
             name: campaignName,
             type: campaignType,
-            goal: campaignGoal,
             status: 'active',
             audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
+            ...(isAdmin
+              ? {
+                  is_organization_campaign: orgListFields.is_organization_campaign,
+                  show_in_org_tab: orgListFields.show_in_org_tab,
+                }
+              : {}),
             ...(sequenceMetadata?.scheduleRecurrence !== undefined && {
               schedule_recurrence: sequenceMetadata.scheduleRecurrence,
             }),
@@ -632,30 +859,57 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
         }
       }
 
-      // Invoke edge function to send step 1 immediately and queue step 2+
-      const { data, error } = await supabase.functions.invoke('send-campaign-email', {
-        body: { campaignId: finalCampaignId },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
+      const cid = finalCampaignId!;
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
 
-      const errs = Array.isArray(data?.errors) ? (data.errors as string[]) : [];
-      const skippedNoEmail = typeof data?.skippedNoEmail === 'number' ? data.skippedNoEmail : 0;
-      const extra =
-        errs.length > 0 || skippedNoEmail > 0
-          ? buildCampaignLaunchDescription(errs, skippedNoEmail)
-          : '';
-      toast({
-        title: 'Campaign launched!',
-        description: extra
-          ? `Your campaign is active. ${extra}`
-          : 'Your campaign is now active and emails will begin sending.',
+      // Don’t await send-campaign-email: it sends to each recipient sequentially and blocks the UI for large lists.
+      const launchDescription =
+        'Your campaign is active. Messages are sending now; large audiences may take a minute to finish.';
+      onSendSuccess?.({
+        campaignId: cid,
+        campaignName: campaignName.trim(),
+        kind: 'launch',
+        description: launchDescription,
       });
+      if (!onSendSuccess) {
+        toast({
+          title: 'Campaign launched!',
+          description: launchDescription,
+        });
+      }
       handleClose();
+
+      void supabase.functions
+        .invoke('send-campaign-email', { body: { campaignId: cid } })
+        .then(({ data, error }) => {
+          queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+          queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
+          if (error) {
+            toast({
+              title: 'Sending may be incomplete',
+              description: error.message,
+              variant: 'destructive',
+            });
+            return;
+          }
+          if (data?.error) {
+            toast({
+              title: 'Sending may be incomplete',
+              description: String(data.error),
+              variant: 'destructive',
+            });
+            return;
+          }
+          const errs = Array.isArray(data?.errors) ? (data.errors as string[]) : [];
+          const skippedNoEmail = typeof data?.skippedNoEmail === 'number' ? data.skippedNoEmail : 0;
+          if (errs.length > 0 || skippedNoEmail > 0) {
+            toast({
+              title: 'Some recipients were skipped or failed',
+              description: buildCampaignLaunchDescription(errs, skippedNoEmail),
+            });
+          }
+        });
     } catch (err) {
       toast({
         title: 'Launch failed',
@@ -665,11 +919,10 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     }
   };
 
-  const handleClose = () => {
+  const resetBuilderState = () => {
     setCurrentStep('details');
     setCampaignName('');
     setCampaignType('');
-    setCampaignGoal('');
     setSelectedTemplate(null);
     setTemplateComposeKind('announcement_form');
     setTemplateFormPayload(null);
@@ -688,7 +941,23 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     setJobSearch('');
     setSequenceBuilderNonce(0);
     setFurthestStepIndex(0);
+    setEditorInitialWorkspaceTab('editor');
+    setValidationActionPending(false);
+    setEmailDraftChatSessionId(newEmailDraftSessionId());
+    setShareWithOrganization(false);
+  };
+
+  /** Programmatic close (Save draft, Launch, Schedule, etc.) */
+  const handleClose = () => {
     onOpenChange(false);
+    resetBuilderState();
+  };
+
+  /** Radix dialog: ignore `open=true` so we don't wipe state when the dialog opens. */
+  const handleDialogOpenChange = (isOpen: boolean) => {
+    if (isOpen) return;
+    onOpenChange(false);
+    resetBuilderState();
   };
 
   const toggleTalentPool = (poolId: string) => {
@@ -709,21 +978,135 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
     );
   };
 
+  const launchSendBlocker = getSendBlocker('launch');
+  const scheduleSendBlocker = getSendBlocker('schedule');
+
+  const { data: firstSentByCampaignEmailId } = useQuery({
+    queryKey: ['campaign-step-first-sent', editingCampaign?.id],
+    queryFn: () => campaignService.getFirstSentAtByCampaignEmailId(editingCampaign!.id),
+    enabled: readOnly && !!editingCampaign?.id,
+  });
+
+  if (readOnly) {
+    const sortedSteps = [...emailSteps].sort(
+      (a, b) => (a.step_order ?? 0) - (b.step_order ?? 0),
+    );
+    const c = editingCampaign;
+    return (
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="max-w-lg max-h-[min(90vh,720px)] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-heading pr-8">{c?.name ?? 'Campaign'}</DialogTitle>
+            {c ? (
+              <DialogDescription className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={campaignStatusBadgeClass(c.status)}>
+                  {c.status}
+                </Badge>
+                <Badge variant="secondary">{c.type}</Badge>
+              </DialogDescription>
+            ) : (
+              <DialogDescription>Loading campaign…</DialogDescription>
+            )}
+          </DialogHeader>
+          {isLoadingCampaign ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : !c ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">Unable to load this campaign.</p>
+          ) : (
+            <div className="space-y-4 text-sm">
+              {c.goal ? (
+                <div>
+                  <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Goal</div>
+                  <p className="text-foreground mt-0.5">{c.goal}</p>
+                </div>
+              ) : null}
+              <div>
+                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Created</div>
+                <p className="text-foreground mt-0.5">{format(new Date(c.created_at), 'PPP')}</p>
+              </div>
+              {c.scheduled_at ? (
+                <div>
+                  <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Scheduled</div>
+                  <p className="text-foreground mt-0.5">{format(new Date(c.scheduled_at), 'PPP p')}</p>
+                </div>
+              ) : null}
+              <div>
+                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Schedule</div>
+                <p className="text-foreground mt-0.5">
+                  {sequenceMetadata?.sendImmediately
+                    ? 'Send immediately when launched'
+                    : sequenceMetadata?.firstSendDate && sequenceMetadata?.scheduleTime
+                      ? `${format(new Date(sequenceMetadata.firstSendDate), 'PPP')} at ${sequenceMetadata.scheduleTime}`
+                      : '—'}
+                </p>
+              </div>
+              <div>
+                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Recipients (estimate)</div>
+                <p className="text-foreground mt-0.5">{recipientCount ?? 0} candidates match current filters</p>
+              </div>
+              <ReadOnlyDeliveryIssues campaignId={c.id} />
+              <div>
+                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide mb-2">Emails</div>
+                <ul className="space-y-2 border border-border rounded-md divide-y divide-border">
+                  {sortedSteps.length === 0 ? (
+                    <li className="px-3 py-2 text-muted-foreground">No emails in sequence</li>
+                  ) : (
+                    sortedSteps.map((step, i) => {
+                      const stepId = step.id;
+                      const firstSent =
+                        stepId && firstSentByCampaignEmailId
+                          ? firstSentByCampaignEmailId[stepId]
+                          : undefined;
+                      return (
+                        <li key={stepId ?? i} className="px-3 py-2">
+                          <div className="font-medium text-foreground">
+                            {i + 1}. {step.subject || '(No subject)'}
+                          </div>
+                          {firstSent ? (
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              First sent {format(new Date(firstSent), 'PPp')}
+                            </div>
+                          ) : null}
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   if (currentStep === 'editor') {
     return (
-      <Dialog open={open} onOpenChange={handleClose}>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0">
           <DialogTitle className="sr-only">Edit campaign email</DialogTitle>
           <HtmlCampaignEmailEditor
+            editorSeed={emailDraftChatSessionId}
             initialSubject={templateEditorSubject}
             initialHtmlContent={templateHtml}
             initialComposeKind={templateComposeKind}
             initialFormPayload={templateFormPayload ?? undefined}
+            initialWorkspaceTab={editorInitialWorkspaceTab}
             onContinue={handleEditorContinue}
-            onSaveToTemplateLibrary={handleEditorSaveTemplate}
+            onSaveTemplate={handleSaveTemplate}
+            onSaveAsTemplate={handleSaveAsTemplate}
+            defaultSaveAsTemplateName={campaignName || selectedTemplate?.name || 'New template'}
             onCancel={handleEditorCancel}
             campaignJobId={selectedJobId}
             campaignId={campaignId}
+            draftChatSessionId={emailDraftChatSessionId}
             loadedTemplate={
               selectedTemplate ? { id: selectedTemplate.id, name: selectedTemplate.name } : null
             }
@@ -735,7 +1118,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-6xl h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <div className="flex items-center justify-between">
@@ -748,7 +1131,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                 {currentStep === 'review' && 'Review & Launch'}
               </DialogTitle>
               <DialogDescription>
-                {currentStep === 'details' && 'Set up your campaign details and objectives'}
+                {currentStep === 'details' && 'Set up your campaign name, type, and options'}
                 {currentStep === 'template' && 'Select an existing template or create from scratch'}
                 {currentStep === 'sequence' && 'Create your email sequence and timing'}
                 {currentStep === 'audience' && 'Define who will receive this campaign'}
@@ -768,13 +1151,14 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                   try {
                     if (!campaignId && campaignName && emailSteps.length > 0) {
                       const campaign = await createCampaign.mutateAsync({
-                        name: campaignName,
+                        name: ensureCampaignNameWithPeriod(campaignName),
                         type: campaignType || 'email',
-                        goal: campaignGoal,
                         audience_filter: audienceFilter,
                         ...(sequenceMetadata?.scheduleRecurrence !== undefined && { schedule_recurrence: sequenceMetadata.scheduleRecurrence }),
                         job_id: campaignType === 'job_alert' ? selectedJobId : null,
                         folder_id: selectedFolderId,
+                        is_organization_campaign: orgListFields.is_organization_campaign,
+                        show_in_org_tab: orgListFields.show_in_org_tab,
                       });
                       setCampaignId(campaign.id);
                       await persistCampaignEmails(campaign.id);
@@ -791,11 +1175,16 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                         input: {
                           name: campaignName,
                           type: campaignType,
-                          goal: campaignGoal,
                           audience_filter: audienceFilter,
                           ...(sequenceMetadata?.scheduleRecurrence !== undefined && { schedule_recurrence: sequenceMetadata.scheduleRecurrence }),
                           job_id: campaignType === 'job_alert' ? selectedJobId : null,
                           folder_id: selectedFolderId,
+                          ...(isAdmin
+                            ? {
+                                is_organization_campaign: orgListFields.is_organization_campaign,
+                                show_in_org_tab: orgListFields.show_in_org_tab,
+                              }
+                            : {}),
                         },
                       });
                       await persistCampaignEmails(campaignId);
@@ -854,7 +1243,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto mt-6">
+        <div ref={mainScrollRef} className="flex-1 overflow-y-auto mt-6">
           {isLoadingCampaign ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
@@ -890,16 +1279,6 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="campaign-goal">Campaign Goal</Label>
-                <Input 
-                  id="campaign-goal" 
-                  placeholder="What do you want to achieve?"
-                  value={campaignGoal}
-                  onChange={(e) => setCampaignGoal(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label>Folder (optional)</Label>
                 <Select value={selectedFolderId ?? 'none'} onValueChange={(v) => setSelectedFolderId(v === 'none' ? null : v)}>
                   <SelectTrigger>
@@ -919,6 +1298,59 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                 </Select>
                 <p className="text-xs text-muted-foreground">Organize campaigns into folders for easier finding.</p>
               </div>
+
+              {isAdmin && (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+                    <Checkbox
+                      id="share-org"
+                      checked={shareWithOrganization}
+                      onCheckedChange={(v) => setShareWithOrganization(!!v)}
+                    />
+                    <div className="space-y-0.5">
+                      <Label htmlFor="share-org" className="font-medium cursor-pointer">
+                        Share with organization
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {orgTabListingForced
+                          ? 'When enabled, teammates can access this campaign. For your account, org-shared campaigns also always appear under Organization (set by an admin in Settings → Team). You can change sharing anytime, including after the campaign is live.'
+                          : 'When enabled, teammates can access this campaign. Use the option below to choose whether it also shows under the Organization tab. You can change both anytime, including after the campaign is live.'}
+                      </p>
+                    </div>
+                  </div>
+                  {shareWithOrganization && orgTabListingForced && (
+                    <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 ml-0 sm:ml-1">
+                      <Checkbox id="show-in-org-tab-forced" checked disabled />
+                      <div className="space-y-0.5">
+                        <span className="font-medium text-foreground">Also list under Organization</span>
+                        <p className="text-xs text-muted-foreground">
+                          Required for your account: when you share a campaign, it will always be listed under
+                          Organization. This isn’t optional per campaign — an admin controls it in Settings → Team.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {shareWithOrganization && !orgTabListingForced && (
+                    <div className="flex items-start gap-3 rounded-lg border border-border p-3 ml-0 sm:ml-1">
+                      <Checkbox
+                        id="show-in-org-tab"
+                        checked={showInOrgTab}
+                        onCheckedChange={(v) => setShowInOrgTab(!!v)}
+                      />
+                      <div className="space-y-0.5">
+                        <Label htmlFor="show-in-org-tab" className="font-medium cursor-pointer">
+                          Also list under Organization
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Optional for your account: when on, this campaign appears under the Organization tab as well
+                          as My Campaigns. When off, it stays only under My Campaigns (teammates can still use it if
+                          shared). You can change this anytime, including after launch.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {campaignType === 'job_alert' && (
                 <div className="space-y-2">
@@ -967,10 +1399,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               <Button 
                 className="w-full bg-gradient-primary hover:opacity-90"
                 onClick={() => {
+                  if (!campaignName.trim() || !campaignType) return;
                   setFurthestStepIndex((f) => Math.max(1, f));
                   setCurrentStep('template');
                 }}
-                disabled={!campaignName || !campaignType}
+                disabled={!campaignName.trim() || !campaignType}
               >
                 Continue to Templates
               </Button>
@@ -992,6 +1425,7 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
               templateHtml={templateHtml}
               campaignJobId={selectedJobId}
               campaignId={campaignId}
+              emailDraftChatSessionId={emailDraftChatSessionId}
               initialSteps={emailSteps.length > 0 ? emailSteps : undefined}
             />
           )}
@@ -1189,12 +1623,12 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
 
           {currentStep === 'review' && (
             <div className="space-y-6">
-              {(!orgSettings?.base_url || !orgSettings.base_url.trim()) && (
+              {(sequenceMetadata?.sendImmediately === false ? scheduleSendBlocker : launchSendBlocker) && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Base URL not set</AlertTitle>
+                  <AlertTitle>Complete these before sending</AlertTitle>
                   <AlertDescription>
-                    Set Base URL in Settings → Organization so unsubscribe links work.
+                    {sequenceMetadata?.sendImmediately === false ? scheduleSendBlocker : launchSendBlocker}
                   </AlertDescription>
                 </Alert>
               )}
@@ -1281,7 +1715,11 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                         <Button 
                           className="flex-1 bg-gradient-primary hover:opacity-90"
                           onClick={() => runWithValidation('schedule')}
-                          disabled={createCampaign.isPending || updateCampaign.isPending || !sequenceMetadata?.firstSendDate}
+                          disabled={
+                            createCampaign.isPending ||
+                            updateCampaign.isPending ||
+                            !!scheduleSendBlocker
+                          }
                         >
                           {createCampaign.isPending ? (
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1294,7 +1732,9 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                         <Button 
                           className="flex-1 bg-gradient-primary hover:opacity-90"
                           onClick={() => runWithValidation('launch')}
-                          disabled={createCampaign.isPending || updateCampaign.isPending}
+                          disabled={
+                            createCampaign.isPending || updateCampaign.isPending || !!launchSendBlocker
+                          }
                         >
                           {createCampaign.isPending ? (
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1327,14 +1767,31 @@ export const CampaignBuilder = ({ open, onOpenChange, editingCampaign, initialTe
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => {
-                            if (pendingAction === 'launch') handleLaunchCampaign();
-                            else if (pendingAction === 'schedule') handleScheduleCampaign();
-                            setShowValidationDialog(false);
-                            setPendingAction(null);
+                          disabled={validationActionPending}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (validationActionPending || !pendingAction) return;
+                            setValidationActionPending(true);
+                            void (async () => {
+                              try {
+                                if (pendingAction === 'launch') await handleLaunchCampaign();
+                                else if (pendingAction === 'schedule') await handleScheduleCampaign();
+                              } finally {
+                                setValidationActionPending(false);
+                                setShowValidationDialog(false);
+                                setPendingAction(null);
+                              }
+                            })();
                           }}
                         >
-                          Continue
+                          {validationActionPending ? (
+                            <span className="inline-flex items-center">
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Working…
+                            </span>
+                          ) : (
+                            'Continue'
+                          )}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>

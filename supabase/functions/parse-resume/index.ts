@@ -11,6 +11,10 @@ const corsHeaders = {
 
 interface ParseResumeRequest {
   text: string;
+  /** When `"tags_only"`, returns `{ tags }` only — smaller prompt, same model (`gpt-4o-mini`). */
+  mode?: "full" | "tags_only";
+  /** For `tags_only`: labels already on the candidate or in the UI queue — model must not repeat them. */
+  excludeTags?: string[];
 }
 
 interface ParsedCandidate {
@@ -53,7 +57,19 @@ Deno.serve(async (req) => {
     }
 
     const body: ParseResumeRequest = await req.json();
-    const { text } = body;
+    const { text, mode } = body;
+    const tagsOnly = mode === "tags_only";
+    const excludeTags = Array.isArray(body.excludeTags)
+      ? body.excludeTags
+          .filter((t): t is string => typeof t === "string")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    const excludeLower = new Set(excludeTags.map((t) => t.toLowerCase()));
+    const excludeForPrompt = excludeTags.filter((t, i, arr) => {
+      const k = t.toLowerCase();
+      return arr.findIndex((x) => x.toLowerCase() === k) === i;
+    }).slice(0, 80);
 
     if (!text || typeof text !== "string") {
       return new Response(
@@ -69,7 +85,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    const prompt = `Extract candidate information from this resume/CV text. Return a JSON object matching this schema exactly. Use null for missing fields. For tags, return only the 4 most important/relevant skills or technologies (prioritize core competencies and job-relevant keywords). For name, split into firstName and lastName. For linkedinUrl, use the full URL if a LinkedIn profile link appears.
+    const excludeBlock =
+      tagsOnly && excludeForPrompt.length > 0
+        ? `
+
+These labels are ALREADY used for this candidate (or already suggested in the UI). Do NOT output them or close synonyms — pick DIFFERENT skills, tools, certifications, or keywords that still appear in the resume:
+${excludeForPrompt.join(" | ")}
+
+`
+        : "";
+
+    const prompt = tagsOnly
+      ? `You help recruiters tag candidates. From the resume/CV text below, suggest exactly 5 concise tags: skills, technologies, certifications, equipment, or job-relevant keywords. Each tag should be 1–4 words, Title Case for multi-word labels. No duplicates or near-duplicates. Prefer concrete terms (e.g. "Forklift Certified", "Warehouse WMS") over vague ones.${excludeBlock}
+Return a JSON object with this shape only: {"tags":["tag1","tag2",...]} with up to 5 strings (fewer only if the resume is very sparse or every obvious tag is excluded above).
+
+Resume text:
+---
+${text.slice(0, 12000)}
+---`
+      : `Extract candidate information from this resume/CV text. Return a JSON object matching this schema exactly. Use null for missing fields. For tags, return only the 4 most important/relevant skills or technologies (prioritize core competencies and job-relevant keywords). For name, split into firstName and lastName. For linkedinUrl, use the full URL if a LinkedIn profile link appears.
 
 Schema: ${CANDIDATE_SCHEMA}
 
@@ -88,7 +122,7 @@ ${text.slice(0, 12000)}
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        temperature: 0.2,
+        temperature: tagsOnly && excludeForPrompt.length > 0 ? 0.35 : 0.2,
       }),
     });
 
@@ -113,7 +147,7 @@ ${text.slice(0, 12000)}
       );
     }
 
-    let parsed: ParsedCandidate;
+    let parsed: ParsedCandidate | { tags?: unknown };
     try {
       parsed = JSON.parse(content);
     } catch {
@@ -123,18 +157,34 @@ ${text.slice(0, 12000)}
       );
     }
 
-    // Normalize
+    if (tagsOnly) {
+      const raw = parsed as { tags?: unknown };
+      const tags = Array.isArray(raw.tags)
+        ? raw.tags
+            .filter((t): t is string => typeof t === "string")
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .filter((t) => !excludeLower.has(t.toLowerCase()))
+            .slice(0, 5)
+        : [];
+      return new Response(JSON.stringify({ tags }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Normalize (full parse)
+    const full = parsed as ParsedCandidate;
     const profile: ParsedCandidate = {
-      firstName: parsed.firstName ?? null,
-      lastName: parsed.lastName ?? null,
-      email: parsed.email ?? null,
-      phone: parsed.phone ?? null,
-      company: parsed.company ?? null,
-      title: parsed.title ?? null,
-      location: parsed.location ?? null,
-      linkedinUrl: parsed.linkedinUrl ?? null,
-      tags: Array.isArray(parsed.tags)
-        ? parsed.tags.filter((t): t is string => typeof t === "string").slice(0, 4)
+      firstName: full.firstName ?? null,
+      lastName: full.lastName ?? null,
+      email: full.email ?? null,
+      phone: full.phone ?? null,
+      company: full.company ?? null,
+      title: full.title ?? null,
+      location: full.location ?? null,
+      linkedinUrl: full.linkedinUrl ?? null,
+      tags: Array.isArray(full.tags)
+        ? full.tags.filter((t): t is string => typeof t === "string").slice(0, 4)
         : [],
     };
 

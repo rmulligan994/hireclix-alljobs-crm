@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Search, X } from 'lucide-react';
 
@@ -18,6 +18,8 @@ export const CampaignSearchBar = ({
   debounceMs = 300,
 }: CampaignSearchBarProps) => {
   const [localValue, setLocalValue] = useState(value);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     setLocalValue(value);
@@ -25,9 +27,9 @@ export const CampaignSearchBar = ({
 
   useEffect(() => {
     if (localValue === value) return;
-    const t = window.setTimeout(() => onChange(localValue), debounceMs);
+    const t = window.setTimeout(() => onChangeRef.current(localValue), debounceMs);
     return () => window.clearTimeout(t);
-  }, [localValue, value, debounceMs, onChange]);
+  }, [localValue, value, debounceMs]);
 
   return (
     <div className="relative">
