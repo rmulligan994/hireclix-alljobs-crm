@@ -38,7 +38,8 @@ const mapRowToProfile = (row: any): Profile => ({
   linkedinUrl: row.linkedin_url,
   avatarUrl: row.avatar_url,
   role: row.role === 'admin' ? 'admin' : 'recruiter',
-  forceShowInOrgTab: row.force_show_in_org_tab !== false,
+  forceShowInOrgTab: row.require_org_shared_campaigns === true,
+  requireOrgSharedCampaigns: row.require_org_shared_campaigns === true,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at),
 });
@@ -168,8 +169,17 @@ export const userService = {
     if (data.linkedinUrl !== undefined) updateData.linkedin_url = data.linkedinUrl;
     if (data.avatarUrl !== undefined) updateData.avatar_url = data.avatarUrl;
     if (data.role !== undefined) updateData.role = data.role;
-    if (data.forceShowInOrgTab !== undefined) {
-      updateData.force_show_in_org_tab = data.forceShowInOrgTab;
+    if (data.requireOrgSharedCampaigns !== undefined) {
+      const v = data.requireOrgSharedCampaigns === true;
+      updateData.require_org_shared_campaigns = v;
+      updateData.force_show_in_org_tab = v;
+    }
+
+    if (!userId || typeof userId !== 'string') {
+      throw new Error('Invalid user id for profile update');
+    }
+    if (Object.keys(updateData).length === 0) {
+      throw new Error('No profile fields to update');
     }
 
     const { data: result, error } = await supabase
@@ -177,9 +187,14 @@ export const userService = {
       .update(updateData)
       .eq('user_id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!result) {
+      throw new Error(
+        'No profile row was updated. You may not have permission to change this person’s settings, or the profile is missing. Admins: confirm your role is "admin" in the database and that the target user has a profile row.',
+      );
+    }
     return mapRowToProfile(result);
   },
 

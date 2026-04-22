@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Users, Loader2 } from 'lucide-react';
 import { useTalentPools } from '@/hooks/useTalentPools';
 import { usePipelines } from '@/hooks/usePipelines';
-import { useFilteredCandidates, useAddCampaignRecipients, useCampaignRecipients } from '@/hooks/useCampaigns';
+import { useFilteredCandidates, useAddCampaignRecipients, useCampaign, useCampaignRecipients } from '@/hooks/useCampaigns';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { AudienceFilter, LeadStatus } from '@/types/Campaign';
@@ -34,6 +35,7 @@ export const AddRecipientsModal = ({
   onOpenChange,
   onSuccess,
 }: AddRecipientsModalProps) => {
+  const queryClient = useQueryClient();
   const [selectedTalentPools, setSelectedTalentPools] = useState<string[]>([]);
   const [selectedPipelines, setSelectedPipelines] = useState<string[]>([]);
   const [selectedLeadStatus, setSelectedLeadStatus] = useState<LeadStatus[]>([]);
@@ -43,6 +45,7 @@ export const AddRecipientsModal = ({
   const { data: pipelines } = usePipelines();
   const { data: filteredCandidates, isLoading: isLoadingCandidates } = useFilteredCandidates(audienceFilter);
   const { data: existingRecipients } = useCampaignRecipients(campaignId);
+  const { data: campaign, isLoading: isLoadingCampaign } = useCampaign(campaignId);
   const addRecipients = useAddCampaignRecipients();
 
   const existingIds = new Set((existingRecipients || []).map((r) => r.candidate_id));
@@ -74,19 +77,37 @@ export const AddRecipientsModal = ({
       toast({ title: 'No new recipients to add', variant: 'destructive' });
       return;
     }
+    const queueForScheduledSend =
+      campaign?.status === 'scheduled' &&
+      campaign.scheduled_at != null &&
+      new Date(campaign.scheduled_at).getTime() > Date.now();
     try {
       await addRecipients.mutateAsync({
         campaignId,
         candidateIds: newCandidates.map((c) => c.id),
       });
-      const { error } = await supabase.functions.invoke('send-campaign-email', {
-        body: { campaignId },
-      });
+      const body = queueForScheduledSend
+        ? { campaignId, scheduledAt: campaign!.scheduled_at! }
+        : { campaignId };
+      const { data, error } = await supabase.functions.invoke('send-campaign-email', { body });
       if (error) throw error;
-      toast({
-        title: 'Recipients added',
-        description: `Added ${newCandidates.length} recipients. First email sent.`,
-      });
+      if (data && typeof data === 'object' && 'error' in data && (data as { error?: string }).error) {
+        throw new Error(String((data as { error: string }).error));
+      }
+      const n = newCandidates.length;
+      toast(
+        queueForScheduledSend
+          ? {
+              title: 'Recipients added',
+              description: `Added ${n} recipient${n === 1 ? '' : 's'}. Their first email is queued for your campaign’s scheduled time.`,
+            }
+          : {
+              title: 'Recipients added',
+              description: `Added ${n} recipient${n === 1 ? '' : 's'}. First email sent.`,
+            },
+      );
+      queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-recipients', campaignId] });
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
@@ -100,7 +121,8 @@ export const AddRecipientsModal = ({
         <DialogHeader>
           <DialogTitle>Add recipients</DialogTitle>
           <DialogDescription>
-            Select talent pools or pipelines. New candidates will receive the first email in the sequence.
+            Select talent pools or pipelines. New candidates are added to the campaign; the first message sends when the
+            campaign runs (immediately for active campaigns, or at the scheduled time for scheduled campaigns).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -228,10 +250,14 @@ export const AddRecipientsModal = ({
             </Button>
             <Button
               onClick={handleAdd}
-              disabled={newCandidates.length === 0 || addRecipients.isPending}
+              disabled={newCandidates.length === 0 || addRecipients.isPending || isLoadingCampaign}
             >
               {addRecipients.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Add & send first email
+              {campaign?.status === 'scheduled' &&
+              campaign.scheduled_at &&
+              new Date(campaign.scheduled_at).getTime() > Date.now()
+                ? 'Add & queue for scheduled send'
+                : 'Add & send first email'}
             </Button>
           </div>
         </div>

@@ -17,6 +17,8 @@ interface SendEmailRequest {
   recipientId?: string;
   scheduledEmailId?: string; // When provided (from cron), send that specific scheduled email
   scheduledAt?: string; // DEPRECATED: use scheduled_emails table instead. Kept for backward compat.
+  /** When true, allow immediate send to pending recipients even if campaign is scheduled for the future (explicit "Send now"). */
+  forceImmediateSend?: boolean;
 }
 
 Deno.serve(async (req) => {
@@ -36,7 +38,14 @@ Deno.serve(async (req) => {
     }
 
     if (body.campaignId) {
-      return await processCampaignSend(supabase, body.campaignId, body.recipientId, body.scheduledAt, corsHeaders);
+      return await processCampaignSend(
+        supabase,
+        body.campaignId,
+        body.recipientId,
+        body.scheduledAt,
+        body.forceImmediateSend,
+        corsHeaders
+      );
     }
 
     return new Response(
@@ -136,6 +145,7 @@ async function processCampaignSend(
   campaignId: string,
   recipientId?: string,
   scheduledAt?: string,
+  forceImmediateSend?: boolean,
   corsHeaders: Record<string, string>
 ) {
   const { data: campaign, error: campaignError } = await supabase
@@ -149,6 +159,24 @@ async function processCampaignSend(
       JSON.stringify({ error: "Campaign not found" }),
       { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+  }
+
+  if (
+    !scheduledAt &&
+    !forceImmediateSend &&
+    campaign.status === "scheduled" &&
+    campaign.scheduled_at
+  ) {
+    const t = new Date(campaign.scheduled_at as string).getTime();
+    if (t > Date.now()) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "This campaign is scheduled for a future time. Pass scheduledAt to queue rows, or pass forceImmediateSend: true to send the first email to pending recipients now.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
   }
 
   const { data: campaignEmails, error: emailsError } = await supabase

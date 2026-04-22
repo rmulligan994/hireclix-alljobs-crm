@@ -757,6 +757,7 @@ export type Database = {
           email: string | null
           first_name: string | null
           force_show_in_org_tab: boolean
+          require_org_shared_campaigns: boolean
           id: string
           last_name: string | null
           linkedin_url: string | null
@@ -773,6 +774,7 @@ export type Database = {
           email?: string | null
           first_name?: string | null
           force_show_in_org_tab?: boolean
+          require_org_shared_campaigns?: boolean
           id?: string
           last_name?: string | null
           linkedin_url?: string | null
@@ -789,6 +791,7 @@ export type Database = {
           email?: string | null
           first_name?: string | null
           force_show_in_org_tab?: boolean
+          require_org_shared_campaigns?: boolean
           id?: string
           last_name?: string | null
           linkedin_url?: string | null

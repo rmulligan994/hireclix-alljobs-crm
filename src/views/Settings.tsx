@@ -130,17 +130,32 @@ const Settings = () => {
 
   const saveMemberCampaignVisibility = async (
     targetUserId: string,
-    data: { forceShowInOrgTab: boolean }
+    data: { requireOrgSharedCampaigns: boolean }
   ) => {
     if (!isAdmin) return;
+    if (!targetUserId?.trim()) {
+      toast({
+        title: 'Cannot save',
+        description: 'Missing user id for this team member. Refresh the page and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setCampaignPrefsSavingUserId(targetUserId);
     try {
-      await userService.updateProfile(targetUserId, data);
+      await userService.updateProfile(targetUserId, {
+        requireOrgSharedCampaigns: data.requireOrgSharedCampaigns === true,
+      });
       await queryClient.invalidateQueries({ queryKey: ['profiles'] });
       await queryClient.invalidateQueries({ queryKey: ['currentUser'] });
       toast({ title: 'Campaign settings updated' });
-    } catch {
-      toast({ title: 'Failed to save campaign settings', variant: 'destructive' });
+    } catch (e) {
+      console.error('saveMemberCampaignVisibility', e);
+      const description =
+        e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+          ? (e as { message: string }).message
+          : 'Could not update profile. Check the browser console for details.';
+      toast({ title: 'Failed to save campaign settings', description, variant: 'destructive' });
     } finally {
       setCampaignPrefsSavingUserId(null);
     }
@@ -880,11 +895,10 @@ const Settings = () => {
               {isAdmin && (
                 <Card className="mt-6">
                   <CardHeader>
-                    <CardTitle>Organization tab listing</CardTitle>
+                    <CardTitle>Campaign organization sharing</CardTitle>
                     <CardDescription>
-                      When forcing is on, all of a user’s org-shared campaigns appear under Organization. When forcing
-                      is off, they choose per campaign in the campaign editor (including after a campaign is live).
-                      &quot;Share with organization&quot; is always per campaign.
+                      Per team member: require org-wide sharing to lock the campaign to shared (greyed) controls and the
+                      Organization tab rules. If off, they choose on each campaign.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -900,7 +914,7 @@ const Settings = () => {
                           return (
                             <div
                               key={`campaign-prefs-${p.id}`}
-                              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-border p-4"
+                              className="flex flex-col gap-4 rounded-lg border border-border p-4"
                             >
                               <div>
                                 <div className="font-medium text-foreground">
@@ -911,20 +925,23 @@ const Settings = () => {
                                 </div>
                                 <div className="text-sm text-muted-foreground">{p.email}</div>
                               </div>
-                              <div className="flex items-center gap-3 sm:max-w-md sm:justify-end">
-                                <div className="space-y-0.5 min-w-0 text-right sm:text-left flex-1">
-                                  <Label className="text-sm sm:text-right sm:block">Force Organization listing</Label>
-                                  <p className="text-xs text-muted-foreground sm:text-right">
-                                    Off: per-campaign &quot;Also list under Organization&quot; in the editor.
+                              <div className="flex items-start justify-between gap-3 rounded-md border border-border/80 bg-muted/20 p-3 sm:max-w-xl">
+                                <div className="space-y-0.5 min-w-0 pr-2">
+                                  <Label className="text-sm">Require org-wide sharing</Label>
+                                  <p className="text-xs text-muted-foreground">
+                                    When on, this person cannot create private campaigns. Campaign details show fixed
+                                    (greyed) &quot;Share with organization&quot; and Organization tab options. When off,
+                                    they choose sharing and &quot;Also list under Organization&quot; on each campaign.
                                   </p>
                                 </div>
                                 <Switch
-                                  checked={p.forceShowInOrgTab !== false}
+                                  checked={p.requireOrgSharedCampaigns === true}
                                   disabled={busy}
                                   onCheckedChange={(checked) =>
-                                    saveMemberCampaignVisibility(p.userId, { forceShowInOrgTab: checked })
+                                    saveMemberCampaignVisibility(p.userId, { requireOrgSharedCampaigns: checked })
                                   }
-                                  aria-label={`Force Organization tab listing for ${name}`}
+                                  aria-label={`Require org-wide campaign sharing for ${name}`}
+                                  className="shrink-0"
                                 />
                               </div>
                             </div>

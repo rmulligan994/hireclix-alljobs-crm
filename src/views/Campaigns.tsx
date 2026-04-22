@@ -27,6 +27,7 @@ import { useMyCampaigns, useOrgCampaigns, useArchivedCampaigns, useCampaign, use
 import { useCurrentUser, useAllProfiles } from '@/hooks/useAuth';
 import { CampaignListRow } from '@/components/campaigns/CampaignListRow';
 import { profileDisplayName } from '@/lib/profileDisplayName';
+import { campaignService } from '@/services/campaignService';
 import { Virtuoso } from 'react-virtuoso';
 import { Label } from '@/components/ui/label';
 import type { Profile } from '@/types/User';
@@ -36,6 +37,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { Campaign } from '@/types/Campaign';
 import type { EmailTemplate } from '@/services/emailTemplateService';
+import type { StarterTemplate } from '@/data/email-starter-data';
 import { describeCampaignSendToast } from '@/lib/campaignSendToast';
 
 const CAMPAIGN_TYPES = ['nurture', 'event', 'job_alert', 'reengagement', 'newsletter'] as const;
@@ -102,6 +104,8 @@ const Campaigns = () => {
     seed: string;
     initialWorkspaceTab: 'editor' | 'ai';
     libraryRecord: EmailTemplate | null;
+    /** Built-in starter content — not a DB row until saved */
+    fromStarter?: { name: string; subject: string; html: string };
   }>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -148,10 +152,10 @@ const Campaigns = () => {
 
   const { data: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id ?? '';
-  const forceShowInOrgTab = currentUser?.profile?.forceShowInOrgTab !== false;
+  const requireOrgSharedCampaigns = currentUser?.profile?.requireOrgSharedCampaigns === true;
 
   const { data: myCampaigns, isLoading: loadingMy, refetch: refetchMy } = useMyCampaigns();
-  const { data: orgCampaigns, isLoading: loadingOrg, refetch: refetchOrg } = useOrgCampaigns(forceShowInOrgTab);
+  const { data: orgCampaigns, isLoading: loadingOrg, refetch: refetchOrg } = useOrgCampaigns(requireOrgSharedCampaigns);
   const { data: allProfiles = [] } = useAllProfiles(scopeTab === 'org');
   const profileByUserId = useMemo(() => {
     const m = new Map<string, Profile>();
@@ -380,7 +384,7 @@ const Campaigns = () => {
     toast({ title: 'Sending emails...', description: 'Please wait while we send your campaign.' });
     try {
       const { data, error } = await supabase.functions.invoke('send-campaign-email', {
-        body: { campaignId: id }
+        body: { campaignId: id, forceImmediateSend: true },
       });
       if (error) throw error;
       if (data?.sent === 0 && data?.message === 'No pending recipients') {
@@ -413,6 +417,46 @@ const Campaigns = () => {
     }
   };
 
+  const handleRequeuePendingForScheduledTime = async (id: string) => {
+    const fromList = campaigns.find((c) => c.id === id);
+    const scheduledAt =
+      fromList?.scheduled_at ?? (await campaignService.getById(id))?.scheduled_at ?? null;
+    if (!scheduledAt) {
+      toast({
+        title: 'Could not queue',
+        description: 'This campaign has no scheduled send time.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setSendingCampaignId(id);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-campaign-email', {
+        body: { campaignId: id, scheduledAt: scheduledAt },
+      });
+      if (error) throw error;
+      if (data && typeof data === 'object' && 'error' in data && (data as { error?: string }).error) {
+        throw new Error(String((data as { error: string }).error));
+      }
+      const sent = typeof (data as { sent?: number })?.sent === 'number' ? (data as { sent: number }).sent : 0;
+      toast({
+        title: 'Recipients queued',
+        description:
+          sent > 0
+            ? `${sent} recipient${sent === 1 ? '' : 's'} added to the send queue for the scheduled time.`
+            : 'Queue updated. Check Upcoming Sends for pending emails.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-recipients', id] });
+      refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      toast({ title: 'Failed to queue', description: message, variant: 'destructive' });
+    } finally {
+      setSendingCampaignId(null);
+    }
+  };
+
   const handleDeleteCampaign = async (id: string) => {
     try {
       await deleteCampaign.mutateAsync(id);
@@ -439,6 +483,16 @@ const Campaigns = () => {
       seed: newEmailDraftSessionId(),
       initialWorkspaceTab: options?.initialAiTab ? 'ai' : 'editor',
       libraryRecord: template,
+    });
+    setShowTemplateLibrary(false);
+  };
+
+  const handleTemplateLibraryStarter = (starter: StarterTemplate) => {
+    setTemplateEditorSession({
+      seed: newEmailDraftSessionId(),
+      initialWorkspaceTab: 'editor',
+      libraryRecord: null,
+      fromStarter: { name: starter.name, subject: starter.subject, html: starter.html },
     });
     setShowTemplateLibrary(false);
   };
@@ -754,7 +808,7 @@ const Campaigns = () => {
                                 {campaigns.length > 0
                                   ? 'Try adjusting search, type, folder, or date filters.'
                                   : scopeTab === 'org'
-                                    ? 'Teammate campaigns show here when an admin turns on Share with organization. Yours can appear here too for org-shared campaigns — either your admin forces Organization listing in Settings → Team, or you enable “Also list under Organization” on each campaign.'
+                                    ? 'Teammate campaigns show here when they org-share. Your own org-shared campaigns appear here too — either your admin required org-wide sharing in Settings → Team, or you turn on “Also list under Organization” on each campaign.'
                                     : 'Create your first campaign to start engaging with candidates.'}
                               </p>
                               <Button
@@ -819,6 +873,7 @@ const Campaigns = () => {
                                     onView={handleViewCampaign}
                                     onDuplicate={handleDuplicateCampaign}
                                     onLaunch={handleLaunchCampaign}
+                                    onRequeuePendingForScheduledTime={handleRequeuePendingForScheduledTime}
                                     onPause={handlePauseCampaign}
                                     onResume={handleResumeCampaign}
                                     onAddRecipients={setAddRecipientsCampaignId}
@@ -864,12 +919,22 @@ const Campaigns = () => {
             <HtmlCampaignEmailEditor
               key={templateEditorSession.seed}
               editorSeed={templateEditorSession.seed}
-              initialSubject={templateEditorSession.libraryRecord?.subject ?? ''}
-              initialHtmlContent={templateEditorSession.libraryRecord?.html_content ?? null}
-              initialComposeKind={
-                templateEditorSession.libraryRecord?.compose_kind === 'raw_html' ? 'raw_html' : 'announcement_form'
+              initialSubject={
+                templateEditorSession.fromStarter?.subject ?? templateEditorSession.libraryRecord?.subject ?? ''
               }
-              initialFormPayload={templateEditorSession.libraryRecord?.form_payload ?? undefined}
+              initialHtmlContent={
+                templateEditorSession.fromStarter?.html ?? templateEditorSession.libraryRecord?.html_content ?? null
+              }
+              initialComposeKind={
+                templateEditorSession.fromStarter
+                  ? 'raw_html'
+                  : templateEditorSession.libraryRecord?.compose_kind === 'raw_html'
+                    ? 'raw_html'
+                    : 'announcement_form'
+              }
+              initialFormPayload={
+                templateEditorSession.fromStarter ? undefined : (templateEditorSession.libraryRecord?.form_payload ?? undefined)
+              }
               initialWorkspaceTab={templateEditorSession.initialWorkspaceTab}
               draftChatSessionId={templateEditorSession.seed}
               aiChatScopeSuffix="standalone-template"
@@ -938,7 +1003,9 @@ const Campaigns = () => {
                           compose_kind: payload.compose_kind,
                           form_payload: payload.form_payload as Json | null,
                         });
-                        setTemplateEditorSession((cur) => (cur ? { ...cur, libraryRecord: created } : null));
+                        setTemplateEditorSession((cur) =>
+                          cur ? { ...cur, libraryRecord: created, fromStarter: undefined } : null,
+                        );
                         queryClient.invalidateQueries({ queryKey: ['email-templates'] });
                         toast({
                           title: 'Template created',
@@ -954,7 +1021,9 @@ const Campaigns = () => {
                     }
               }
               defaultSaveAsTemplateName={
-                templateEditorSession.libraryRecord?.subject?.trim() || 'New template'
+                templateEditorSession.fromStarter?.name?.trim() ||
+                  templateEditorSession.libraryRecord?.subject?.trim() ||
+                  'New template'
               }
             />
           ) : null}
@@ -1022,7 +1091,10 @@ const Campaigns = () => {
               Create and edit saved email designs. To send mail, use New Campaign and pick a template there.
             </DialogDescription>
           </DialogHeader>
-          <TemplateLibrary onSelectTemplate={handleTemplateLibrarySelect} />
+          <TemplateLibrary
+            onSelectTemplate={handleTemplateLibrarySelect}
+            onSelectStarterTemplate={handleTemplateLibraryStarter}
+          />
         </DialogContent>
       </Dialog>
 

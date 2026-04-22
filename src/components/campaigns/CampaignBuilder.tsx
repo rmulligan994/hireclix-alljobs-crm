@@ -23,11 +23,14 @@ import { useOrganizationSettings } from '@/hooks/useOrganizationSettings';
 import { useCurrentUserRole } from '@/hooks/useCurrentUserRole';
 import { isOverRecipientLimit, getRecipientLimitForRole } from '@/config/roleLimits';
 import { EmailTemplate, emailTemplateService } from '@/services/emailTemplateService';
+import type { StarterTemplate } from '@/data/email-starter-data';
 import { AudienceFilter, CampaignEmail, Campaign, LeadStatus } from '@/types/Campaign';
 import { Json } from '@/integrations/supabase/types';
 import type { AnnouncementForm, ComposeKind } from '@/types/email-types';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
+import { isScheduleInPast, localYmdTimeToDate } from '@/lib/campaignScheduleTime';
+import { formatHhmmAs12h } from '@/lib/time12h';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LeadUsageIndicator } from '@/components/candidates/LeadUsageIndicator';
@@ -156,8 +159,9 @@ export const CampaignBuilder = ({
       // Build sequence metadata from campaign for display
       const rec = editingCampaign.schedule_recurrence;
       if (rec || editingCampaign.scheduled_at) {
+        // Use local calendar day — `toISOString().slice(0,10)` is UTC and can be wrong for evening sends.
         const firstDate = editingCampaign.scheduled_at
-          ? new Date(editingCampaign.scheduled_at).toISOString().slice(0, 10)
+          ? format(new Date(editingCampaign.scheduled_at), 'yyyy-MM-dd')
           : undefined;
         const scheduleTime = rec?.time ?? '09:00';
         setSequenceMetadata({
@@ -233,7 +237,8 @@ export const CampaignBuilder = ({
   const [showValidationDialog, setShowValidationDialog] = useState(false);
   const [validationData, setValidationData] = useState<{ valid: number; noEmail: number; unsubscribed: number } | null>(null);
   const [pendingAction, setPendingAction] = useState<'launch' | 'schedule' | null>(null);
-  
+  const [isQueueingSchedule, setIsQueueingSchedule] = useState(false);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { updateTemplate } = useEmailTemplates();
@@ -246,13 +251,18 @@ export const CampaignBuilder = ({
   const { data: currentUser } = useCurrentUser();
   const userRole = useCurrentUserRole();
   const isAdmin = userRole === 'admin';
-  /** Admins (Team) can require all org-shared campaigns to appear in the Organization tab — no per-campaign toggle. */
-  const orgTabListingForced = currentUser?.profile?.forceShowInOrgTab !== false;
+  /** Admins (Team): when true, org sharing is required; campaign UI uses greyed, fixed org + Organization tab options. */
+  const requireOrgShared = currentUser?.profile?.requireOrgSharedCampaigns === true;
+  /** Save org flags on updates for admins and for users with required org sharing (recruiters). */
+  const shouldPersistOrgCampaignFlags = isAdmin || requireOrgShared;
   const [shareWithOrganization, setShareWithOrganization] = useState(false);
   /** When admin has not set “force” on your profile, controls Organization tab listing for this org-shared campaign. */
   const [showInOrgTab, setShowInOrgTab] = useState(true);
 
   const orgListFields = useMemo(() => {
+    if (requireOrgShared) {
+      return { is_organization_campaign: true, show_in_org_tab: true };
+    }
     if (!isAdmin) {
       return { is_organization_campaign: false, show_in_org_tab: true };
     }
@@ -261,20 +271,32 @@ export const CampaignBuilder = ({
     }
     return {
       is_organization_campaign: true,
-      show_in_org_tab: orgTabListingForced ? true : showInOrgTab,
+      show_in_org_tab: showInOrgTab,
     };
-  }, [isAdmin, shareWithOrganization, orgTabListingForced, showInOrgTab]);
+  }, [isAdmin, requireOrgShared, shareWithOrganization, showInOrgTab]);
+
+  useEffect(() => {
+    if (requireOrgShared) {
+      setShareWithOrganization(true);
+    }
+  }, [requireOrgShared]);
 
   useEffect(() => {
     if (!open) return;
     if (editingCampaign) {
-      setShareWithOrganization(!!editingCampaign.is_organization_campaign);
+      setShareWithOrganization(
+        requireOrgShared ? true : !!editingCampaign.is_organization_campaign
+      );
       setShowInOrgTab(editingCampaign.show_in_org_tab !== false);
     } else {
-      setShareWithOrganization(false);
+      if (requireOrgShared) {
+        setShareWithOrganization(true);
+      } else {
+        setShareWithOrganization(false);
+      }
       setShowInOrgTab(true);
     }
-  }, [open, editingCampaign]);
+  }, [open, editingCampaign, requireOrgShared]);
 
   const { settings: orgSettings } = useOrganizationSettings();
   const { data: campaignJobs } = useJobsForCampaign(jobSearch);
@@ -370,6 +392,20 @@ export const CampaignBuilder = ({
     setEmailSteps([]);
     setSequenceBuilderNonce((n) => n + 1);
     // New template body invalidates sequence/audience/review until the user goes through editor → sequence again.
+    setFurthestStepIndex(1);
+    setEmailDraftChatSessionId(newEmailDraftSessionId());
+    setCurrentStep('editor');
+  };
+
+  const handleStarterTemplateSelect = (starter: StarterTemplate) => {
+    setEditorInitialWorkspaceTab('editor');
+    setSelectedTemplate(null);
+    setTemplateComposeKind('raw_html');
+    setTemplateFormPayload(null);
+    setTemplateEditorSubject(starter.subject);
+    setTemplateHtml(starter.html);
+    setEmailSteps([]);
+    setSequenceBuilderNonce((n) => n + 1);
     setFurthestStepIndex(1);
     setEmailDraftChatSessionId(newEmailDraftSessionId());
     setCurrentStep('editor');
@@ -608,7 +644,7 @@ export const CampaignBuilder = ({
             audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
-            ...(isAdmin
+            ...(shouldPersistOrgCampaignFlags
               ? {
                   is_organization_campaign: orgListFields.is_organization_campaign,
                   show_in_org_tab: orgListFields.show_in_org_tab,
@@ -639,7 +675,7 @@ export const CampaignBuilder = ({
     }
   };
 
-  const handleScheduleCampaign = async () => {
+  const handleScheduleCampaign = async (): Promise<boolean> => {
     const scheduleBlocker = getSendBlocker('schedule');
     if (scheduleBlocker) {
       toast({
@@ -647,18 +683,32 @@ export const CampaignBuilder = ({
         description: scheduleBlocker,
         variant: 'destructive',
       });
-      return;
+      return false;
     }
 
     const firstDate = sequenceMetadata!.firstSendDate!;
     const scheduleTime = sequenceMetadata?.scheduleTime ?? '09:00';
 
-    try {
-      const scheduledAt = new Date(firstDate);
-      const [hours, minutes] = scheduleTime.split(':').map(Number);
-      scheduledAt.setHours(hours, minutes);
-      const scheduledAtIso = scheduledAt.toISOString();
+    if (isScheduleInPast(firstDate, scheduleTime)) {
+      toast({
+        title: 'Choose a future time',
+        description:
+          'The date and time you picked are already in the past. Pick a later slot (times use your local timezone).',
+        variant: 'destructive',
+      });
+      return false;
+    }
 
+    let scheduledAt: Date;
+    try {
+      scheduledAt = localYmdTimeToDate(firstDate, scheduleTime);
+    } catch {
+      toast({ title: 'Invalid schedule', description: 'Check the first send date and time.', variant: 'destructive' });
+      return false;
+    }
+    const scheduledAtIso = scheduledAt.toISOString();
+
+    try {
       let finalCampaignId = campaignId;
 
       if (!campaignId) {
@@ -675,7 +725,7 @@ export const CampaignBuilder = ({
         });
         setCampaignId(campaign.id);
         finalCampaignId = campaign.id;
-        
+
         await persistCampaignEmails(campaign.id);
 
         await updateCampaign.mutateAsync({
@@ -686,7 +736,7 @@ export const CampaignBuilder = ({
         if (filteredCandidates && filteredCandidates.length > 0) {
           await addRecipients.mutateAsync({
             campaignId: campaign.id,
-            candidateIds: filteredCandidates.map(c => c.id),
+            candidateIds: filteredCandidates.map((c) => c.id),
           });
         }
       } else {
@@ -701,7 +751,7 @@ export const CampaignBuilder = ({
             audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
-            ...(isAdmin
+            ...(shouldPersistOrgCampaignFlags
               ? {
                   is_organization_campaign: orgListFields.is_organization_campaign,
                   show_in_org_tab: orgListFields.show_in_org_tab,
@@ -722,63 +772,69 @@ export const CampaignBuilder = ({
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
 
-      // Don’t await send-campaign-email: it queues one row per recipient and can take a long time.
-      const scheduleDescription = `Your campaign is scheduled for ${format(scheduledAt, 'PPP')} at ${scheduleTime}. Sends are finishing queueing in the background—check Upcoming Sends for status.`;
-      onSendSuccess?.({
-        campaignId: cid,
-        campaignName: campaignName.trim(),
-        kind: 'schedule',
-        description: scheduleDescription,
-      });
-      if (!onSendSuccess) {
-        toast({
-          title: 'Campaign scheduled',
+      setIsQueueingSchedule(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('send-campaign-email', {
+          body: { campaignId: cid, scheduledAt: scheduledAtIso },
+        });
+        queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+        queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
+        if (error) {
+          toast({
+            title: 'Scheduling failed',
+            description:
+              `${error.message} Your campaign is saved as scheduled, but the send queue was not created. Use “Send” on the campaign list to queue again, or contact support if this persists.`,
+            variant: 'destructive',
+          });
+          return false;
+        }
+        if ((data as { error?: string } | null | undefined)?.error) {
+          const msg = String((data as { error: string }).error);
+          toast({
+            title: 'Scheduling failed',
+            description: `${msg} Your campaign is saved as scheduled, but the send queue may be incomplete. Try “Send” on the campaign list, or check Upcoming Sends.`,
+            variant: 'destructive',
+          });
+          return false;
+        }
+        const scheduleDescription = `Your campaign is scheduled for ${format(scheduledAt, 'PPP')} at ${formatHhmmAs12h(scheduleTime)}. Check Upcoming Sends to confirm.`;
+        onSendSuccess?.({
+          campaignId: cid,
+          campaignName: campaignName.trim(),
+          kind: 'schedule',
           description: scheduleDescription,
         });
+        if (!onSendSuccess) {
+          toast({
+            title: 'Campaign scheduled',
+            description: scheduleDescription,
+          });
+        }
+        handleClose();
+        const skippedNoEmail = typeof (data as { skippedNoEmail?: number })?.skippedNoEmail === 'number'
+          ? (data as { skippedNoEmail: number }).skippedNoEmail
+          : 0;
+        if (skippedNoEmail > 0) {
+          toast({
+            title: 'Schedule ready',
+            description: `${(data as { sent?: number })?.sent ?? 0} queued; ${skippedNoEmail} skipped (no email on file).`,
+          });
+        }
+        return true;
+      } finally {
+        setIsQueueingSchedule(false);
       }
-      handleClose();
-
-      void supabase.functions
-        .invoke('send-campaign-email', {
-          body: { campaignId: cid, scheduledAt: scheduledAtIso },
-        })
-        .then(({ data, error }) => {
-          queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-          queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
-          if (error) {
-            toast({
-              title: 'Scheduling may be incomplete',
-              description: error.message,
-              variant: 'destructive',
-            });
-            return;
-          }
-          if (data?.error) {
-            toast({
-              title: 'Scheduling may be incomplete',
-              description: String(data.error),
-              variant: 'destructive',
-            });
-            return;
-          }
-          const skippedNoEmail = typeof data?.skippedNoEmail === 'number' ? data.skippedNoEmail : 0;
-          if (skippedNoEmail > 0) {
-            toast({
-              title: 'Schedule ready',
-              description: `${data?.sent ?? 0} queued; ${skippedNoEmail} skipped (no email on file).`,
-            });
-          }
-        });
     } catch (err) {
       toast({
         title: 'Schedule failed',
         description: (err as Error)?.message || 'Failed to schedule campaign. Please try again.',
         variant: 'destructive',
       });
+      return false;
     }
   };
 
-  const handleLaunchCampaign = async () => {
+  const handleLaunchCampaign = async (): Promise<boolean> => {
     const launchBlocker = getSendBlocker('launch');
     if (launchBlocker) {
       toast({
@@ -786,7 +842,7 @@ export const CampaignBuilder = ({
         description: launchBlocker,
         variant: 'destructive',
       });
-      return;
+      return false;
     }
 
     try {
@@ -814,7 +870,7 @@ export const CampaignBuilder = ({
             status: 'active',
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
-            ...(isAdmin
+            ...(shouldPersistOrgCampaignFlags
               ? {
                   is_organization_campaign: orgListFields.is_organization_campaign,
                   show_in_org_tab: orgListFields.show_in_org_tab,
@@ -839,7 +895,7 @@ export const CampaignBuilder = ({
             audience_filter: audienceFilter,
             job_id: campaignType === 'job_alert' ? selectedJobId : null,
             folder_id: selectedFolderId,
-            ...(isAdmin
+            ...(shouldPersistOrgCampaignFlags
               ? {
                   is_organization_campaign: orgListFields.is_organization_campaign,
                   show_in_org_tab: orgListFields.show_in_org_tab,
@@ -881,7 +937,7 @@ export const CampaignBuilder = ({
       handleClose();
 
       void supabase.functions
-        .invoke('send-campaign-email', { body: { campaignId: cid } })
+        .invoke('send-campaign-email', { body: { campaignId: cid, forceImmediateSend: true } })
         .then(({ data, error }) => {
           queryClient.invalidateQueries({ queryKey: ['campaigns'] });
           queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
@@ -910,12 +966,14 @@ export const CampaignBuilder = ({
             });
           }
         });
+      return true;
     } catch (err) {
       toast({
         title: 'Launch failed',
         description: (err as Error)?.message || 'Failed to launch campaign. Please try again.',
         variant: 'destructive',
       });
+      return false;
     }
   };
 
@@ -1038,7 +1096,7 @@ export const CampaignBuilder = ({
                   {sequenceMetadata?.sendImmediately
                     ? 'Send immediately when launched'
                     : sequenceMetadata?.firstSendDate && sequenceMetadata?.scheduleTime
-                      ? `${format(new Date(sequenceMetadata.firstSendDate), 'PPP')} at ${sequenceMetadata.scheduleTime}`
+                      ? `${format(parse(sequenceMetadata.firstSendDate, 'yyyy-MM-dd', new Date()), 'PPP')} at ${formatHhmmAs12h(sequenceMetadata.scheduleTime)}`
                       : '—'}
                 </p>
               </div>
@@ -1179,7 +1237,7 @@ export const CampaignBuilder = ({
                           ...(sequenceMetadata?.scheduleRecurrence !== undefined && { schedule_recurrence: sequenceMetadata.scheduleRecurrence }),
                           job_id: campaignType === 'job_alert' ? selectedJobId : null,
                           folder_id: selectedFolderId,
-                          ...(isAdmin
+                          ...(shouldPersistOrgCampaignFlags
                             ? {
                                 is_organization_campaign: orgListFields.is_organization_campaign,
                                 show_in_org_tab: orgListFields.show_in_org_tab,
@@ -1299,38 +1357,36 @@ export const CampaignBuilder = ({
                 <p className="text-xs text-muted-foreground">Organize campaigns into folders for easier finding.</p>
               </div>
 
-              {isAdmin && (
+              {(isAdmin || requireOrgShared) && (
                 <div className="space-y-3">
-                  <div className="flex items-start gap-3 rounded-lg border border-border p-3">
-                    <Checkbox
-                      id="share-org"
-                      checked={shareWithOrganization}
-                      onCheckedChange={(v) => setShareWithOrganization(!!v)}
-                    />
-                    <div className="space-y-0.5">
-                      <Label htmlFor="share-org" className="font-medium cursor-pointer">
-                        Share with organization
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        {orgTabListingForced
-                          ? 'When enabled, teammates can access this campaign. For your account, org-shared campaigns also always appear under Organization (set by an admin in Settings → Team). You can change sharing anytime, including after the campaign is live.'
-                          : 'When enabled, teammates can access this campaign. Use the option below to choose whether it also shows under the Organization tab. You can change both anytime, including after the campaign is live.'}
+                  {requireOrgShared ? (
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                      <p className="text-sm font-medium text-foreground">Organization (required for your account)</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Your admin has turned on org-wide campaign sharing in Settings → Team. For every campaign: teammates
+                        can access it, and it also appears under the Organization tab.
                       </p>
                     </div>
-                  </div>
-                  {shareWithOrganization && orgTabListingForced && (
-                    <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 ml-0 sm:ml-1">
-                      <Checkbox id="show-in-org-tab-forced" checked disabled />
+                  ) : (
+                    <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+                      <Checkbox
+                        id="share-org"
+                        checked={shareWithOrganization}
+                        onCheckedChange={(v) => setShareWithOrganization(!!v)}
+                      />
                       <div className="space-y-0.5">
-                        <span className="font-medium text-foreground">Also list under Organization</span>
+                        <Label htmlFor="share-org" className="font-medium cursor-pointer">
+                          Share with organization
+                        </Label>
                         <p className="text-xs text-muted-foreground">
-                          Required for your account: when you share a campaign, it will always be listed under
-                          Organization. This isn’t optional per campaign — an admin controls it in Settings → Team.
+                          When enabled, teammates can access this campaign. Use the option below to choose whether it also
+                          shows under the Organization tab. You can change both anytime, including after the campaign is
+                          live.
                         </p>
                       </div>
                     </div>
                   )}
-                  {shareWithOrganization && !orgTabListingForced && (
+                  {orgListFields.is_organization_campaign && !requireOrgShared && (
                     <div className="flex items-start gap-3 rounded-lg border border-border p-3 ml-0 sm:ml-1">
                       <Checkbox
                         id="show-in-org-tab"
@@ -1411,7 +1467,10 @@ export const CampaignBuilder = ({
           )}
 
           {currentStep === 'template' && (
-            <TemplateLibrary onSelectTemplate={handleTemplateSelect} />
+            <TemplateLibrary
+              onSelectTemplate={handleTemplateSelect}
+              onSelectStarterTemplate={handleStarterTemplateSelect}
+            />
           )}
 
           {currentStep === 'sequence' && (
@@ -1687,7 +1746,7 @@ export const CampaignBuilder = ({
                       </p>
                     ) : sequenceMetadata?.firstSendDate && sequenceMetadata?.scheduleTime ? (
                       <p className="text-sm text-muted-foreground">
-                        Emails will be queued for {format(new Date(sequenceMetadata.firstSendDate), 'PPP')} at {sequenceMetadata.scheduleTime}. They will be sent on the next hourly run. View and manage in the <strong>Upcoming Sends</strong> tab.
+                        Emails will be queued for {format(parse(sequenceMetadata.firstSendDate, 'yyyy-MM-dd', new Date()), 'PPP')} at {formatHhmmAs12h(sequenceMetadata.scheduleTime)}. They will be sent on the next hourly run. View and manage in the <strong>Upcoming Sends</strong> tab.
                       </p>
                     ) : (
                       <p className="text-sm text-muted-foreground">
@@ -1718,15 +1777,16 @@ export const CampaignBuilder = ({
                           disabled={
                             createCampaign.isPending ||
                             updateCampaign.isPending ||
+                            isQueueingSchedule ||
                             !!scheduleSendBlocker
                           }
                         >
-                          {createCampaign.isPending ? (
+                          {createCampaign.isPending || isQueueingSchedule ? (
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           ) : (
                             <CalendarIcon className="w-4 h-4 mr-2" />
                           )}
-                          Schedule Campaign
+                          {isQueueingSchedule ? 'Queuing…' : 'Schedule Campaign'}
                         </Button>
                       ) : (
                         <Button 
@@ -1774,12 +1834,16 @@ export const CampaignBuilder = ({
                             setValidationActionPending(true);
                             void (async () => {
                               try {
-                                if (pendingAction === 'launch') await handleLaunchCampaign();
-                                else if (pendingAction === 'schedule') await handleScheduleCampaign();
+                                const action = pendingAction;
+                                let ok = false;
+                                if (action === 'launch') ok = await handleLaunchCampaign();
+                                else if (action === 'schedule') ok = await handleScheduleCampaign();
+                                if (ok) {
+                                  setShowValidationDialog(false);
+                                  setPendingAction(null);
+                                }
                               } finally {
                                 setValidationActionPending(false);
-                                setShowValidationDialog(false);
-                                setPendingAction(null);
                               }
                             })();
                           }}

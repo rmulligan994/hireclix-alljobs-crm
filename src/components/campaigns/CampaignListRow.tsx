@@ -1,4 +1,5 @@
 "use client";
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -62,6 +63,8 @@ interface CampaignListRowProps {
   onView: (c: Campaign) => void;
   onDuplicate: (c: Campaign) => void;
   onLaunch: (id: string) => void;
+  /** When a scheduled campaign has pending recipients, queue them for `campaigns.scheduled_at` instead of sending now. */
+  onRequeuePendingForScheduledTime?: (id: string) => void | Promise<void>;
   onPause: (id: string) => void;
   onResume: (id: string) => void;
   onAddRecipients: (id: string) => void;
@@ -86,6 +89,7 @@ export function CampaignListRow({
   onView,
   onDuplicate,
   onLaunch,
+  onRequeuePendingForScheduledTime,
   onPause,
   onResume,
   onAddRecipients,
@@ -95,6 +99,7 @@ export function CampaignListRow({
   onDelete,
   getStatusBadgeClass,
 }: CampaignListRowProps) {
+  const [sendNowDialogOpen, setSendNowDialogOpen] = useState(false);
   const isOwner = campaign.user_id === currentUserId;
   const compact = density === 'compact';
   const s = stats;
@@ -227,20 +232,67 @@ export function CampaignListRow({
               </Button>
             )}
             {isOwner && campaign.status === 'scheduled' && pending > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn('border-sky-blue text-sky-blue', actionBtn)}
-                onClick={() => onLaunch(campaign.id)}
-                disabled={sendingCampaignId === campaign.id}
-              >
-                {sendingCampaignId === campaign.id ? (
-                  <Loader2 className={cn(ico, icoMr, 'animate-spin')} />
-                ) : (
-                  <Send className={cn(ico, icoMr)} />
-                )}
-                {sendingCampaignId === campaign.id ? '…' : `Send ${pending}`}
-              </Button>
+              <AlertDialog open={sendNowDialogOpen} onOpenChange={setSendNowDialogOpen}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn('border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white', actionBtn)}
+                  onClick={() => setSendNowDialogOpen(true)}
+                  disabled={sendingCampaignId === campaign.id}
+                >
+                  {sendingCampaignId === campaign.id ? (
+                    <Loader2 className={cn(ico, icoMr, 'animate-spin')} />
+                  ) : (
+                    <Send className={cn(ico, icoMr)} />
+                  )}
+                  {sendingCampaignId === campaign.id ? '…' : `Send now (${pending})`}
+                </Button>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Send first email now?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-left space-y-2">
+                      <span className="block">
+                        {pending} recipient{pending === 1 ? ' is' : 's are'} still <strong>pending</strong> and not in the
+                        scheduled send queue. Sending now delivers the first email <strong>immediately</strong>, not on your
+                        next queued run.
+                      </span>
+                      {campaign.scheduled_at && (
+                        <span className="block text-muted-foreground">
+                          This campaign is otherwise set for {format(new Date(campaign.scheduled_at), 'PPP p')}.
+                        </span>
+                      )}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter className="flex-col sm:flex-row sm:justify-end gap-2">
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    {onRequeuePendingForScheduledTime &&
+                      campaign.scheduled_at &&
+                      new Date(campaign.scheduled_at).getTime() > Date.now() && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full sm:w-auto"
+                          onClick={() => {
+                            setSendNowDialogOpen(false);
+                            void onRequeuePendingForScheduledTime(campaign.id);
+                          }}
+                        >
+                          Add to queue for scheduled time
+                        </Button>
+                      )}
+                    <Button
+                      type="button"
+                      className="w-full sm:w-auto bg-sky-blue hover:bg-sky-blue/90"
+                      onClick={() => {
+                        setSendNowDialogOpen(false);
+                        onLaunch(campaign.id);
+                      }}
+                    >
+                      Send now
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
             {isOwner && campaign.status === 'paused' && (
               <Button

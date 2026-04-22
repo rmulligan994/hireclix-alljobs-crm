@@ -16,6 +16,8 @@ import { format, addDays, differenceInDays, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { isUuid } from '@/lib/isUuid';
 import { findUnknownMergeTagsInStrings, formatUnknownMergeTagsMessage } from '@/lib/email/merge-tags-validation';
+import { formatHhmmAs12h } from '@/lib/time12h';
+import { TimePicker12h } from '@/components/ui/time-picker-12h';
 import { toast } from 'sonner';
 
 type ScheduleType = 'custom' | 'daily' | 'weekly' | 'monthly' | 'specific_dates';
@@ -327,7 +329,7 @@ export const SequenceBuilder = ({
       scheduleType === 'custom' ? { type: 'custom' } :
       scheduleType === 'specific_dates' ? { type: 'specific_dates' } : undefined;
     const scheduleRecurrence = baseRecurrence && endOnDate
-      ? { ...baseRecurrence, endOnDate: endOnDate.toISOString().slice(0, 10) }
+      ? { ...baseRecurrence, endOnDate: format(endOnDate, 'yyyy-MM-dd') }
       : baseRecurrence;
 
     const metadata: SequenceMetadata = {
@@ -336,16 +338,16 @@ export const SequenceBuilder = ({
     };
     if (!sendImmediately) {
       if (scheduleType === 'specific_dates' && firstSendDate) {
-        metadata.firstSendDate = firstSendDate.toISOString().slice(0, 10);
+        metadata.firstSendDate = format(firstSendDate, 'yyyy-MM-dd');
         metadata.scheduleTime = scheduleTime;
       } else if (scheduledFirstDate) {
-        metadata.firstSendDate = scheduledFirstDate.toISOString().slice(0, 10);
+        metadata.firstSendDate = format(scheduledFirstDate, 'yyyy-MM-dd');
         metadata.scheduleTime = scheduledFirstTime;
       }
     }
 
     const opts = {
-      firstSendDate: metadata.firstSendDate ?? (scheduleType === 'specific_dates' && firstSendDate ? firstSendDate.toISOString().slice(0, 10) : undefined),
+      firstSendDate: metadata.firstSendDate ?? (scheduleType === 'specific_dates' && firstSendDate ? format(firstSendDate, 'yyyy-MM-dd') : undefined),
       metadata,
     };
 
@@ -424,7 +426,9 @@ export const SequenceBuilder = ({
         <div className="flex items-center justify-center py-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="w-4 h-4" />
-            <span>{label} at {scheduleTime}</span>
+            <span>
+              {label} at {formatHhmmAs12h(scheduleTime)}
+            </span>
           </div>
         </div>
       );
@@ -554,11 +558,10 @@ export const SequenceBuilder = ({
                   </Popover>
                   <div className="flex items-center gap-2">
                     <Label className="text-sm text-muted-foreground">at</Label>
-                    <Input
-                      type="time"
+                    <TimePicker12h
                       value={scheduledFirstTime}
-                      onChange={(e) => setScheduledFirstTime(e.target.value)}
-                      className="w-32"
+                      onValueChange={setScheduledFirstTime}
+                      aria-label="First send time"
                     />
                   </div>
                 </div>
@@ -602,13 +605,12 @@ export const SequenceBuilder = ({
               {/* Options for each schedule type */}
               <div className="flex flex-wrap items-center gap-4 pl-1">
                 {scheduleType === 'daily' && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Label className="text-sm text-muted-foreground">At</Label>
-                    <Input
-                      type="time"
+                    <TimePicker12h
                       value={scheduleTime}
-                      onChange={(e) => setScheduleTime(e.target.value)}
-                      className="w-32"
+                      onValueChange={setScheduleTime}
+                      aria-label="Send time (each day)"
                     />
                   </div>
                 )}
@@ -627,13 +629,12 @@ export const SequenceBuilder = ({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Label className="text-sm text-muted-foreground">at</Label>
-                      <Input
-                        type="time"
+                      <TimePicker12h
                         value={scheduleTime}
-                        onChange={(e) => setScheduleTime(e.target.value)}
-                        className="w-32"
+                        onValueChange={setScheduleTime}
+                        aria-label="Send time (weekly)"
                       />
                     </div>
                   </>
@@ -653,13 +654,12 @@ export const SequenceBuilder = ({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Label className="text-sm text-muted-foreground">at</Label>
-                      <Input
-                        type="time"
+                      <TimePicker12h
                         value={scheduleTime}
-                        onChange={(e) => setScheduleTime(e.target.value)}
-                        className="w-32"
+                        onValueChange={setScheduleTime}
+                        aria-label="Send time (monthly)"
                       />
                     </div>
                   </>
@@ -689,27 +689,37 @@ export const SequenceBuilder = ({
                   </div>
                 )}
                 {scheduleType === 'specific_dates' && (
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm text-muted-foreground">First send date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={cn("w-[180px] justify-start", !firstSendDate && "text-muted-foreground")}
-                        >
-                          {firstSendDate ? format(firstSendDate, 'PPP') : 'Pick date'}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={firstSendDate}
-                          onSelect={(d) => d && setFirstSendDate(d)}
-                          disabled={(date) => date < startOfDay(new Date())}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm text-muted-foreground">First send date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn("w-[180px] justify-start", !firstSendDate && "text-muted-foreground")}
+                          >
+                            {firstSendDate ? format(firstSendDate, 'PPP') : 'Pick date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={firstSendDate}
+                            onSelect={(d) => d && setFirstSendDate(d)}
+                            disabled={(date) => date < startOfDay(new Date())}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Label className="text-sm text-muted-foreground">at</Label>
+                      <TimePicker12h
+                        value={scheduleTime}
+                        onValueChange={setScheduleTime}
+                        aria-label="First send time on that date"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

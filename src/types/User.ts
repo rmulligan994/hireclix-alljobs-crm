@@ -21,8 +21,13 @@ export interface Profile {
   linkedinUrl?: string;
   avatarUrl?: string;
   role?: UserRole;
-  /** Admins (Team): when true, all of this user’s org-shared campaigns appear in Organization; when false, each campaign can opt in. */
+  /**
+   * Same as `requireOrgSharedCampaigns` (kept for backwards compatibility).
+   * @deprecated Use `requireOrgSharedCampaigns` — Team settings use one “require org sharing” control.
+   */
   forceShowInOrgTab?: boolean;
+  /** Admins (Team): when true, this user must org-share every campaign; Organization tab options are fixed (greyed). */
+  requireOrgSharedCampaigns?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

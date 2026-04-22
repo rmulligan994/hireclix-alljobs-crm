@@ -414,9 +414,9 @@ export const campaignService = {
 
   /**
    * Organization tab: all org-shared campaigns, then apply listing rules for your own rows.
-   * @param forceShowInOrgTab — from profile: when true, your org campaigns always list here; when false, uses each campaign’s show_in_org_tab.
+   * @param requireOrgSharedCampaigns — from profile: when true, your org campaigns always list here; when false, uses each campaign’s show_in_org_tab.
    */
-  async getOrgCampaigns(options: { forceShowInOrgTab: boolean }): Promise<Campaign[]> {
+  async getOrgCampaigns(options: { requireOrgSharedCampaigns: boolean }): Promise<Campaign[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
     const { data, error } = await supabase
@@ -429,7 +429,7 @@ export const campaignService = {
     const rows = (data || []).map(mapCampaignRow);
     return rows.filter((c) => {
       if (c.user_id !== user.id) return true;
-      if (options.forceShowInOrgTab) return true;
+      if (options.requireOrgSharedCampaigns) return true;
       return c.show_in_org_tab !== false;
     });
   },

@@ -29,10 +29,10 @@ export const useArchivedCampaigns = () => {
   });
 };
 
-export const useOrgCampaigns = (forceShowInOrgTab: boolean) => {
+export const useOrgCampaigns = (requireOrgSharedCampaigns: boolean) => {
   return useQuery({
-    queryKey: ['campaigns', 'org', forceShowInOrgTab],
-    queryFn: () => campaignService.getOrgCampaigns({ forceShowInOrgTab }),
+    queryKey: ['campaigns', 'org', requireOrgSharedCampaigns],
+    queryFn: () => campaignService.getOrgCampaigns({ requireOrgSharedCampaigns }),
   });
 };
 
