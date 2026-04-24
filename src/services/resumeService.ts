@@ -14,6 +14,26 @@ function normalizeStorageFilePath(filePath: string): string {
 }
 
 /**
+ * Next API routes for this app live under the Webflow mount, e.g. `.../crm/api/...`.
+ * `getApiBase()` is sometimes origin-only; this ensures a single `/crm` segment before `/api/...` (idempotent).
+ * Remove or rely on `NEXT_PUBLIC_BASE_URL=/crm` once env is set everywhere.
+ */
+function crmAppApiBaseForResumeRoutes(): string {
+  const b = getApiBase();
+  if (!b) return '';
+  try {
+    const { pathname, origin } = new URL(b);
+    const p = pathname.replace(/\/$/, '') || '/';
+    if (p === '/crm' || p.startsWith('/crm/')) {
+      return b;
+    }
+    return `${origin}/crm`;
+  } catch {
+    return /\/crm(\/|$)/.test(b) ? b : `${b.replace(/\/$/, '')}/crm`;
+  }
+}
+
+/**
  * Supabase storage errors are often class instances: JSON.stringify(err) is "{}" and
  * message can be empty. Unpack what we can for logs and toasts.
  */
@@ -216,7 +236,7 @@ export const resumeService = {
     }
     if (typeof window !== 'undefined' && getApiBase()) {
       const token = encodeURIComponent(session.access_token);
-      return `${getApiBase()}/api/resumes/${resumeId}?token=${token}`;
+      return `${crmAppApiBaseForResumeRoutes()}/api/resumes/${resumeId}?token=${token}`;
     }
     return resumeService.getSignedUrl(resumeId);
   },
@@ -231,7 +251,7 @@ export const resumeService = {
     }
     if (typeof window !== 'undefined' && getApiBase()) {
       const res = await fetch(
-        `${getApiBase()}/api/resumes/${resumeId}?token=${encodeURIComponent(session.access_token)}`
+        `${crmAppApiBaseForResumeRoutes()}/api/resumes/${resumeId}?token=${encodeURIComponent(session.access_token)}`
       );
       if (res.ok) return res.blob();
     }
@@ -265,7 +285,7 @@ export const resumeService = {
     const excludeTags = (options?.excludeTags ?? [])
       .map((t) => t.trim())
       .filter(Boolean);
-    const res = await fetch(`${getApiBase()}/api/resumes/${resumeId}/suggest-tags`, {
+    const res = await fetch(`${crmAppApiBaseForResumeRoutes()}/api/resumes/${resumeId}/suggest-tags`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
