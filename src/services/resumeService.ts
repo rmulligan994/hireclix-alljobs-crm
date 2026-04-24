@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { getApiBase } from '@/lib/api';
 import type { CandidateResume } from '@/types/Resume';
 
 const BUCKET = 'resumes';
@@ -10,13 +11,6 @@ function normalizeStorageFilePath(filePath: string): string {
   if (p.startsWith('/')) p = p.slice(1);
   if (p.startsWith(`${BUCKET}/`)) p = p.slice(BUCKET.length + 1);
   return p;
-}
-
-/** Origin + optional `NEXT_PUBLIC_BASE_URL` (Next basePath, e.g. /crm) for same-origin API routes. */
-function getBrowserApiBase(): string {
-  if (typeof window === 'undefined') return '';
-  const prefix = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '');
-  return `${window.location.origin}${prefix}`;
 }
 
 /**
@@ -220,9 +214,9 @@ export const resumeService = {
     if (sessionError || !session?.access_token) {
       throw new Error('You must be signed in to view resumes. Please refresh the page and try again.');
     }
-    if (typeof window !== 'undefined' && getBrowserApiBase()) {
+    if (typeof window !== 'undefined' && getApiBase()) {
       const token = encodeURIComponent(session.access_token);
-      return `${getBrowserApiBase()}/api/resumes/${resumeId}?token=${token}`;
+      return `${getApiBase()}/api/resumes/${resumeId}?token=${token}`;
     }
     return resumeService.getSignedUrl(resumeId);
   },
@@ -235,9 +229,9 @@ export const resumeService = {
     if (sessionError || !session?.access_token) {
       throw new Error('You must be signed in to download resumes. Please refresh the page and try again.');
     }
-    if (typeof window !== 'undefined' && getBrowserApiBase()) {
+    if (typeof window !== 'undefined' && getApiBase()) {
       const res = await fetch(
-        `${getBrowserApiBase()}/api/resumes/${resumeId}?token=${encodeURIComponent(session.access_token)}`
+        `${getApiBase()}/api/resumes/${resumeId}?token=${encodeURIComponent(session.access_token)}`
       );
       if (res.ok) return res.blob();
     }
@@ -265,13 +259,13 @@ export const resumeService = {
     if (sessionError || !session?.access_token) {
       throw new Error('You must be signed in to use resume tag suggestions. Please refresh and try again.');
     }
-    if (typeof window === 'undefined' || !getBrowserApiBase()) {
+    if (typeof window === 'undefined' || !getApiBase()) {
       throw new Error('Tag suggestions are only available in the app.');
     }
     const excludeTags = (options?.excludeTags ?? [])
       .map((t) => t.trim())
       .filter(Boolean);
-    const res = await fetch(`${getBrowserApiBase()}/api/resumes/${resumeId}/suggest-tags`, {
+    const res = await fetch(`${getApiBase()}/api/resumes/${resumeId}/suggest-tags`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
