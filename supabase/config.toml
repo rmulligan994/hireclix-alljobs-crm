@@ -30,3 +30,6 @@ verify_jwt = false
 # UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM at the edge when verify_jwt = true.
 [functions.email-ai]
 verify_jwt = false
+
+[functions.mailgun-metrics]
+verify_jwt = false

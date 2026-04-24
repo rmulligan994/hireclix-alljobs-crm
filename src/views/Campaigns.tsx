@@ -22,7 +22,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Mail, Calendar, TrendingUp, Users, ChevronDown, ChevronUp, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Plus, Mail, Users, ChevronDown, ChevronUp, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { useMyCampaigns, useOrgCampaigns, useArchivedCampaigns, useCampaign, useUpdateCampaign, useDeleteCampaign, useDuplicateCampaign } from '@/hooks/useCampaigns';
 import { useCurrentUser, useAllProfiles } from '@/hooks/useAuth';
 import { CampaignListRow } from '@/components/campaigns/CampaignListRow';
@@ -39,6 +40,9 @@ import type { Campaign } from '@/types/Campaign';
 import type { EmailTemplate } from '@/services/emailTemplateService';
 import type { StarterTemplate } from '@/data/email-starter-data';
 import { describeCampaignSendToast } from '@/lib/campaignSendToast';
+import { getStatsPeriodWindow, type StatsPeriodPreset } from '@/lib/campaignReportingWindow';
+import { useMailgunCampaignMetrics } from '@/hooks/useMailgunCampaignMetrics';
+import { MailgunSummaryMetricsGrid } from '@/components/campaigns/MailgunSummaryMetricsGrid';
 
 const CAMPAIGN_TYPES = ['nurture', 'event', 'job_alert', 'reengagement', 'newsletter'] as const;
 const SORT_OPTIONS = [
@@ -119,6 +123,10 @@ const Campaigns = () => {
   /** Filter by a single "active time" (scheduled at if set, else created at). */
   const [activeTimeFrom, setActiveTimeFrom] = useState<string>('');
   const [activeTimeTo, setActiveTimeTo] = useState<string>('');
+  /** Summary row: all campaigns in the filtered list, or a single selected campaign. */
+  const [summaryScopeCampaignId, setSummaryScopeCampaignId] = useState<string | null>(null);
+  /** Statistics / Mailgun window: not tied to list “active time” date pickers. */
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriodPreset>('mtd');
   const { data: campaignForView, isLoading: loadingCampaignForView } = useCampaign(viewCampaignId || '');
   const [sendSuccess, setSendSuccess] = useState<{
     campaignId: string;
@@ -259,6 +267,30 @@ const Campaigns = () => {
     activeTimeTo,
   ]);
 
+  const statsReportingWindow = useMemo(() => getStatsPeriodWindow(statsPeriod), [statsPeriod]);
+
+  const summaryCampaignIds = useMemo(() => {
+    if (scopeTab === 'upcoming') return [];
+    const base = filteredCampaigns;
+    if (base.length === 0) return [];
+    if (summaryScopeCampaignId && base.some((c) => c.id === summaryScopeCampaignId)) {
+      return [summaryScopeCampaignId];
+    }
+    return base.map((c) => c.id);
+  }, [scopeTab, filteredCampaigns, summaryScopeCampaignId]);
+
+  useEffect(() => {
+    if (!summaryScopeCampaignId) return;
+    if (!filteredCampaigns.some((c) => c.id === summaryScopeCampaignId)) {
+      setSummaryScopeCampaignId(null);
+    }
+  }, [filteredCampaigns, summaryScopeCampaignId]);
+
+  const { data: mailgunSummary, isPending: mailgunSummaryLoading } = useMailgunCampaignMetrics(
+    summaryCampaignIds,
+    statsReportingWindow
+  );
+
   const sortOptions = useMemo(
     () => (scopeTab === 'org' ? [...SORT_OPTIONS, ...ORG_ONLY_SORT] : [...SORT_OPTIONS]),
     [scopeTab]
@@ -292,13 +324,6 @@ const Campaigns = () => {
       default: return arr;
     }
   }, [filteredCampaigns, sortBy, statsMap, profileByUserId]);
-
-  // Calculate aggregate stats
-  const totalRecipients = Object.values(statsMap).reduce((sum, s) => sum + s.recipients, 0);
-  const totalOpened = Object.values(statsMap).reduce((sum, s) => sum + s.opened, 0);
-  const totalClicked = Object.values(statsMap).reduce((sum, s) => sum + s.clicked, 0);
-  const overallOpenRate = totalRecipients > 0 ? Math.round((totalOpened / totalRecipients) * 100) : 0;
-  const overallClickRate = totalRecipients > 0 ? Math.round((totalClicked / totalRecipients) * 100) : 0;
 
   const displayCampaigns = useMemo(
     () => (scopeTab === 'upcoming' ? [] : sortedCampaigns),
@@ -352,14 +377,6 @@ const Campaigns = () => {
     return rows;
   }, [displayCampaigns, scopeTab, currentUserId, profileByUserId, sortBy, statsMap]);
 
-  const stats = {
-    active: campaigns.filter((c) => c.status === 'active').length,
-    total: campaigns.length,
-    totalRecipients,
-    openRate: overallOpenRate,
-    clickRate: overallClickRate,
-  };
-
   const handlePauseCampaign = async (id: string) => {
     try {
       await updateCampaign.mutateAsync({ id, input: { status: 'paused' } });
@@ -404,6 +421,7 @@ const Campaigns = () => {
         });
       }
       refetch();
+      void queryClient.invalidateQueries({ queryKey: ['mailgun-campaign-metrics'] });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error occurred';
       toast({ 
@@ -448,6 +466,7 @@ const Campaigns = () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-emails'] });
       queryClient.invalidateQueries({ queryKey: ['campaign-recipients', id] });
       refetch();
+      void queryClient.invalidateQueries({ queryKey: ['mailgun-campaign-metrics'] });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       toast({ title: 'Failed to queue', description: message, variant: 'destructive' });
@@ -564,10 +583,10 @@ const Campaigns = () => {
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar />
         
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto [scrollbar-gutter:stable]">
           <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex min-w-0 items-center justify-between gap-4">
+              <div className="min-w-0">
                 <h1 className="font-heading text-3xl font-bold text-foreground mb-2">
                   Campaigns
                 </h1>
@@ -575,16 +594,16 @@ const Campaigns = () => {
                   Create and manage email campaigns and sequences
                 </p>
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex shrink-0 items-center space-x-2 sm:space-x-3">
                 <Button 
                   variant="outline" 
-                  className="border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
+                  className="shrink-0 border-sky-blue text-sky-blue hover:bg-sky-blue hover:text-white"
                   onClick={() => setShowTemplateLibrary(true)}
                 >
                   Template Library
                 </Button>
                 <Button
-                  className="bg-gradient-primary hover:opacity-90"
+                  className="shrink-0 bg-gradient-primary hover:opacity-90"
                   onClick={() => {
                     setViewCampaignId(null);
                     setEditingCampaign(null);
@@ -598,64 +617,130 @@ const Campaigns = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => setSummaryOpen((s) => !s)}
-            >
-              {summaryOpen ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
-              {summaryOpen ? 'Hide' : 'Show'} summary
-            </Button>
-          </div>
-          {summaryOpen && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-              <Card className="border-sky-blue/20">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xl font-bold text-foreground">{stats.active}</div>
-                      <div className="text-xs text-muted-foreground">Active</div>
+          {summaryOpen ? (
+            <div className="space-y-4 mb-6">
+              {scopeTab === 'upcoming' ? (
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    Open <span className="font-medium text-foreground">My Campaigns</span>,{' '}
+                    <span className="font-medium text-foreground">Organization</span>, or{' '}
+                    <span className="font-medium text-foreground">Archived</span> to see email statistics.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground h-8 shrink-0 self-end sm:self-start"
+                    onClick={() => setSummaryOpen(false)}
+                  >
+                    <ChevronUp className="w-4 h-4 mr-1" />
+                    Hide statistics
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide order-1">
+                      Statistics · {statsReportingWindow.label}
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3 w-full sm:w-auto order-2 sm:order-2 min-w-0">
+                      {filteredCampaigns.length > 0 && (
+                        <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
+                          <span className="text-sm text-muted-foreground whitespace-nowrap">Campaign selection</span>
+                          <Select
+                            value={summaryScopeCampaignId ?? 'all'}
+                            onValueChange={(v) => setSummaryScopeCampaignId(v === 'all' ? null : v)}
+                          >
+                            <SelectTrigger className="w-full sm:w-[min(100%,20rem)] h-9 min-w-0">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">
+                                All in list ({filteredCampaigns.length})
+                              </SelectItem>
+                              {filteredCampaigns.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.name || 'Untitled campaign'}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground h-8 -ml-2 sm:ml-0 self-start sm:shrink-0"
+                        onClick={() => setSummaryOpen(false)}
+                      >
+                        <ChevronUp className="w-4 h-4 mr-1" />
+                        Hide statistics
+                      </Button>
                     </div>
-                    <Mail className="w-6 h-6 text-sky-blue" />
                   </div>
-                </CardContent>
-              </Card>
-              <Card className="border-sky-blue/20">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xl font-bold text-foreground">{stats.total}</div>
-                      <div className="text-xs text-muted-foreground">Total in tab</div>
-                    </div>
-                    <Users className="w-6 h-6 text-sky-blue" />
+
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <span className="text-xs text-muted-foreground">Period</span>
+                    <ToggleGroup
+                      type="single"
+                      value={statsPeriod}
+                      onValueChange={(v) => {
+                        if (v) setStatsPeriod(v as StatsPeriodPreset);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                    >
+                      <ToggleGroupItem value="7d" aria-label="Last 7 days" className="px-3 text-xs sm:text-sm">
+                        7 days
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="30d" aria-label="Last 30 days" className="px-3 text-xs sm:text-sm">
+                        30 days
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="mtd" aria-label="Month to date" className="px-3 text-xs sm:text-sm">
+                        Month to date
+                      </ToggleGroupItem>
+                    </ToggleGroup>
                   </div>
-                </CardContent>
-              </Card>
-              <Card className="border-sky-blue/20">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xl font-bold text-foreground">{stats.openRate}%</div>
-                      <div className="text-xs text-muted-foreground">Open rate</div>
-                    </div>
-                    <TrendingUp className="w-6 h-6 text-sunrise" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-sky-blue/20">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xl font-bold text-foreground">{stats.clickRate}%</div>
-                      <div className="text-xs text-muted-foreground">Click rate</div>
-                    </div>
-                    <Calendar className="w-6 h-6 text-sunrise" />
-                  </div>
-                </CardContent>
-              </Card>
+
+                  <MailgunSummaryMetricsGrid
+                    emptyListMessage={summaryCampaignIds.length === 0 ? 'No campaigns in the current list.' : null}
+                    loading={summaryCampaignIds.length > 0 && mailgunSummaryLoading}
+                    errorText={(() => {
+                      if (summaryCampaignIds.length === 0) return null;
+                      if (mailgunSummaryLoading) return null;
+                      if (!mailgunSummary) return null;
+                      if (!mailgunSummary.ok) {
+                        return mailgunSummary.error || 'Statistics are unavailable right now.';
+                      }
+                      if (!mailgunSummary.metrics) {
+                        return 'Configure your sending provider to load delivery and engagement for this range.';
+                      }
+                      return null;
+                    })()}
+                    metrics={mailgunSummary?.ok && mailgunSummary.metrics ? mailgunSummary.metrics : null}
+                  />
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="mb-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Statistics
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground h-8 w-full sm:w-auto justify-center sm:justify-end sm:self-end sm:shrink-0"
+                  onClick={() => setSummaryOpen(true)}
+                >
+                  <ChevronDown className="w-4 h-4 mr-1 shrink-0" aria-hidden />
+                  Show statistics
+                </Button>
+              </div>
             </div>
           )}
 
